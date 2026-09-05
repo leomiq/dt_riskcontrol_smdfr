@@ -1,0 +1,21 @@
+\begin{table}[h!tb]
+	\centering
+	\caption{Closed-loop KPIs over the 61-instant grid for the DSM-penalty configurations: baseline, over-penalised, and the retuned setting. All runs use Luus--Jaakola with seed 1 and the same accident stream; $u_{\max}$ and $\lambda$ are the only design changes.}
+	\label{tab:gbdt-penalty-kpis}
+	\begin{tabular}{lccc}
+		\toprule
+		\textbf{Performance index} & \textbf{Baseline} & \textbf{$\lambda=10^{6}$} & \textbf{$\lambda=10^{4}$, retuned} \\
+		 & $u_{\max}=56.75$ & $u_{\max}=56.90$ & $u_{\max}=56.90$ \\
+		\midrule
+		Minimum safety margin (DSM of PCT) & \textbf{62.79 K} & \textbf{62.79 K} & \textbf{62.79 K} \\
+		Minimum overshoot (PCT $-$ ref) & $-32.75$ K & \textbf{$-32.98$ K} & $-32.98$ K \\
+		Maximum $|$PCT $-$ ref$|$, post-transient & 1.935 K & 1.726 K & \textbf{1.397 K} \\
+		Settling time ($<0.30$ K) & \textbf{1176.0 s} & $\infty$ & $\infty$ \\
+		Steady-state error & \textbf{$+0.07$ K} & $+1.32$ K & $+0.70$ K \\
+		Peak PCT & \textbf{1181.21 K} & \textbf{1181.21 K} & \textbf{1181.21 K} \\
+		IAE & 35.16 K$\cdot$s & 34.59 K$\cdot$s & \textbf{28.65 K$\cdot$s} \\
+		Control total variation & \textbf{0.86 A} & 3.16 A & 2.54 A \\
+		Optimizer runtime (median per query) & 351.8 s & 280.6 s & \textbf{76.0 s} \\
+		\bottomrule
+	\end{tabular}
+\end{table}

@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: >-
+  Grey-Box Digital Twin for Risk Monitoring and Predictive Control
+  of a Small Modular Dual Fluid Reactor
+message: >-
+  If you use this software, please cite it using the metadata from
+  this file, together with the thesis it accompanies.
+type: software
+authors:
+  - given-names: Leonardo Andrés
+    family-names: Miqueles Leiva
+    affiliation: Politecnico di Milano
+    email: leonardoandres.miqueles@polimi.it
+license: MIT
+repository-code: 'https://github.com/leomiq/dt_riskcontrol_smdfr'
+abstract: >-
+  Reference implementation of a grey-box digital twin for an SMDFR:
+  a reduced-order plant model, a grey-box virtual sensor for the peak
+  cladding temperature, an Importance-Sampling Monte Carlo Dynamic
+  Event Tree for dynamic risk assessment, and a model predictive
+  controller whose objective carries a deterministic-safety-margin
+  soft constraint.
+keywords:
+  - digital twin
+  - grey-box modelling
+  - risk monitoring
+  - dynamic event tree
+  - importance sampling
+  - model predictive control
+  - safety margin
+  - small modular reactor

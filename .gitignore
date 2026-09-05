@@ -1,0 +1,29 @@
+# --- MATLAB / Simulink build output ---------------------------------------
+slprj/
+*.slxc
+*.asv
+*.autosave
+codegen/
+
+# Compiled MEX. The Windows binaries are committed deliberately (see README);
+# other platforms' output is not.
+*.mexa64
+*.mexmaci64
+*.mexmaca64
+
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --- Run artefacts --------------------------------------------------------
+# Bulk simulation output; the summary arrays under results/ are committed.
+*.log
+pilot_result.mat
+fingerprint.mat
+data/
+
+# --- OS -------------------------------------------------------------------
+Thumbs.db
+.DS_Store
