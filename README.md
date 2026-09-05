@@ -1,5 +1,8 @@
 # Grey-Box Digital Twin for Risk Monitoring and Predictive Control of an SMDFR
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22407139.svg)](https://doi.org/10.5281/zenodo.22407139)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Reference implementation accompanying the PhD thesis *A Grey-Box Digital
 Twin-based Approach for Condition-informed Risk Monitoring and Control of
 New-Generation Nuclear Power Plants* (Politecnico di Milano).
@@ -113,8 +116,28 @@ code in this repository are original contributions of the thesis.
 
 ## Citing
 
-Please cite the thesis and this repository. A `CITATION.cff` is provided; a DOI
-will be minted on archival release.
+This software is archived on Zenodo and citable by DOI:
+
+> Miqueles Leiva, L. A. (2026). *Grey-Box Digital Twin for Risk Monitoring and
+> Predictive Control of a Small Modular Dual Fluid Reactor* (v1.0.0) [Software].
+> Zenodo. https://doi.org/10.5281/zenodo.22407139
+
+```bibtex
+@software{miqueles2026dtriskcontrol,
+  author    = {Miqueles Leiva, Leonardo Andr\'{e}s},
+  title     = {Grey-Box Digital Twin for Risk Monitoring and Predictive
+               Control of a Small Modular Dual Fluid Reactor},
+  version   = {1.0.0},
+  year      = {2026},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.22407139},
+  url       = {https://doi.org/10.5281/zenodo.22407139}
+}
+```
+
+The DOI above is the *concept* DOI: it always resolves to the most recent
+archived version. Zenodo also mints a version-specific DOI for each release if
+you need to pin one exactly. Machine-readable metadata is in `CITATION.cff`.
 
 ## Licence
 
