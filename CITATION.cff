@@ -12,7 +12,12 @@ authors:
     affiliation: Politecnico di Milano
     email: leonardoandres.miqueles@polimi.it
 license: MIT
+version: 1.0.0
+date-released: '2026-09-05'
 repository-code: 'https://github.com/leomiq/dt_riskcontrol_smdfr'
+# On archival release, Zenodo mints a DOI; add it here and cite it in the
+# thesis instead of the bare repository URL:
+# doi: 10.5281/zenodo.XXXXXXX
 abstract: >-
   Reference implementation of a grey-box digital twin for an SMDFR:
   a reduced-order plant model, a grey-box virtual sensor for the peak
