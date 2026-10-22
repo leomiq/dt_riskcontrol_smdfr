@@ -27,3 +27,11 @@ data/
 # --- OS -------------------------------------------------------------------
 Thumbs.db
 .DS_Store
+
+# --- LaTeX build intermediates ------------------------------------------
+*.aux
+*.out
+*.nav
+*.snm
+*.toc
+*.synctex.gz

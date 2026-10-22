@@ -28,6 +28,16 @@ results/         Arrays and tables that regenerate the thesis figures without
 docs/            Experimental record for the DSM-penalty study
 ```
 
+## Research extension: risk-informed stochastic control
+
+The October 2026 continuation starts from this v1.0.0 release. See
+[the implementation route](docs/implementation_route.md),
+[the technical report](docs/technical_report.pdf), and
+[the USM Beamer presentation](presentations/usm_risk_control.pdf).
+The first code module computes a conditional lower bound on the current
+MPC objective from certified temperature and flow enclosures. It does
+not yet certify the ROM/DET trajectories or optimize probabilistic risk.
+
 ## Requirements
 
 - MATLAB R2024a with Simulink, and a C compiler for `mex` (verified with MinGW64)

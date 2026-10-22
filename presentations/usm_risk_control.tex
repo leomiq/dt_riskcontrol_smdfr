@@ -1,0 +1,204 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+\usepackage[spanish]{babel}
+\usepackage{fontspec}
+\setsansfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,ItalicFont=InterVariable.ttf,BoldItalicFont=InterVariable.ttf]{InterVariable.ttf}
+\setmainfont[Path=../assets/fonts/]{InterVariable.ttf}
+\usefonttheme{professionalfonts}
+\usepackage{amsmath,amssymb,booktabs,tikz}
+\newcommand{\E}{\mathbb E}
+\newcommand{\Prb}{\mathbb P}
+\usetikzlibrary{positioning,arrows.meta}
+\definecolor{USMBlue}{HTML}{003876}
+\definecolor{USMDeep}{HTML}{002A5C}
+\definecolor{USMCyan}{HTML}{00AEEF}
+\definecolor{USMYellow}{HTML}{FDB913}
+\definecolor{USMPale}{HTML}{EAF5FB}
+\definecolor{Ink}{HTML}{12233B}
+\setbeamercolor{normal text}{fg=Ink,bg=white}
+\setbeamercolor{frametitle}{fg=white,bg=USMBlue}
+\setbeamercolor{structure}{fg=USMBlue}
+\setbeamercolor{block title}{fg=white,bg=USMBlue}
+\setbeamercolor{block body}{fg=Ink,bg=USMPale}
+\setbeamercolor{alerted text}{fg=USMBlue}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{footline}{
+ \leavevmode\hbox{
+ \begin{beamercolorbox}[wd=.78\paperwidth,ht=3ex,dp=1ex,leftskip=1em]{footline}
+ \color{USMBlue}\scriptsize UNIVERSIDAD TÉCNICA FEDERICO SANTA MARÍA
+ \end{beamercolorbox}
+ \begin{beamercolorbox}[wd=.22\paperwidth,ht=3ex,dp=1ex,rightskip=1em plus1fil]{footline}
+ \color{USMBlue}\scriptsize DT--SMDFR \hfill \insertframenumber
+ \end{beamercolorbox}}}
+\title{Hacia un MPC estocástico informado por riesgo}
+\subtitle{Estado del DT--SMDFR y ruta de implementación}
+\author{Proyecto DT--SMDFR Risk Control}
+\institute{Universidad Técnica Federico Santa María}
+\date{22 de octubre de 2026}
+\begin{document}
+{
+\setbeamercolor{background canvas}{bg=USMBlue}
+\begin{frame}[plain]
+\vspace{1.2cm}
+{\color{USMCyan}\large INVESTIGACIÓN EN CONTROL Y SEGURIDAD}\\[0.55cm]
+{\color{white}\Huge\bfseries Hacia un MPC estocástico\\[0.18cm] informado por riesgo}\\[0.55cm]
+{\color{white}\Large DT--SMDFR: diagnóstico, cota inferior y plan}\\[1.05cm]
+{\color{USMYellow}\rule{9cm}{2pt}}\\[0.3cm]
+{\color{white}\normalsize Universidad Técnica Federico Santa María \quad|\quad 22.10.2026}
+\end{frame}
+}
+
+\begin{frame}{Punto de partida: distribución v1.0.0}
+\begin{columns}[T]
+\column{.53\textwidth}
+\begin{block}{Cadena de búsqueda actual}
+Piloto a $t_q=1180$ s $\rightarrow$ Luus--Jaakola/GA
+$\rightarrow$ \texttt{DET\_2}
+$\rightarrow$ \texttt{fitness\_cost}.
+\end{block}
+\begin{itemize}
+\item Repositorio: \texttt{leomiq/dt\_riskcontrol\_smdfr}.
+\item Base: commit \texttt{3266149}; árbol Git limpio al inicio.
+\item Referencia archivada: $f=0.326151$ en el piloto.
+\end{itemize}
+\column{.43\textwidth}
+\begin{block}{Lectura técnica}
+$J=J_T+J_m+J_s$: seguimiento térmico, salto de caudal y margen determinista.
+\end{block}
+\begin{itemize}
+\item La variante principal del scheduler usa PID; LJ/GA están comentados.
+\item Conviene comparar sobre el mismo piloto y las mismas semillas.
+\end{itemize}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Brecha entre margen y riesgo}
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{block}{Dentro de la búsqueda}
+\[
+J_T=\sum_j(T_j-T_{\rm ref})^2,\quad
+J_s=\lambda_s\sum_j[\mathrm{DSM}_j-\tau]_+^2
+\]
+El DSM depende de la trayectoria, pero no pondera la probabilidad de las rutas.
+\end{block}
+\column{.48\textwidth}
+\begin{block}{Después de la búsqueda}
+IS--MCDET calcula PSM desde rutas terminales y pesos $p/q$ en el posprocesamiento.
+\end{block}
+\begin{itemize}
+\item El costo concatena nodos de un solo árbol.
+\item No es una esperanza estocástica sobre secuencias de fallo.
+\end{itemize}
+\end{columns}
+\vspace{.2cm}
+\alert{Meta: evaluar riesgo para cada política candidata y dejar que esa evaluación cambie la decisión.}
+\end{frame}
+
+\begin{frame}{Hito 1: cota inferior del costo vigente}
+Para una celda de controles, encerrar cada $T_j$ en $[L_j,H_j]$
+y cada $m_k$ en $[\ell_k,h_k]$.
+\[
+d_j=\operatorname{dist}(T_{\rm ref},[L_j,H_j]),\qquad
+e_k=\operatorname{dist}([\ell_{k+1}-h_k,h_{k+1}-\ell_k],[-\Delta_m,\Delta_m]).
+\]
+\begin{block}{Cota algebraica}
+\[
+\underline J=
+\sum_jd_j^2+\lambda_m\sum_ke_k^2+
+\lambda_s\sum_j[g(L_j)]_+^2
+\leq \min_{u\ \mathrm{en\ celda}}J(u).
+\]
+\end{block}
+El módulo MATLAB ya calcula esta expresión y su prueba sintética
+comprueba exactitud para cajas puntuales. La certificación global
+requiere encierros rigurosos del ROM/DET para todas las topologías.
+\end{frame}
+
+\begin{frame}{De cota local a garantía de optimalidad}
+\begin{center}
+\begin{tikzpicture}[node distance=8mm and 8mm,>=Latex,
+ box/.style={draw=USMBlue,rounded corners,fill=USMPale,align=center,
+ minimum width=3.2cm,minimum height=1.1cm,font=\small}]
+\node[box] (a) {Partición de controles\\y topologías DET};
+\node[box,right=of a] (b) {Encierros certificados\\$T_j,m_k$ por celda};
+\node[box,right=of b] (c) {Cotas $L_b$\\y candidato factible $U$};
+\draw[->,thick,USMCyan] (a)--(b);
+\draw[->,thick,USMCyan] (b)--(c);
+\end{tikzpicture}
+\end{center}
+\[
+L=\min_b L_b \leq J^\star \leq U,\qquad
+\mathrm{gap}=U-L.
+\]
+\begin{itemize}
+\item Resolver el problema de factibilidad: LJ y GA hoy tratan distinto el indicador.
+\item Alinear horizonte y muestras entre topologías de eventos.
+\item Muchas semillas o una malla densa dan evidencia empírica, no certificado.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Formulación de control estocástico causal}
+\[
+\min_{\pi}\;
+\E_p\!\left[\sum_{k=0}^{N-1}
+w_T(T_k-T_{\rm ref})^2+w_uc_u(u_k,a_k)\right]
++\lambda_R R(\pi)
+\]
+\[
+\Prb_p\!\left(\max_k T_k>U_y\mid\mathcal F_t\right)\leq\varepsilon .
+\]
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Métricas a comparar}
+Probabilidad de excedencia, CVaR del exceso térmico y PSM de cuantil.
+\end{block}
+\column{.47\textwidth}
+\begin{block}{Condiciones metodológicas}
+Pesos $p/q$ por ruta completa, no anticipación, intervalos de confianza
+y validación fuera de muestra.
+\end{block}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Protecciones múltiples y sistema pasivo}
+\begin{center}
+\begin{tikzpicture}[node distance=7mm and 8mm,>=Latex,
+ box/.style={draw=USMBlue,rounded corners,fill=USMPale,align=center,
+ minimum width=2.7cm,minimum height=1.05cm,font=\small}]
+\node[box] (q) {Estado observado\\demanda térmica};
+\node[box,right=of q] (a) {ACS\\disponible / fallado};
+\node[box,right=of a] (b) {Sistema B\\disponible / fallado};
+\node[box,below=of b] (p) {Sistema pasivo\\demanda / éxito};
+\draw[->,thick,USMCyan] (q)--(a);
+\draw[->,thick,USMCyan] (a)--(b);
+\draw[->,thick,USMCyan] (b)--(p);
+\draw[->,dashed,USMBlue] (q) |- (p);
+\end{tikzpicture}
+\end{center}
+\begin{itemize}
+\item La política elige activación y caudal tras las observaciones disponibles.
+\item El orden de activación cambia temperatura, probabilidad y acciones factibles.
+\item Modelar retardos, causas comunes, recursos compartidos y demanda pasiva.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Ruta de implementación y entregables}
+\begin{tabular}{@{}p{.08\textwidth}@{\hspace{.25cm}}p{.39\textwidth}@{\hspace{.25cm}}p{.40\textwidth}@{}}
+\toprule
+ & Entrega & Evidencia de cierre\\
+\midrule
+M0 & Piloto reproducible & SHA, semilla, costo, tiempo\\
+M1 & Cota y encierros ROM/DET & $L\leq J^\star\leq U$, gap\\
+M2 & Riesgo por candidato & pesos IS y sensibilidad de decisión\\
+M3 & Optimización estocástica & riesgo fuera de muestra y tiempo\\
+M4 & Varios sistemas y pasivo & secuencias y política causal\\
+\bottomrule
+\end{tabular}
+\vspace{.5cm}
+\begin{block}{Trabajo iniciado}
+\texttt{certified\_cost\_lower\_bound\_box.m}, prueba sintética,
+reporte técnico y ruta detallada en Markdown.
+\end{block}
+\end{frame}
+\end{document}

@@ -1,0 +1,163 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[spanish]{babel}
+\usepackage{fontspec}
+\setmainfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,ItalicFont=InterVariable.ttf,BoldItalicFont=InterVariable.ttf]{InterVariable.ttf}
+\setsansfont[Path=../assets/fonts/]{InterVariable.ttf}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath,amssymb,booktabs}
+\usepackage{xcolor,hyperref}
+\definecolor{usmblue}{HTML}{003876}
+\hypersetup{colorlinks=true,linkcolor=usmblue,urlcolor=usmblue}
+\newcommand{\E}{\mathbb E}
+\newcommand{\Prob}{\mathbb P}
+\title{\textcolor{usmblue}{Control predictivo estocástico informado por riesgo}\\
+\large Estado técnico y primer hito de certificación de costos}
+\author{Proyecto DT--SMDFR Risk Control\\Universidad Técnica Federico Santa María}
+\date{22 de octubre de 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+Se audita la distribución v1.0.0 de leomiq/dt\_riskcontrol\_smdfr,
+commit 3266149. El controlador minimiza un costo de seguimiento y márgenes
+deterministas mediante Luus--Jaakola o algoritmo genético; el margen
+probabilístico por IS--MCDET se obtiene en posprocesamiento. Se formula
+una cota inferior por intervalos para el costo vigente y una ruta hacia
+optimización estocástica causal con varios sistemas de protección.
+\end{abstract}
+
+\section{Estado y brechas del código}
+El piloto \texttt{pilot\_single\_run.m} llama
+\texttt{luus\_jaakola\_det.m}, \texttt{DET\_2.m} y
+\texttt{fitness\_cost.m} para cada candidato. \texttt{ga\_det.m}
+emplea la misma función de costo. En
+\nolinkurl{DET_scheduler_v1_perc_online.m} las llamadas LJ/GA están
+comentadas y se usa PID; por ello el piloto es la referencia de búsqueda.
+El README registra $f=0.326151$ a $t_q=1180$ s frente a $0.326139$
+en el árbol de referencia, diferencia relativa cercana a $4\,10^{-5}$.
+
+La función de costo concatena muestras futuras de nodos de
+\texttt{forest\_data\{1\}} y evalúa
+\begin{equation}
+J(u)=
+\underbrace{\sum_{j\in\mathcal I(u)}(T_j(u)-T_{\rm ref})^2}_{J_T}
++\underbrace{\lambda_m\sum_{k=1}^{K-1}
+ [\,|m_{k+1}(u)-m_k(u)|-\Delta_m\,]_+^2}_{J_m}
++\underbrace{\lambda_s\sum_{j\in\mathcal I(u)}
+ [\,g(T_j(u))\,]_+^2}_{J_s}.
+\label{eq:old}
+\end{equation}
+Aquí $m_k$ procede de \texttt{CurrentToMassFlow.m},
+$\Delta_m=5$, $\lambda_m=10^{-4}$ y $[x]_+=\max(x,0)$.
+Por defecto $g(T)=T-U_y$, $U_y=1244$ K y $\lambda_s=10$.
+Con \texttt{dsm\_thr} y \texttt{lambda\_dsm} en el nodo raíz se usa
+$g(T)=(T-T_{\rm ref})/(U_y-T_{\rm ref})-\tau$.
+El booleano \texttt{feasible} comprueba
+$|(T-T_{\rm ref})/(U_y-T_{\rm ref})|\leq1$ en las muestras,
+pero LJ registra candidatos no factibles y GA sí los filtra.
+La semántica de factibilidad debe unificarse antes de certificar el
+óptimo restringido.
+
+La ecuación \eqref{eq:old} no es una esperanza: concatena nodos de un
+solo árbol y omite las probabilidades de ruta. Incluso el número de
+muestras puede variar con la topología inducida por el control.
+El PSM se calcula posteriormente en
+\nolinkurl{DET_scheduler_postprocessing_perc_online.m} mediante
+trayectorias terminales y pesos de importancia. El DSM penalizado dentro
+del costo es determinista; no equivale a una métrica probabilística
+evaluada para cada candidato.
+
+\section{Cota inferior del costo vigente}
+Sea $\mathcal U_b$ una celda de controles. Para toda $u\in\mathcal U_b$,
+supónganse encierros rigurosos
+$T_j(u)\in[L_j,H_j]$ para cada muestra futura de una topología DET fija,
+y $m_k(u)\in[\ell_k,h_k]$. Definamos
+\[
+\begin{aligned}
+d_j&=\max\{L_j-T_{\rm ref},T_{\rm ref}-H_j,0\},\\
+a_k&=\ell_{k+1}-h_k,\qquad b_k=h_{k+1}-\ell_k,\\
+e_k&=\max\{a_k-\Delta_m,-\Delta_m-b_k,0\}.
+\end{aligned}
+\]
+Como la penalización de seguridad crece con $T$, su mínimo por intervalo
+se alcanza en $L_j$. Así,
+\begin{equation}
+\begin{aligned}
+\underline J(\mathcal U_b)
+&=\sum_j d_j^2+\lambda_m\sum_k e_k^2\\
+&\quad+
+\begin{cases}
+\lambda_s\sum_j[L_j-U_y]_+^2,&\text{límite absoluto},\\
+\lambda_s\sum_j
+ [\,\frac{L_j-T_{\rm ref}}{U_y-T_{\rm ref}}-\tau\,]_+^2,
+ &\text{penalización DSM}
+\end{cases}\\
+&\leq\inf_{u\in\mathcal U_b}J(u).
+\end{aligned}
+\label{eq:lb}
+\end{equation}
+La cota puede ser estricta: los mínimos individuales pueden requerir
+controles diferentes. \nolinkurl{certified_cost_lower_bound_box.m}
+implementa \eqref{eq:lb}. En cajas puntuales reproduce exactamente
+\eqref{eq:old}, salvo redondeo.
+
+\paragraph{Alcance.}
+El módulo no construye los encierros de temperatura. Una malla,
+semillas repetidas o un surrogate no los certifican. Si la topología
+cambia, hay que cubrir todas sus alternativas con una convención de
+horizonte común. Si se obtiene un candidato factible con costo $U$ y
+una partición exhaustiva con cotas $L_b$, entonces
+$L=\min_bL_b\leq J^\star\leq U$ y $U-L$ certifica el gap.
+Sin encierros válidos, sólo se tiene $J\geq0$.
+La prueba sintética \nolinkurl{test_certified_cost_lower_bound_box.m}
+verifica exactitud puntual y validez de inclusión.
+
+\section{Problema estocástico propuesto}
+Sea $\pi$ una política causal; el estado híbrido $z_k$ contiene modos
+de cada protección y del sistema pasivo. Los eventos $\xi_k$ incluyen
+fallo, reparación, perturbaciones e incertidumbre del modelo.
+Una formulación inicial es
+\begin{align}
+\min_{\pi}\quad&
+\E_p\!\left[\sum_{k=0}^{N-1}
+ w_T(T_k-T_{\rm ref})^2+w_u c_u(u_k,a_k)\right]
++\lambda_R R(\pi),\\
+\text{sujeto a}\quad&
+\Prob_p\!\left(\max_{0\leq k\leq N}T_k>U_y
+\mid\mathcal F_t\right)\leq\varepsilon,\\
+&x_{k+1}=F(x_k,z_k,u_k,a_k,\xi_k),\quad
+z_{k+1}=G(z_k,a_k,\xi_k).
+\end{align}
+Debe imponerse no anticipación en ramas aún indistinguibles.
+Son candidatos para $R$ la probabilidad de excedencia, CVaR del exceso
+térmico y un PSM basado en cuantiles; no son intercambiables sin fijar
+horizonte, confianza y unidades. En muestreo por importancia,
+$w_i=p(\omega_i)/q(\omega_i)$ debe representar la trayectoria completa,
+incluidas probabilidades condicionadas a demanda y acción. Comparar
+políticas requiere tamaño efectivo de muestra, intervalos de confianza
+y evaluación fuera de muestra.
+
+\section{Protecciones múltiples y ruta de implementación}
+El árbol actual contiene el par \texttt{[demand\_ps,ava\_ps]} del ACS.
+Con un solo actuador activo no surge una decisión de orden entre
+protecciones. Al incorporar otros sistemas, $z_k$ debe incluir
+disponibilidad, demanda, activación, fallo, reparación y retardos;
+el sistema pasivo tiene demanda y éxito propios. La secuencia temporal
+modifica acciones factibles, respuesta térmica y probabilidades.
+Deben representarse causas comunes y recursos compartidos.
+
+\begin{center}
+\begin{tabular}{@{}p{12mm}p{68mm}p{63mm}@{}}
+\toprule
+Hito & Entrega & Cierre verificable\\
+\midrule
+M0 & Piloto y desglose de costo & SHA, semilla y diferencia frente al valor archivado\\
+M1 & Encierros ROM/DET y cotas por celdas & $L\leq J^\star\leq U$ y gap, o limitación explícita\\
+M2 & Riesgo dentro de cada candidato & Pesos IS validados y decisiones sensibles al riesgo\\
+M3 & Comparación estocástica & Frontera costo--riesgo fuera de muestra y latencia\\
+M4 & Múltiples sistemas y pasivo & Secuencias, fallos comunes y política causal trazable\\
+\bottomrule
+\end{tabular}
+\end{center}
+El desarrollo y los criterios de aceptación constan en
+\texttt{docs/implementation\_route.md}.
+\end{document}
