@@ -59,7 +59,8 @@ $\rightarrow$ \texttt{fitness\_cost}.
 \begin{itemize}
 \item Repositorio: \texttt{leomiq/dt\_riskcontrol\_smdfr}.
 \item Base: commit \texttt{3266149}; árbol Git limpio al inicio.
-\item Referencia archivada: $f=0.326151$ en el piloto.
+\item Referencia archivada: $f=0.326151$.
+\item R2024b local: $f=0.362026$; brecha $+11.0\%$.
 \end{itemize}
 \column{.43\textwidth}
 \begin{block}{Lectura técnica}
@@ -110,8 +111,8 @@ e_k=\operatorname{dist}([\ell_{k+1}-h_k,h_{k+1}-\ell_k],[-\Delta_m,\Delta_m]).
 \leq \min_{u\ \mathrm{en\ celda}}J(u).
 \]
 \end{block}
-El módulo MATLAB ya calcula esta expresión y su prueba sintética
-comprueba exactitud para cajas puntuales. La certificación global
+El módulo MATLAB verifica cajas puntuales. Hoy sólo se tiene
+$L=0$ y el candidato factible $U=0.362026$; una garantía útil
 requiere encierros rigurosos del ROM/DET para todas las topologías.
 \end{frame}
 

@@ -216,6 +216,6 @@ pred_mdot_c_leak = timeseries(zeros(1,50), 0.5:0.5:25);
 pred_delta_tw_max = timeseries(zeros(1,50), 0.5:0.5:25);
 
 %% POLYFIT, DELTA TP AGAINST MDOT C
-load("fit_poly.mat");
-poly_vector = coeffvalues(fit_poly);
+% Load the archived poly4 coefficients without requiring the cfit class.
+poly_vector = fit_poly_coefficients();
 poly_vector(end) = poly_vector(end) - 2.5;

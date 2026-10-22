@@ -46,6 +46,13 @@ not yet certify the ROM/DET trajectories or optimize probabilistic risk.
 - Windows x64 for the pre-compiled `.mexw64` binaries. On any other platform,
   rebuild them from `matlab/mex_sources/` first (see below).
 
+The ROM initialization now reads the five archived polynomial coefficients
+from matlab/fit_poly_coefficients.m instead of deserializing the cfit
+object in models/fit_poly.mat. This removes a Curve Fitting Toolbox
+dependency for the pilot. Verify the exact values against the original MAT
+archive with: python python/verify_fit_poly_coefficients.py
+See docs/pilot_reproducibility.md for provenance and the local run record.
+
 ## Building the S-functions
 
 The Simulink model loads seven Level-2 S-functions as compiled MEX. Pre-built

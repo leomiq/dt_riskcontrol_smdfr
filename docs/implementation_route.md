@@ -32,6 +32,12 @@ Registrar SHA, dependencias, semillas, entrada t_q=1180 s, valor de referencia f
 
 Cierre: un comando reproducible, archivo de parámetros y reporte de diferencia respecto al piloto publicado.
 
+Estado local 22-10-2026: el piloto funciona en R2024b tras eliminar
+la dependencia de cfit, pero obtuvo 0.362026 frente a 0.326151
+archivado (+11.0 %). La equivalencia numérica de M0 sigue abierta;
+véase docs/pilot_reproducibility.md. La comparación de nuevos métodos
+debe esperar a fijar la causa de esa diferencia.
+
 ### M1. Cota inferior para el costo vigente — iniciado en este commit
 
 Derivar la descomposición J=J_T+J_m+J_s y una cota por cajas. Para cada muestra futura, encerrar T_j en [L_j,U_j]; para cada control, encerrar caudal m_k en [l_k,h_k]. El mínimo de cada término no negativo sobre esas cajas da una cota inferior. El módulo matlab/certified_cost_lower_bound_box.m implementa la fórmula y su prueba sintética verifica cajas puntuales, inclusión y errores de entrada. La cota es **condicional**: sólo certifica el problema si los intervalos cubren todas las trayectorias de la celda de control y la topología DET correspondiente está fija o sus alternativas están todas enumeradas.
@@ -71,3 +77,9 @@ Cierre: casos sintéticos que distingan A->B, B->A, fallos comunes, ACS fallido 
     matlab -batch "addpath('matlab'); addpath('models'); pilot_single_run"
 
 El segundo comando requiere MATLAB R2024a, Simulink, modelos y MEX; escribe pilot_result.mat en el directorio de ejecución. Ejecutarlo desde un directorio de resultados dedicado.
+
+## Referencias metodol?gicas y l?mites de transferencia
+
+- Rockafellar y Uryasev (2000), *Optimization of Conditional Value-at-Risk*, https://doi.org/10.21314/jor.2000.038: base de la representaci?n optimizable de CVaR. Se propone como alternativa de riesgo de cola, no como sustituto autom?tico del PSM f?sico.
+- Shapiro (2003), *Monte Carlo Sampling Methods*, https://doi.org/10.1016/S0927-0507(03)10006-0: SAA y validaci?n estad?stica del valor objetivo. Sus estimadores de desempe?o no reemplazan la cota determinista por intervalos de M1.
+- Campi y Garatti (2008), *The Exact Feasibility of Randomized Solutions of Uncertain Convex Programs*, https://doi.org/10.1137/07069821X: garant?as de enfoque por escenarios bajo hip?tesis convexas. El DET h?brido con decisiones binarias no satisface esas hip?tesis autom?ticamente; cualquier garant?a de ese tipo exigir? un argumento nuevo o una relajaci?n convexa expl?cita.

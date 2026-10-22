@@ -35,6 +35,15 @@ comentadas y se usa PID; por ello el piloto es la referencia de búsqueda.
 El README registra $f=0.326151$ a $t_q=1180$ s frente a $0.326139$
 en el árbol de referencia, diferencia relativa cercana a $4\,10^{-5}$.
 
+En esta máquina, R2024b sin Curve Fitting Toolbox exigió recuperar
+los coeficientes poly4 del archivo cfit archivado. La corrida completa
+con semilla 1 produjo $f=0.362026$, control inicial $56.750000$ A,
+margen mínimo $64.4211$ K y seis pases ($828.31$ s de búsqueda).
+Esto excede la referencia $0.326151$ en un $11.0\%$.
+La reproducción del valor publicado permanece abierta; véase
+\texttt{docs/pilot\_reproducibility.md}. Esta discrepancia debe
+resolverse antes de comparar mejoras del optimizador.
+
 La función de costo concatena muestras futuras de nodos de
 \texttt{forest\_data\{1\}} y evalúa
 \begin{equation}
@@ -111,6 +120,15 @@ Sin encierros válidos, sólo se tiene $J\geq0$.
 La prueba sintética \nolinkurl{test_certified_cost_lower_bound_box.m}
 verifica exactitud puntual y validez de inclusión.
 
+En el piloto local, el control candidato satisface la prueba
+térmica muestreada del código (máximo $|\mathrm{DSM}|=0.0047544$);
+su costo $U=0.362026$ es una cota superior para el problema vigente.
+La cota inferior global disponible sin encierros del ROM/DET es
+$L=0$. Por tanto el gap $U-L=0.362026$ no respalda ninguna
+afirmación de cercanía al óptimo. El valor $0.326151$ archivado
+procedía de otra ejecución y no puede usarse como cota de este
+modelo hasta verificar la equivalencia numérica.
+
 \section{Problema estocástico propuesto}
 Sea $\pi$ una política causal; el estado híbrido $z_k$ contiene modos
 de cada protección y del sistema pasivo. Los eventos $\xi_k$ incluyen
@@ -160,4 +178,20 @@ M4 & Múltiples sistemas y pasivo & Secuencias, fallos comunes y política causa
 \end{center}
 El desarrollo y los criterios de aceptación constan en
 \texttt{docs/implementation\_route.md}.
+\section{Referencias metodol?gicas y l?mites}
+La representaci?n optimizable de CVaR se basa en Rockafellar y
+Uryasev, \emph{Optimization of Conditional Value-at-Risk}
+(\href{https://doi.org/10.21314/jor.2000.038}{doi:10.21314/jor.2000.038}).
+Para aproximaci?n por promedios muestrales y validaci?n estad?stica,
+v?ase Shapiro, \emph{Monte Carlo Sampling Methods}
+(\href{https://doi.org/10.1016/S0927-0507(03)10006-0}
+{doi:10.1016/S0927-0507(03)10006-0}).
+Las garant?as de escenarios de Campi y Garatti,
+\emph{The Exact Feasibility of Randomized Solutions of Uncertain
+Convex Programs}
+(\href{https://doi.org/10.1137/07069821X}{doi:10.1137/07069821X}),
+requieren hip?tesis convexas. No se pueden trasladar sin demostraci?n
+al DET h?brido con decisiones binarias. Ninguna cota estad?stica de SAA
+reemplaza el encierro determinista exigido por \eqref{eq:lb}.
+
 \end{document}
