@@ -4,16 +4,16 @@
 \setsansfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,ItalicFont=InterVariable.ttf,BoldItalicFont=InterVariable.ttf]{InterVariable.ttf}
 \setmainfont[Path=../assets/fonts/]{InterVariable.ttf}
 \usefonttheme{professionalfonts}
-\usepackage{amsmath,amssymb,booktabs,tikz}
-\newcommand{\E}{\mathbb E}
-\newcommand{\Prb}{\mathbb P}
-\usetikzlibrary{positioning,arrows.meta}
+\usepackage{amsmath,amssymb,tikz,booktabs}
+\usetikzlibrary{arrows.meta,positioning,calc}
 \definecolor{USMBlue}{HTML}{003876}
 \definecolor{USMDeep}{HTML}{002A5C}
 \definecolor{USMCyan}{HTML}{00AEEF}
 \definecolor{USMYellow}{HTML}{FDB913}
 \definecolor{USMPale}{HTML}{EAF5FB}
 \definecolor{Ink}{HTML}{12233B}
+\definecolor{SoftGray}{HTML}{F2F5F8}
+\definecolor{Warn}{HTML}{AA5B00}
 \setbeamercolor{normal text}{fg=Ink,bg=white}
 \setbeamercolor{frametitle}{fg=white,bg=USMBlue}
 \setbeamercolor{structure}{fg=USMBlue}
@@ -24,204 +24,285 @@
 \setbeamertemplate{itemize items}[circle]
 \setbeamertemplate{footline}{
  \leavevmode\hbox{
- \begin{beamercolorbox}[wd=.78\paperwidth,ht=3ex,dp=1ex,leftskip=1em]{footline}
+ \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.6ex,dp=.8ex,leftskip=1em]{footline}
  \color{USMBlue}\scriptsize UNIVERSIDAD TÉCNICA FEDERICO SANTA MARÍA
  \end{beamercolorbox}
- \begin{beamercolorbox}[wd=.22\paperwidth,ht=3ex,dp=1ex,rightskip=1em plus1fil]{footline}
- \color{USMBlue}\scriptsize DT--SMDFR \hfill \insertframenumber
+ \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.6ex,dp=.8ex,rightskip=1em plus1fil]{footline}
+ \color{USMBlue}\scriptsize\hfill\insertframenumber
  \end{beamercolorbox}}}
-\title{Hacia un MPC estocástico informado por riesgo}
-\subtitle{Estado del DT--SMDFR y ruta de implementación}
-\author{Proyecto DT--SMDFR Risk Control}
-\institute{Universidad Técnica Federico Santa María}
-\date{22 de octubre de 2026}
+\tikzset{
+ stagebox/.style={draw=USMBlue,line width=.8pt,rounded corners=3pt,fill=USMPale,
+  align=center,inner sep=5pt,minimum height=1.05cm,font=\small},
+ active/.style={stagebox,fill=USMBlue,text=white},
+ risk/.style={stagebox,fill=USMYellow!22,draw=Warn},
+ arr/.style={-{Latex[length=2.5mm]},line width=1pt,draw=USMCyan},
+ weak/.style={-{Latex[length=2.5mm]},line width=.8pt,dashed,draw=Warn}
+}
+\newcommand{\key}[1]{{\color{USMBlue}\bfseries #1}}
+\newcommand{\captionline}[1]{\vspace{.18cm}{\color{USMBlue}\small #1}}
 \begin{document}
 {
 \setbeamercolor{background canvas}{bg=USMBlue}
 \begin{frame}[plain]
-\vspace{1.2cm}
-{\color{USMCyan}\large INVESTIGACIÓN EN CONTROL Y SEGURIDAD}\\[0.55cm]
-{\color{white}\Huge\bfseries Hacia un MPC estocástico\\[0.18cm] informado por riesgo}\\[0.55cm]
-{\color{white}\Large DT--SMDFR: diagnóstico, cota inferior y plan}\\[1.05cm]
-{\color{USMYellow}\rule{9cm}{2pt}}\\[0.3cm]
-{\color{white}\normalsize Universidad Técnica Federico Santa María \quad|\quad 22.10.2026}
+\vspace{.95cm}
+{\color{USMCyan}\large CONTROL Y SEGURIDAD NUCLEAR}\\[.55cm]
+{\color{white}\Huge\bfseries Control predictivo\\[.15cm] informado por riesgo}\\[.45cm]
+{\color{white}\Large Contexto, resultados y vías de exploración}\\[.8cm]
+{\color{USMYellow}\rule{9.2cm}{2pt}}\\[.25cm]
+{\color{white}\normalsize DT--SMDFR \quad|\quad Universidad Técnica Federico Santa María}\\[.12cm]
+{\color{white}\small Octubre de 2026}
 \end{frame}
 }
 
-\begin{frame}{Punto de partida: distribución v1.0.0}
-\begin{columns}[T]
-\column{.53\textwidth}
-\begin{block}{Cadena de búsqueda actual}
-Piloto a $t_q=1180$ s $\rightarrow$ Luus--Jaakola/GA
-$\rightarrow$ \texttt{DET\_2}
-$\rightarrow$ \texttt{fitness\_cost}.
-\end{block}
-\begin{itemize}
-\item Repositorio: \texttt{leomiq/dt\_riskcontrol\_smdfr}.
-\item Base: commit \texttt{3266149}; árbol Git limpio al inicio.
-\item Referencia archivada: $f=0.326151$.
-\item R2024b local: $f=0.362026$; brecha $+11.0\%$.
-\end{itemize}
-\column{.43\textwidth}
-\begin{block}{Lectura técnica}
-$J=J_T+J_m+J_s$: seguimiento térmico, salto de caudal y margen determinista.
-\end{block}
-\begin{itemize}
-\item La variante principal del scheduler usa PID; LJ/GA están comentados.
-\item Conviene comparar sobre el mismo piloto y las mismas semillas.
-\end{itemize}
-\end{columns}
-\end{frame}
-
-\begin{frame}{Brecha entre margen y riesgo}
-\begin{columns}[T]
-\column{.48\textwidth}
-\begin{block}{Dentro de la búsqueda}
-\[
-J_T=\sum_j(T_j-T_{\rm ref})^2,\quad
-J_s=\lambda_s\sum_j[\mathrm{DSM}_j-\tau]_+^2
-\]
-El DSM depende de la trayectoria, pero no pondera la probabilidad de las rutas.
-\end{block}
-\column{.48\textwidth}
-\begin{block}{Después de la búsqueda}
-IS--MCDET calcula PSM desde rutas terminales y pesos $p/q$ en el posprocesamiento.
-\end{block}
-\begin{itemize}
-\item El costo concatena nodos de un solo árbol.
-\item No es una esperanza estocástica sobre secuencias de fallo.
-\end{itemize}
-\end{columns}
+\begin{frame}{Pregunta central}
 \vspace{.2cm}
-\alert{Meta: evaluar riesgo para cada política candidata y dejar que esa evaluación cambie la decisión.}
-\end{frame}
-
-\begin{frame}{Hito 1: cota inferior del costo vigente}
-Para una celda de controles, encerrar cada $T_j$ en $[L_j,H_j]$
-y cada $m_k$ en $[\ell_k,h_k]$.
-\[
-d_j=\operatorname{dist}(T_{\rm ref},[L_j,H_j]),\qquad
-e_k=\operatorname{dist}([\ell_{k+1}-h_k,h_{k+1}-\ell_k],[-\Delta_m,\Delta_m]).
-\]
-\begin{block}{Cota algebraica}
-\[
-\underline J=
-\sum_jd_j^2+\lambda_m\sum_ke_k^2+
-\lambda_s\sum_j[g(L_j)]_+^2
-\leq \min_{u\ \mathrm{en\ celda}}J(u).
-\]
+\begin{block}{Decisión de control}
+¿Qué acción reduce el riesgo térmico futuro, mantiene el seguimiento y puede calcularse dentro del tiempo disponible?
 \end{block}
-El módulo MATLAB verifica cajas puntuales. Hoy sólo se tiene
-$L=0$ y el candidato factible $U=0.362026$; una garantía útil
-requiere encierros rigurosos del ROM/DET para todas las topologías.
-\end{frame}
-
-\begin{frame}{De cota local a garantía de optimalidad}
+\vspace{.35cm}
 \begin{center}
-\begin{tikzpicture}[node distance=8mm and 8mm,>=Latex,
- box/.style={draw=USMBlue,rounded corners,fill=USMPale,align=center,
- minimum width=3.2cm,minimum height=1.1cm,font=\small}]
-\node[box] (a) {Partición de controles\\y topologías DET};
-\node[box,right=of a] (b) {Encierros certificados\\$T_j,m_k$ por celda};
-\node[box,right=of b] (c) {Cotas $L_b$\\y candidato factible $U$};
-\draw[->,thick,USMCyan] (a)--(b);
-\draw[->,thick,USMCyan] (b)--(c);
+\begin{tikzpicture}[node distance=5mm]
+\node[stagebox,minimum width=2.15cm] (o) {Estado\\observado};
+\node[stagebox,minimum width=2.15cm,right=of o] (d) {Acción de\\control};
+\node[stagebox,minimum width=2.15cm,right=of d] (f) {Futuros\\posibles};
+\node[risk,minimum width=2.15cm,right=of f] (r) {Costo y\\riesgo};
+\node[active,minimum width=2.15cm,right=of r] (a) {Mejor acción\\factible};
+\draw[arr] (o)--(d);
+\draw[arr] (d)--(f);
+\draw[arr] (f)--(r);
+\draw[arr] (r)--(a);
 \end{tikzpicture}
 \end{center}
-\[
-L=\min_b L_b \leq J^\star \leq U,\qquad
-\mathrm{gap}=U-L.
-\]
-\begin{itemize}
-\item Resolver el problema de factibilidad: LJ y GA hoy tratan distinto el indicador.
-\item Alinear horizonte y muestras entre topologías de eventos.
-\item Muchas semillas o una malla densa dan evidencia empírica, no certificado.
-\end{itemize}
+\captionline{Meta: usar el riesgo calculado para comparar cada acción candidata.}
 \end{frame}
 
-\begin{frame}{M1: prueba híbrida y piloto real}
+\begin{frame}{Contexto actual: riesgo después de la decisión}
+\vspace{.15cm}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm]
+\node[stagebox,minimum width=2.55cm] (t) {Gemelo digital\\estado y pronóstico};
+\node[active,minimum width=2.65cm,right=of t] (c) {Control predictivo\\seguimiento + margen};
+\node[stagebox,minimum width=2.5cm,right=of c] (u) {Acción del\\ACS};
+\node[risk,minimum width=2.55cm,below=1.05cm of c] (p) {Árbol de eventos\\PSM a posteriori};
+\draw[arr] (t)--(c);
+\draw[arr] (c)--(u);
+\draw[arr] (u.south) |- (p.east);
+\draw[weak] (p.west) -- ++(-1.6,0) node[left,font=\small,align=right] {no retroalimenta\\esta búsqueda};
+\end{tikzpicture}
+\end{center}
+\captionline{ACS: enfriamiento auxiliar. PSM: margen probabilístico de seguridad.}
+\vspace{.05cm}
 \begin{columns}[T]
 \column{.48\textwidth}
-\begin{block}{Dos topologías, encierro analítico}
-$u\in[0,1]$: modo A para $u\leq0.5$, modo B para $u>0.5$.
-\[
-L=0.499024391,\quad U=0.500000000
-\]
-Brecha $0.000975609$; 47 divisiones. Óptimo exacto: $0.5$.
+\begin{block}{Lo que ya hace}
+Predice temperatura y evalúa seguimiento, cambios de caudal y una penalización térmica determinista.
 \end{block}
 \column{.48\textwidth}
-\begin{block}{Piloto R2024b}
-\[
-J_T=0.348407,\quad J_m=0.013619,\quad J_s=0
-\]
-$U=0.362026$ factible; $L=0$ para el modelo real.
+\begin{block}{Lo que aún falta}
+Ponderar rutas por probabilidad y usar el riesgo probabilístico para elegir cada acción candidata.
 \end{block}
 \end{columns}
-\vspace{.25cm}
-\alert{Faltan encierros térmicos del ROM/DET y control del redondeo para un gap certificado del piloto.}
 \end{frame}
 
-\begin{frame}{Formulación de control estocástico causal}
-\[
-\min_{\pi}\;
-\E_p\!\left[\sum_{k=0}^{N-1}
-w_T(T_k-T_{\rm ref})^2+w_uc_u(u_k,a_k)\right]
-+\lambda_R R(\pi)
-\]
-\[
-\Prb_p\!\left(\max_k T_k>U_y\mid\mathcal F_t\right)\leq\varepsilon .
-\]
+\begin{frame}{Cuatro desafíos que definen el problema}
 \begin{columns}[T]
 \column{.49\textwidth}
-\begin{block}{Métricas a comparar}
-Probabilidad de excedencia, CVaR del exceso térmico y PSM de cuantil.
+\begin{block}{1. Objetivo comparable}
+El costo actual concatena nodos de un árbol; las rutas no se ponderan y el número de muestras puede cambiar.
 \end{block}
-\column{.47\textwidth}
-\begin{block}{Condiciones metodológicas}
-Pesos $p/q$ por ruta completa, no anticipación, intervalos de confianza
-y validación fuera de muestra.
+\vspace{.1cm}
+\begin{block}{2. Riesgo dentro del control}
+El margen determinista mide una trayectoria; falta probabilidad de falla y cola térmica.
+\end{block}
+\column{.49\textwidth}
+\begin{block}{3. Calidad de la solución}
+Una buena búsqueda no prueba optimalidad. Hace falta una cota inferior válida y un candidato factible.
+\end{block}
+\vspace{.1cm}
+\begin{block}{4. Protecciones múltiples}
+Con dos sistemas activos importan disponibilidad, orden de activación, retardos y respuesta pasiva.
 \end{block}
 \end{columns}
 \end{frame}
 
-\begin{frame}{Protecciones múltiples y sistema pasivo}
+\begin{frame}{Resultado 1: costo local y diferencia con la referencia}
+\begin{columns}[T]
+\column{.52\textwidth}
+\begin{block}{Consulta fija, ejecución local}
+\begin{tabular}{@{}lr@{}}
+Seguimiento térmico & $0.348407$\\
+Cambios de caudal & $0.013619$\\
+Penalización de seguridad & $0$\\ \midrule
+Costo total, candidato factible & $\mathbf{0.362026}$
+\end{tabular}
+\end{block}
+\column{.44\textwidth}
+\begin{block}{Lectura física}
+Margen térmico mínimo pronosticado: \key{64.42 K} respecto de $1244$ K.
+\end{block}
+\begin{block}{Reproducibilidad}
+El costo archivado es $0.326151$; la ejecución local difiere \key{+11.0\,\%}.
+\end{block}
+\end{columns}
+\vspace{.15cm}
+\captionline{La factibilidad se verificó en las muestras del piloto. El margen mostrado no es una garantía probabilística.}
+\end{frame}
+
+\begin{frame}{Resultado 2: efecto del margen determinista en los barridos}
+\vspace{.2cm}
 \begin{center}
-\begin{tikzpicture}[node distance=7mm and 8mm,>=Latex,
- box/.style={draw=USMBlue,rounded corners,fill=USMPale,align=center,
- minimum width=2.7cm,minimum height=1.05cm,font=\small}]
-\node[box] (q) {Estado observado\\demanda térmica};
-\node[box,right=of q] (a) {ACS\\disponible / fallado};
-\node[box,right=of a] (b) {Sistema B\\disponible / fallado};
-\node[box,below=of b] (p) {Sistema pasivo\\demanda / éxito};
-\draw[->,thick,USMCyan] (q)--(a);
-\draw[->,thick,USMCyan] (a)--(b);
-\draw[->,thick,USMCyan] (b)--(p);
-\draw[->,dashed,USMBlue] (q) |- (p);
+\begin{tikzpicture}
+\node[stagebox,minimum width=4.65cm,minimum height=2.15cm] (a) at (0,0)
+ {\textbf{Convergencia}\\[.12cm]\Large 2 de 49\\[.08cm]\small configuraciones\\cambian la acción};
+\node[stagebox,minimum width=4.65cm,minimum height=2.15cm] (b) at (5.35,0)
+ {\textbf{Fase aguda}\\[.12cm]\Large 0 de 49\\[.08cm]\small configuraciones\\cambian la acción};
+
 \end{tikzpicture}
 \end{center}
+\vspace{.12cm}
 \begin{itemize}
-\item La política elige activación y caudal tras las observaciones disponibles.
-\item El orden de activación cambia temperatura, probabilidad y acciones factibles.
-\item Modelar retardos, causas comunes, recursos compartidos y demanda pasiva.
+\item En convergencia, los dos cambios requieren un umbral por debajo de la banda térmica alcanzable.
+\item En fase aguda, el seguimiento ya lleva el enfriamiento al límite permitido.
+\end{itemize}
+\captionline{Resultado del barrido estudiado; no implica que una métrica probabilística tenga el mismo comportamiento.}
+\end{frame}
+
+\begin{frame}{Resultado 3: cotas de optimalidad en el ejemplo y el piloto}
+\vspace{.15cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Ejemplo híbrido de dos modos}
+\[
+0.499024391\leq J^\star\leq 0.500000000
+\]
+Brecha $0.000975609$; óptimo analítico $0.5$.
+\end{block}
+\column{.49\textwidth}
+\begin{block}{Piloto del reactor}
+\[
+0\leq J^\star\leq 0.362026
+\]
+La cota inferior disponible no mide cercanía al óptimo.
+\end{block}
+\end{columns}
+\vspace{.3cm}
+\begin{center}
+\begin{tikzpicture}[x=1cm,y=1cm]
+\node[stagebox,minimum width=2.4cm] (d) at (0,0) {Caja de\\controles};
+\node[stagebox,minimum width=2.4cm] (e) at (3.1,0) {Todas las ramas\\y temperaturas};
+\node[active,minimum width=2.4cm] (l) at (6.2,0) {Cota inferior\\de la caja};
+\draw[arr] (d)--(e);
+\draw[arr] (e)--(l);
+\end{tikzpicture}
+\end{center}
+\captionline{La pieza pendiente es encerrar rigurosamente el pronóstico térmico para todos los controles y ramas.}
+\end{frame}
+
+\begin{frame}{Control informado por riesgo: evaluar cada candidato}
+\vspace{.05cm}
+\begin{center}
+\resizebox{.94\linewidth}{!}{%
+\begin{tikzpicture}[node distance=5mm]
+\node[active,minimum width=2.0cm] (u) {Candidato\\de control};
+\node[stagebox,minimum width=2.0cm,right=of u] (s) {Mismas\\realizaciones};
+\node[stagebox,minimum width=2.1cm,right=of s] (r) {Rutas, temperaturas\\y pesos};
+\node[risk,minimum width=2.0cm,right=of r] (m) {Costo esperado\\y riesgo};
+\node[active,minimum width=1.9cm,right=of m] (o) {Comparar\\candidatos};
+\draw[arr] (u)--(s);
+\draw[arr] (s)--(r);
+\draw[arr] (r)--(m);
+\draw[arr] (m)--(o);
+\end{tikzpicture}%
+}
+\end{center}
+\vspace{.25cm}
+\[
+\min_{\pi}\ \mathbb E[J(\pi,\omega)]+\lambda_R R(\pi)
+\qquad
+\text{sujeto a}\quad
+\mathbb P\!\left(\max_k T_k>1244\ {\rm K}\right)\leq\varepsilon .
+\]
+\vspace{.05cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Métrica principal a probar}
+Probabilidad de exceder el límite durante un horizonte común.
+\end{block}
+\column{.49\textwidth}
+\begin{block}{Métricas complementarias}
+Margen por cuantil y costo medio de los peores casos (CVaR).
+\end{block}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Vías de exploración más prometedoras}
+\begin{columns}[T]
+\column{.32\textwidth}
+\begin{block}{1. Escenarios comunes}
+Evaluar cada control sobre las mismas realizaciones. Comparar costo y riesgo sin que cambie el ruido de muestreo.
+\end{block}
+\column{.32\textwidth}
+\begin{block}{2. Fallas raras}
+Usar muestreo por importancia para la cola; registrar pesos, tamaño efectivo e incertidumbre.
+\end{block}
+\column{.32\textwidth}
+\begin{block}{3. Cotas globales}
+Construir encierros térmicos por regiones de control y ramas; medir una brecha de optimalidad válida.
+\end{block}
+\end{columns}
+\vspace{.3cm}
+\begin{center}
+\begin{tikzpicture}[node distance=5mm]
+\node[stagebox,minimum width=3.05cm] (a) {Primero: decisión\\sensible al riesgo};
+\node[stagebox,minimum width=3.05cm,right=of a] (b) {Después: cola\\estadísticamente estable};
+\node[stagebox,minimum width=3.05cm,right=of b] (c) {En paralelo: calidad\\de la optimización};
+\draw[arr] (a)--(b);
+\draw[arr] (b)--(c);
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}{Con varios sistemas, la estrategia es una secuencia causal}
+\vspace{.05cm}
+\begin{center}
+\begin{tikzpicture}[node distance=8mm and 9mm]
+\node[stagebox,minimum width=2.4cm] (obs) {Estado y demanda\\observados};
+\node[active,minimum width=2.4cm,right=of obs] (acs) {Activar ACS\\si corresponde};
+\node[stagebox,minimum width=2.35cm,right=of acs] (out) {Observar\\éxito o falla};
+\node[active,minimum width=2.45cm,right=of out] (b) {Decidir sobre\\sistema B};
+\node[risk,minimum width=2.65cm,below=1.15cm of out] (pas) {Protección pasiva\\según demanda y estado};
+\draw[arr] (obs)--(acs);
+\draw[arr] (acs)--(out);
+\draw[arr] (out)--(b);
+\draw[weak] (obs.south) |- (pas.west);
+\draw[weak] (out.south)--(pas.north);
+\end{tikzpicture}
+\end{center}
+\vspace{.2cm}
+\begin{itemize}
+\item ACS$\rightarrow$B y B$\rightarrow$ACS pueden producir riesgos y respuestas térmicas distintos.
+\item La acción en cada instante usa sólo fallas y demandas ya observadas.
+\item La protección pasiva responde a demanda y disponibilidad; el controlador decide sobre los sistemas activos.
 \end{itemize}
 \end{frame}
 
-\begin{frame}{Ruta de implementación y entregables}
-\begin{tabular}{@{}p{.08\textwidth}@{\hspace{.25cm}}p{.39\textwidth}@{\hspace{.25cm}}p{.40\textwidth}@{}}
-\toprule
- & Entrega & Evidencia de cierre\\
-\midrule
-M0 & Piloto reproducible & SHA, semilla, costo, tiempo\\
-M1 & Cota y encierros ROM/DET & $L\leq J^\star\leq U$, gap\\
-M2 & Riesgo por candidato & pesos IS y sensibilidad de decisión\\
-M3 & Optimización estocástica & riesgo fuera de muestra y tiempo\\
-M4 & Varios sistemas y pasivo & secuencias y política causal\\
-\bottomrule
-\end{tabular}
-\vspace{.5cm}
-\begin{block}{Trabajo iniciado}
-\texttt{certified\_cost\_lower\_bound\_box.m}, prueba sintética,
-reporte técnico y ruta detallada en Markdown.
+\begin{frame}{Secuencia de trabajo y criterio de éxito}
+\begin{center}
+\begin{tikzpicture}[node distance=7mm]
+\node[stagebox,minimum width=2.5cm] (a) {1. Conciliar\\línea base};
+\node[stagebox,minimum width=2.5cm,right=of a] (b) {2. Riesgo en\\cada candidato};
+\node[stagebox,minimum width=2.5cm,right=of b] (c) {3. Validar fuera\\de muestra};
+\node[stagebox,minimum width=2.5cm,right=of c] (d) {4. Dos sistemas\\y pasivo};
+\draw[arr] (a)--(b);
+\draw[arr] (b)--(c);
+\draw[arr] (c)--(d);
+\end{tikzpicture}
+\end{center}
+\vspace{.35cm}
+\begin{block}{Una mejora será convincente cuando}
+La nueva métrica cambie alguna decisión, reduzca el riesgo fuera de muestra a un costo térmico aceptable y cumpla el tiempo disponible por consulta.
 \end{block}
+\vspace{.12cm}
+\captionline{En paralelo: obtener cotas para el modelo real y cuantificar la brecha de optimalidad.}
 \end{frame}
 \end{document}
