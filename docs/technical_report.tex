@@ -129,6 +129,25 @@ afirmación de cercanía al óptimo. El valor $0.326151$ archivado
 procedía de otra ejecución y no puede usarse como cota de este
 modelo hasta verificar la equivalencia numérica.
 
+\section{Resultados del hito M1}
+El algoritmo \texttt{m1\_branch\_and\_bound.m} divide celdas de control
+según la menor cota inferior y evalúa candidatos factibles con el mismo
+costo. Su contrato exige que el oráculo cubra toda topología DET alcanzable.
+Un ejemplo híbrido de dos modos, con encierros analíticos, obtuvo
+$L=0.499024391$, $U=0.5$ y $U-L=0.000975609$ tras 47 divisiones;
+el óptimo exacto del ejemplo es $0.5$. Esta prueba valida el procedimiento,
+no el ROM real. Los números de máquina no usan redondeo dirigido.
+
+La auditoría del piloto R2024b descompuso el costo guardado:
+$J_T=0.348406945669$, $J_m=0.013619170139$,
+$J_s=0$ y $U=0.362026115808$. El caudal de la bomba es
+monótono en la corriente dentro del dominio del piloto, pero sus
+intervalos permiten cambios menores que $5$ kg/s; su cota inferior
+global es $L_m=0$. Sin encierros térmicos del ROM/DET,
+$L=0$ y el gap disponible sigue siendo $0.362026115808$.
+El detalle y los comandos constan en
+\texttt{docs/m1\_cost\_bound\_results.md}.
+
 \section{Problema estocástico propuesto}
 Sea $\pi$ una política causal; el estado híbrido $z_k$ contiene modos
 de cada protección y del sistema pasivo. Los eventos $\xi_k$ incluyen

@@ -139,6 +139,28 @@ L=\min_b L_b \leq J^\star \leq U,\qquad
 \end{itemize}
 \end{frame}
 
+\begin{frame}{M1: prueba híbrida y piloto real}
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{block}{Dos topologías, encierro analítico}
+$u\in[0,1]$: modo A para $u\leq0.5$, modo B para $u>0.5$.
+\[
+L=0.499024391,\quad U=0.500000000
+\]
+Brecha $0.000975609$; 47 divisiones. Óptimo exacto: $0.5$.
+\end{block}
+\column{.48\textwidth}
+\begin{block}{Piloto R2024b}
+\[
+J_T=0.348407,\quad J_m=0.013619,\quad J_s=0
+\]
+$U=0.362026$ factible; $L=0$ para el modelo real.
+\end{block}
+\end{columns}
+\vspace{.25cm}
+\alert{Faltan encierros térmicos del ROM/DET y control del redondeo para un gap certificado del piloto.}
+\end{frame}
+
 \begin{frame}{Formulación de control estocástico causal}
 \[
 \min_{\pi}\;
