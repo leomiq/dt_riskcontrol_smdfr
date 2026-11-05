@@ -1,4 +1,4 @@
-function E = e2_compare_optimizers(seeds, solvers, nlp_csv)
+function E = e2_compare_optimizers(seeds, solvers, nlp_csv, query_file)
 % E2_COMPARE_OPTIMIZERS  Corrected Luus-Jaakola and GA versus the monolithic NLP
 % on the archived query t_q = 1180 s, all costed by the SAME evaluator
 % (DET_2 + fitness_cost.m, i.e. the cost the closed loop actually optimizes).
@@ -23,15 +23,24 @@ function E = e2_compare_optimizers(seeds, solvers, nlp_csv)
     if nargin < 2 || isempty(solvers), solvers = {'LJ', 'GA'}; end
     if isequal(solvers, 'none'), solvers = {}; end   % only cost the NLP and archived actions
     repo = fileparts(fileparts(mfilename('fullpath')));
-    if nargin < 3 || isempty(nlp_csv)
-        nlp_csv = fullfile(repo, 'results', 'f1_rom_replica', 'f2_nlp_vs_lj_1180.csv');
-    end
-    outdir = fullfile(repo, 'results', 'e2_optimizers_1180');
-    if ~isfolder(outdir), mkdir(outdir); end
     try, suppress_simulink_prompts(); catch, end
-
-    S = load(fullfile(repo, 'models', 'LJ_test_sampled_vel_ACS_2_loop_1180.mat'));
-    dp = refresh_operating_points(S);
+    if nargin >= 4 && ~isempty(query_file)
+        % query from build_query_from_archive.m (operating points already current)
+        S = load(query_file);
+        dp = S.det_params;
+        S.time_snapshot_root = dp.time_snapshot_root; S.t_sam = dp.t_sam;
+        S.delayed_time_rom = dp.delayed_time_rom;
+        S.u_opt = [];                                  % no archived optimizer action
+    else
+        S = load(fullfile(repo, 'models', 'LJ_test_sampled_vel_ACS_2_loop_1180.mat'));
+        dp = refresh_operating_points(S);
+    end
+    tq_tag = sprintf('%g', double(S.time_snapshot_root));
+    if nargin < 3 || isempty(nlp_csv)
+        nlp_csv = fullfile(repo, 'results', 'f1_rom_replica', ['f2_nlp_vs_lj_' tq_tag '.csv']);
+    end
+    outdir = fullfile(repo, 'results', ['e2_optimizers_' tq_tag]);
+    if ~isfolder(outdir), mkdir(outdir); end
     if ~isfield(dp, 'Y_denorm_50'), dp.Y_denorm_50 = dp.Y_denorm; end
     for f = {'dsm_thr', 'lambda_dsm'}               % historical P0 cost only
         if isfield(dp, f{1}), dp = rmfield(dp, f{1}); end
@@ -60,7 +69,8 @@ function E = e2_compare_optimizers(seeds, solvers, nlp_csv)
     done = @(name) isfield(acts, name);
     % --- NLP action and archived (pre-fix) LJ action, one evaluation each
     T = readtable(nlp_csv);
-    named = {'NLP', T.u_NLP(:)'; 'LJ_archived', double(S.u_opt(:))'};
+    named = {'NLP', T.u_NLP(:)'};
+    if ~isempty(S.u_opt), named(end+1, :) = {'LJ_archived', double(S.u_opt(:))'}; end
     for i = 1:size(named, 1)
         if done(named{i, 1}), continue; end
         u = min(max(named{i, 2}, u_min), u_max);

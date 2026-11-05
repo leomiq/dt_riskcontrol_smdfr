@@ -13,8 +13,9 @@
 include(joinpath(@__DIR__, "SMDFRROM.jl"))
 using .SMDFRROM, MAT, JuMP, Ipopt, Printf, LinearAlgebra, ForwardDiff, DelimitedFiles
 
+TQ = isempty(ARGS) ? "1180" : ARGS[1]          # query instant, as in rom_reference_<TQ>.mat
 dir = joinpath(@__DIR__, "..", "results", "f1_rom_replica")
-r = matread(joinpath(dir, "rom_reference_1180.mat"))
+r = matread(joinpath(dir, "rom_reference_$TQ.mat"))
 p = load_params(r["par"])
 h = Float64(r["t_sam"]); t_q = Float64(r["t_q"]); y_ref = Float64(r["target"])
 U_y = 1244.0; lam_m = 1e-4; dm_lim = 5.0; lam_pct = 10.0
@@ -79,7 +80,7 @@ function solve_qp(pts)
 end
 
 # --- NLP reference (f2_monolithic_nlp.jl output)
-csv, hdr = readdlm(joinpath(dir, "f2_nlp_vs_lj_1180.csv"), ','; header = true)
+csv, hdr = readdlm(joinpath(dir, "f2_nlp_vs_lj_$TQ.csv"), ','; header = true)
 m_nlp = Float64.(csv[:, findfirst(==("mdot_NLP"), vec(hdr))])
 y_nlp, J_nlp, _ = evaluate(m_nlp)
 @printf("NLP (N3) reference: J = %.6f, u₀ ↔ ṁ₀ = %.4f kg/s\n\n", J_nlp, m_nlp[1])
@@ -133,7 +134,7 @@ for ω in (1e-3, 1e-2, 0.1, 1.0, 10.0)
     g = G(im * ω); @printf("  %8.3f     %.5f            %8.2f\n", ω, abs(g), rad2deg(angle(g)))
 end
 
-open(joinpath(dir, "f3_qp_vs_nlp_1180.csv"), "w") do io
+open(joinpath(dir, "f3_qp_vs_nlp_$TQ.csv"), "w") do io
     println(io, "t,mdot_NLP," * join(["mdot_" * replace(r[1], r"[ (),]" => "") for r in rows], ","))
     for k in 1:K
         println(io, join([@sprintf("%.1f", tX[hor[k]]); @sprintf("%.8f", m_nlp[k]);

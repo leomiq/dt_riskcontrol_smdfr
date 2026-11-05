@@ -402,7 +402,39 @@ el modelo afín); la acción del QP se re-simula con el modelo no lineal y se co
   como máximo sobre la PCT.
 - Valores propios de $A$: el más rápido −1.7·10³ s⁻¹ (cinética), ninguno inestable.
 - **Lectura**: en esta consulta el modelo lineal basta. El MPC lineal (QP) es viable y abre
-  la restricción probabilística analítica de §7. Falta comprobarlo en la fase aguda.
+  la restricción probabilística analítica de §7.
+
+**Fase aguda, $t_q=1161$ s.** `matlab/build_query_from_archive.m` reconstruye la consulta
+desde la realización archivada: corrientes aplicadas por el lazo hasta $t_q-\Delta t$, HRM
+re-simulado (idéntico al archivo, Δ fuga = 0) y ROM en $t_q-10$ s. El pronóstico de fuga es
+la **fuga real del HRM** (pronóstico perfecto): la BiLSTM no se puede regenerar aquí (falta
+`torch` y el `.pth` que carga `mc_inference.py`). Para comparar optimizadores da igual, porque
+todos reciben la misma serie.
+
+| | $t_q=1161$ s | $t_q=1180$ s |
+|---|---:|---:|
+| PCT al inicio del horizonte | 1181.33 K (2.1 K sobre la referencia) | 1179.63 K |
+| Réplica vs Simulink (horizonte) | 1.6·10⁻⁶ K | 2.2·10⁻⁶ K |
+| NLP: costo óptimo (4 inicios, mismo óptimo) | 48.027 | 0.244 |
+| NLP evaluado con `DET_2` + `fitness_cost` | 48.026942 | 0.243996 |
+| QP N1 / N2: costo re-simulado | 48.026949 / 48.026949 | 0.244005 / 0.243999 |
+| Error de la predicción lineal N1 | ≤ 0.015 K | ≤ 0.001 K |
+| $\partial\hat y/\partial\Delta M$ | −1.62·10⁻² K/kg | −1.58·10⁻² K/kg |
+| Solución | $u=u_{\max}$ todo el horizonte | satura 3 s y luego sigue $y_{\rm ref}$ |
+
+**Autoridad del actuador** (NLP con la cota superior ampliada; sólo cambia la cota):
+
+| $u_{\max}$ | $\dot m_{\rm ACS,max}$ | Costo óptimo 1161 s | Costo óptimo 1180 s |
+|---|---:|---:|---:|
+| 56.75 A (lazo actual) | 12.9 kg/s | 48.03 | 0.244 |
+| 56.80 A | 23.1 kg/s | 21.51 | 0.098 |
+| 56.90 A | 43.6 kg/s | 10.32 | — (no terminó) |
+
+- En la fase aguda el óptimo es la esquina $u=u_{\max}$: **la cota de la bomba, no el
+  optimizador, determina el resultado**, y aun así la PCT no llega a la referencia en el
+  horizonte (1179.76 K al final). Cualquier comparación de optimizadores en esa fase mide
+  sobre todo si encuentran la esquina.
+- El LJ y el GA a 1161 s no se completaron (procesos detenidos por falta de memoria).
 
 ---
 

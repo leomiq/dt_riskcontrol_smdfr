@@ -67,7 +67,7 @@ for k in findall(hor)[1:5:end]
     @printf("  %7.1f  %10.4f  %10.4f  %+.2e\n", tX[k], ypred[k], y[k], y[k] - ypred[k])
 end
 
-open(joinpath(dirname(file), "replica_vs_simulink_1180.csv"), "w") do io
+open(joinpath(dirname(file), "replica_vs_simulink_$(round(Int, t_q)).csv"), "w") do io
     println(io, "t,y_simulink,y_replica,leak,acs,u")
     for k in eachindex(tX)
         @printf(io, "%.1f,%.8f,%.8f,%.8f,%.8f,%.8f\n", tX[k], ypred[k], y[k], leak[k], acs_sim[k], u[k])

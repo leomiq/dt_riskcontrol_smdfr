@@ -12,11 +12,14 @@
 # then re-simulated with the ode1be replica (= Simulink, see validate_replica.jl),
 # so all costs are compared on the same model.
 #
-# Usage, from the repository root:  julia --project=julia julia/f2_monolithic_nlp.jl
+# Usage, from the repository root:  julia --project=julia julia/f2_monolithic_nlp.jl [t_q]
+# (default t_q = 1180; for other queries "LJ" is the reference action stored in
+# rom_reference_<t_q>.mat, the mid-range current when no optimizer action exists)
 include(joinpath(@__DIR__, "SMDFRROM.jl"))
 using .SMDFRROM, MAT, JuMP, Ipopt, Printf
 
-file = joinpath(@__DIR__, "..", "results", "f1_rom_replica", "rom_reference_1180.mat")
+TQ = isempty(ARGS) ? "1180" : ARGS[1]
+file = joinpath(@__DIR__, "..", "results", "f1_rom_replica", "rom_reference_$TQ.mat")
 r = matread(file)
 p = load_params(r["par"])
 h = Float64(r["t_sam"]); t_q = Float64(r["t_q"]); y_ref = Float64(r["target"])
@@ -35,6 +38,9 @@ x_init = Xs[k0, :]
 leak = ip[hor, 2]
 u_opt = vec(r["u_opt"]); @assert length(u_opt) == K
 ub = r["u_bounds"]; u_lo, u_hi = minimum(ub[:, 1]), maximum(ub[:, 2])
+if haskey(ENV, "U_MAX_OVERRIDE")                # actuator-authority study (bound only)
+    u_hi = parse(Float64, ENV["U_MAX_OVERRIDE"]); TQ *= "_umax$(ENV["U_MAX_OVERRIDE"])"
+end
 m_lo, m_hi = current_to_massflow(u_lo), current_to_massflow(u_hi)
 @printf("t_q = %.1f s, K = %d, y_ref = %.4f K, u ∈ [%.4f, %.4f] A → ṁ_ACS ∈ [%.3f, %.3f] kg/s\n",
         t_q, K, y_ref, u_lo, u_hi, m_lo, m_hi)
@@ -138,7 +144,7 @@ for k in 1:K
     @printf("  %7.1f   %.5f    %.5f    %.4f   %.4f\n", tX[hor[k]], u_opt[k], u_best[k], y_LJ[k], y_best[k])
 end
 
-open(joinpath(dirname(file), "f2_nlp_vs_lj_1180.csv"), "w") do io
+open(joinpath(dirname(file), "f2_nlp_vs_lj_$TQ.csv"), "w") do io
     println(io, "t,u_LJ,u_NLP,mdot_LJ,mdot_NLP,y_LJ,y_NLP,leak")
     for k in 1:K
         @printf(io, "%.1f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f,%.8f\n", tX[hor[k]], u_opt[k], u_best[k],

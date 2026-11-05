@@ -1,4 +1,4 @@
-function f1_export_rom_reference(u_csv, tag)
+function f1_export_rom_reference(u_csv, tag, query_file)
 % F1 (monolithic formulation plan): reference data for the algebraic ROM replica.
 %
 % Rebuilds the ROOT-node ROM simulation of the archived query t_q = 1180 s exactly
@@ -19,18 +19,31 @@ function f1_export_rom_reference(u_csv, tag)
 % Usage (from the repository root):
 %   matlab -batch "addpath('matlab'); addpath('models'); f1_export_rom_reference"
 %   matlab -batch "addpath('matlab'); addpath('models'); f1_export_rom_reference('results/f1_rom_replica/f2_nlp_vs_lj_1180.csv','NLP')"
+%
+% A third argument takes a query built by build_query_from_archive.m instead of
+% the archived 1180 s workspace; the output is then rom_reference_<t_q>.mat:
+%   matlab -batch "addpath('matlab'); addpath('models'); f1_export_rom_reference('','','results/queries/query_1161.mat')"
 
 repo = fileparts(fileparts(mfilename('fullpath')));
 outdir = fullfile(repo, 'results', 'f1_rom_replica');
 if ~isfolder(outdir), mkdir(outdir); end
 
-A = load(fullfile(repo, 'models', 'LJ_test_sampled_vel_ACS_2_loop_1180.mat'), ...
-    'det_params', 'u_opt', 'd_mpc', 'forest_data_opt', 'target', 'u_bounds');
+if nargin >= 3 && ~isempty(query_file)
+    % query built by build_query_from_archive.m: no archived optimizer action,
+    % the reference run uses the mid-range current
+    A = load(query_file);
+    nu = size(A.u_bounds, 1);
+    A.u_opt = mean(A.u_bounds(1, :)) * ones(1, nu);
+    fprintf('Query %s (%s)\n', query_file, A.forecast);
+else
+    A = load(fullfile(repo, 'models', 'LJ_test_sampled_vel_ACS_2_loop_1180.mat'), ...
+        'det_params', 'u_opt', 'd_mpc', 'forest_data_opt', 'target', 'u_bounds');
+end
 P = A.det_params;
 u_trial = A.u_opt;
 d_mpc = A.d_mpc;
 suffix = '';
-if nargin >= 2
+if nargin >= 2 && ~isempty(tag)
     T = readtable(u_csv);
     u_trial = T.(['u_' tag])';
     assert(numel(u_trial) == numel(A.u_opt), 'expected %d actions', numel(A.u_opt));
@@ -179,15 +192,17 @@ end
 ref.par = par;
 
 %% Re-run vs archived prediction (R2024a run stored in the .mat)
-tr = A.forest_data_opt{1}(1).tree_data.data.pred_tw_max_signal;
 mine = out.pred_tw_max_signal;
-ta = tr.Time(:); ya = double(tr.Data(:));
-[tc, ia, ib] = intersect(round(ta*2)/2, round(mine.Time(:)*2)/2);
-d = double(mine.Data(ib)) - ya(ia);
-keep = tc > t_q - t_sam;
-ref.archived_pred_tw_max = [ta, ya];
-fprintf(['Re-run vs archived pred_tw_max on the horizon (%d samples): ' ...
-    'diff in [%.4f, %.4f] K, std %.2e K\n'], nnz(keep), min(d(keep)), max(d(keep)), std(d(keep)));
+if isfield(A, 'forest_data_opt')
+    tr = A.forest_data_opt{1}(1).tree_data.data.pred_tw_max_signal;
+    ta = tr.Time(:); ya = double(tr.Data(:));
+    [tc, ia, ib] = intersect(round(ta*2)/2, round(mine.Time(:)*2)/2);
+    d = double(mine.Data(ib)) - ya(ia);
+    keep = tc > t_q - t_sam;
+    ref.archived_pred_tw_max = [ta, ya];
+    fprintf(['Re-run vs archived pred_tw_max on the horizon (%d samples): ' ...
+        'diff in [%.4f, %.4f] K, std %.2e K\n'], nnz(keep), min(d(keep)), max(d(keep)), std(d(keep)));
+end
 fprintf('Initial states (%d logged):\n', numel(x0));
 for i = 1:numel(x0)
     fprintf('  %2d  %-60s  n=%d  first=%.6g\n', i, x0(i).block, numel(x0(i).value), x0(i).value(1));
@@ -202,7 +217,7 @@ J_pct   = 10 * sum(max(0, y - 1244).^2);
 fprintf('P0 cost on Simulink: J = %.6f (track %.6f, mdot %.2e, pct %.2e), max PCT %.4f K\n', ...
     J_track + J_mdot + J_pct, J_track, J_mdot, J_pct, max(y));
 
-fn = fullfile(outdir, ['rom_reference_1180' suffix '.mat']);
+fn = fullfile(outdir, sprintf('rom_reference_%g%s.mat', t_q, suffix));
 save(fn, '-struct', 'ref', '-v7');
 fprintf('Saved %s\n', fn);
 end
