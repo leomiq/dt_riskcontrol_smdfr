@@ -29,10 +29,14 @@ function [Y_best, u_best, f_best, history, t_vector] = ga_det(u0, bounds, num_ge
     % Bounds
     lb = bounds(:,1)'; ub = bounds(:,2)';
 
-    % Initialize parallel pool if needed
-    pool = gcp('nocreate');
-    if isempty(pool)
-        parpool('local', min(pop_size, feature('numcores')));
+    % Initialize parallel pool if needed. Without the Parallel Computing Toolbox
+    % gcp/parpool do not exist and parfor below runs serially, as in
+    % luus_jaakola_det.m, so the pool is optional.
+    if exist('gcp', 'file') == 2
+        pool = gcp('nocreate');
+        if isempty(pool)
+            parpool('local', min(pop_size, feature('numcores')));
+        end
     end
 
     % Initialize population

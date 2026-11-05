@@ -359,6 +359,51 @@ las bisagras y el caudal del ACS como decisión. Cada acción se re-simula en Si
   actual. Falta repetir la comparación con LJ corregido y con el algoritmo genético en
   varias consultas (E2/V3).
 
+**E2 en la misma consulta** (`matlab/e2_compare_optimizers.m`, resultados en
+`results/e2_optimizers_1180/`). Optimizadores del lazo con la configuración de producción
+(cotas [56.69, 56.75] A; LJ corregido: R = 24, γ = 0.90, M = 5, parada relativa; GA: 20 × 20,
+cruce 0.8, mutación 0.3), todos costeados con el mismo evaluador `DET_2` + `fitness_cost`.
+Sin Parallel Computing Toolbox los `parfor` corren en serie.
+
+| Método | Costo P0 | Brecha vs NLP | PCT máx. [K] | $u_0$ [A] | Evaluaciones | Tiempo |
+|---|---:|---:|---:|---:|---:|---:|
+| NLP (N3) / QP (N1) | **0.2440** | — | 1179.5789 | 56.750 | — | 0.1 s |
+| LJ corregido, semilla 1 | 0.3169 | +30 % | 1179.5789 | 56.750 | 721 | 868 s |
+| LJ corregido, semilla 2 | 0.3131 | +28 % | 1179.5789 | 56.750 | 721 | 820 s |
+| LJ corregido, semilla 3 | 0.3805 | +56 % | 1179.5970 | 56.730 | 721 | 794 s |
+| GA, semilla 1 | 0.3527 | +45 % | 1179.5815 | 56.747 | 420 | 629 s |
+| GA, semilla 2 | 0.3489 | +43 % | 1179.5841 | 56.744 | 420 | 603 s |
+| LJ archivado (antes de la corrección) | 4.0810 | +1573 % | 1179.7154 | 56.690 | — | — |
+
+- Ningún optimizador sin derivadas alcanza el óptimo: quedan entre +28 % y +56 % por
+  encima, y la primera acción (la que se aplica) depende de la semilla: 2 de 5 corridas no
+  saturan. El NLP y el QP dan siempre la misma acción, ≈ 10⁴ veces más rápido.
+- En temperatura las diferencias son pequeñas (≤ 0.02 K de PCT máxima): en esta consulta el
+  beneficio es velocidad y reproducibilidad, no seguridad.
+- GA semilla 3 no terminó (proceso detenido por falta de memoria del sistema).
+
+**F3, primer resultado** (`julia/f3_linearized_qp.jl`, misma consulta). La réplica se
+linealiza con ForwardDiff y el MPC lineal se resuelve como QP convexo (Euler implícito sobre
+el modelo afín); la acción del QP se re-simula con el modelo no lineal y se costea con P0.
+
+| Modelo de predicción | Tiempo | Costo P0 (re-simulación no lineal) | Brecha vs NLP | Error máx. de la predicción lineal |
+|---|---:|---:|---:|---:|
+| N3 (NLP) | 0.1 s | 0.243998 | — | — |
+| N1: LTI en $t_q-\Delta t$ | 0.06 s | 0.244005 | +0.003 % | ≤ 0.001 K |
+| N2: LTV a lo largo de la trayectoria, 2 iteraciones | 0.07 s | 0.243999 | 0.000 % | < 0.001 K |
+
+- **Estructura de $G(s)$** de $\dot m_{\rm ACS}$ a $\hat y$: el caudal del ACS sólo entra en
+  $\dot{\Delta M}=\dot m_{\rm leak}+\dot m_{\rm ACS}$ y en el término $p_4$. Con el inventario
+  congelado la ganancia estática es $2\cdot10^{-4}$ K/(kg/s), sólo por $p_4'$. El efecto real
+  pasa por el inventario (polo en $s=0$): $\partial\hat y/\partial\Delta M=-1.58\cdot10^{-2}$
+  K/kg, así que $G(s)\approx G_M/s$ (fase ≈ +90° bajo 0.1 rad/s). Esto explica la solución
+  "saturar y luego seguir": hay que acumular inventario lo antes posible.
+- **Autoridad**: el rango de $u$ equivale a ≈ 12 kg/s; en 12.5 s eso suma ≈ 150 kg, ≈ −2.4 K
+  como máximo sobre la PCT.
+- Valores propios de $A$: el más rápido −1.7·10³ s⁻¹ (cinética), ninguno inestable.
+- **Lectura**: en esta consulta el modelo lineal basta. El MPC lineal (QP) es viable y abre
+  la restricción probabilística analítica de §7. Falta comprobarlo en la fase aguda.
+
 ---
 
 ## 9. Decisiones abiertas
