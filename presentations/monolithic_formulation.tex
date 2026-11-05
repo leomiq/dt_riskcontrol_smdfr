@@ -1,0 +1,771 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage{fontspec}
+\setsansfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,BoldFeatures={FakeBold=2.2},ItalicFont=InterVariable.ttf,ItalicFeatures={FakeSlant=0.18},BoldItalicFont=InterVariable.ttf,BoldItalicFeatures={FakeBold=2.2,FakeSlant=0.18}]{InterVariable.ttf}
+\setmainfont[Path=../assets/fonts/,BoldFont=InterVariable.ttf,BoldFeatures={FakeBold=2.2}]{InterVariable.ttf}
+\usefonttheme{professionalfonts}
+\usepackage{amsmath,amssymb,booktabs,array}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+
+% ---------- Colores USM ----------
+\definecolor{USMBlue}{HTML}{003876}
+\definecolor{USMDeep}{HTML}{002A5C}
+\definecolor{USMCyan}{HTML}{00AEEF}
+\definecolor{USMYellow}{HTML}{FDB913}
+\definecolor{USMPale}{HTML}{EAF5FB}
+\definecolor{Ink}{HTML}{12233B}
+\definecolor{SoftGray}{HTML}{F2F5F8}
+\definecolor{MidGray}{HTML}{8A96A3}
+\definecolor{Warn}{HTML}{AA5B00}
+\definecolor{Bad}{HTML}{B3261E}
+\definecolor{Good}{HTML}{1E7B45}
+
+\setbeamercolor{normal text}{fg=Ink,bg=white}
+\setbeamercolor{frametitle}{fg=white,bg=USMBlue}
+\setbeamercolor{structure}{fg=USMBlue}
+\setbeamercolor{block title}{fg=white,bg=USMBlue}
+\setbeamercolor{block body}{fg=Ink,bg=USMPale}
+\setbeamercolor{block title alerted}{fg=white,bg=Warn}
+\setbeamercolor{block body alerted}{fg=Ink,bg=USMYellow!14}
+\setbeamercolor{block title example}{fg=white,bg=Good}
+\setbeamercolor{block body example}{fg=Ink,bg=Good!8}
+\setbeamercolor{alerted text}{fg=Warn}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{enumerate items}[default]
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamertemplate{frametitle}{%
+ \nointerlineskip
+ \begin{beamercolorbox}[wd=\paperwidth,ht=2.5ex,dp=1.1ex,leftskip=1em,rightskip=1em]{frametitle}
+ \usebeamerfont{frametitle}\insertframetitle
+ \hfill{\color{USMCyan}\scriptsize\insertsectionhead}
+ \end{beamercolorbox}}
+\setbeamertemplate{footline}{%
+ \leavevmode\hbox{%
+ \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.6ex,dp=.8ex,leftskip=1em]{footline}%
+ \color{USMBlue}\scriptsize UNIVERSIDAD TÉCNICA FEDERICO SANTA MARÍA \quad{\color{MidGray}|\quad Hacia una formulación monolítica}%
+ \end{beamercolorbox}%
+ \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.6ex,dp=.8ex,rightskip=1em]{footline}%
+ \color{USMBlue}\scriptsize\hfill\insertframenumber%
+ \end{beamercolorbox}}}
+
+\tikzset{
+ stagebox/.style={draw=USMBlue,line width=.8pt,rounded corners=3pt,fill=USMPale,
+  align=center,inner sep=5pt,minimum height=1.0cm,font=\small},
+ active/.style={stagebox,fill=USMBlue,text=white},
+ risk/.style={stagebox,fill=USMYellow!22,draw=Warn},
+ ghost/.style={stagebox,fill=SoftGray,draw=MidGray,text=Ink},
+ good/.style={stagebox,fill=Good!10,draw=Good},
+ arr/.style={-{Latex[length=2.5mm]},line width=1pt,draw=USMCyan},
+ darr/.style={-{Latex[length=2.5mm]},line width=1pt,draw=USMBlue},
+ weak/.style={-{Latex[length=2.5mm]},line width=.8pt,dashed,draw=Warn},
+ tag/.style={font=\scriptsize,fill=white,inner sep=1.5pt}
+}
+\newcommand{\key}[1]{\leavevmode{\color{USMBlue}\bfseries #1}}
+\newcommand{\warn}[1]{{\color{Warn}\bfseries #1}}
+\newcommand{\captionline}[1]{\par\vspace{.15cm}{\color{USMBlue}\small #1\par}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcommand{\yhat}{\hat y}
+\newcommand{\md}{\dot m}
+\newcommand{\Prob}{\mathbb P}
+\newcommand{\E}{\mathbb E}
+\newcommand{\pill}[2]{\tikz[baseline=(p.base)]\node[fill=#1,text=white,rounded corners=2pt,inner sep=2pt,font=\scriptsize\bfseries](p){#2};}
+\newcommand{\partframe}[3]{%
+{\setbeamercolor{background canvas}{bg=USMBlue}
+\begin{frame}[plain]
+\vspace{1.4cm}
+{\color{USMCyan}\Large PARTE #1}\\[.35cm]
+{\color{white}\huge\bfseries #2}\\[.35cm]
+{\color{USMYellow}\rule{7cm}{2pt}}\\[.3cm]
+{\color{white}\normalsize #3}
+\end{frame}}}
+
+\begin{document}
+
+% =====================================================================
+{
+\setbeamercolor{background canvas}{bg=USMBlue}
+\begin{frame}[plain]
+\vspace{.7cm}
+{\color{USMCyan}\large CONTROL PREDICTIVO DEL SMDFR \quad|\quad SEGUNDA ENTREGA}\\[.5cm]
+{\color{white}\Huge\bfseries Hacia una formulación\\[.15cm] monolítica}\\[.4cm]
+{\color{white}\large Ordenar las ideas: modelos, linealización,\\[.05cm] restricciones físicas y riesgo}\\[.6cm]
+{\color{USMYellow}\rule{9.2cm}{2pt}}\\[.25cm]
+{\color{white}\normalsize Leonardo Andrés Miqueles Leiva}\\[.08cm]
+{\color{white}\small Universidad Técnica Federico Santa María \quad|\quad Octubre de 2026}
+\end{frame}
+}
+
+% =====================================================================
+\begin{frame}{De dónde venimos}
+\begin{columns}[T]
+\column{.47\textwidth}
+\begin{block}{El problema implementado (P0)}
+\small Cada 0.5 s, Luus--Jaakola busca 26 corrientes de la bomba del ACS que minimizan
+\[
+\textstyle\sum(\yhat-y_{\rm ref})^2+\lambda_m\sum[\,|\Delta\md|-5\,]_+^2+\lambda_s\sum[\mathrm{DSM}-\tau]_+^2,
+\]
+evaluando cada candidato con un simulador Simulink (ROM + árbol de eventos).
+\end{block}
+\begin{alertblock}{Diagnóstico de la reunión (22-10)}
+\small Ni el MPC determinista se resuelve con holgura (76 s de 120 s). \textbf{Antes de volverlo estocástico, hay que volverlo tratable.}
+\end{alertblock}
+\column{.5\textwidth}
+\begin{block}{Cuatro caminos que surgieron después}
+\small
+\begin{enumerate}\setlength{\itemsep}{.08cm}
+\item Linealizar por \key{pequeña perturbación} y obtener funciones de transferencia (como en el HPR1000).
+\item Usar una \key{respuesta estacionaria} (como \texttt{SA\_DualFluid.m}).
+\item Escribir \key{PKE + TH como restricciones}: fusionar simulador y control.
+\item Reutilizar los \key{modelos en Julia} del secundamiento en ARAMIS.
+\end{enumerate}
+\end{block}
+\begin{exampleblock}{Tesis de esta presentación}
+\small No son alternativas: son \textbf{niveles de un mismo modelo}, escrito una sola vez.
+\end{exampleblock}
+\end{columns}
+\end{frame}
+
+% =====================================================================
+\begin{frame}{Recorrido}
+\vspace{.3cm}
+\begin{center}
+\begin{tikzpicture}[node distance=4mm and 4mm]
+\node[stagebox,minimum width=3.6cm] (a) {\textbf{I. Material}\\qué tenemos y qué aporta};
+\node[stagebox,minimum width=3.6cm,right=of a] (b) {\textbf{II. El modelo por dentro}\\ecuaciones, escalas, no linealidades};
+\node[stagebox,minimum width=3.6cm,right=of b] (c) {\textbf{III. Escalera}\\N0 · N1 · N2 · N3};
+\node[active,minimum width=3.6cm,below=8mm of a] (d) {\textbf{IV. Formulación}\\monolítica};
+\node[risk,minimum width=3.6cm,right=of d] (e) {\textbf{V. Riesgo}\\y escenario óptimo};
+\node[stagebox,minimum width=3.6cm,right=of e] (f) {\textbf{VI. Plan}\\F0--F5 y próxima reunión};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c.south) -- ++(0,-.3) -| (d.north);
+\draw[arr] (d)--(e); \draw[arr] (e)--(f);
+\end{tikzpicture}
+\end{center}
+\vspace{.4cm}
+\captionline{Documento compañero: \texttt{docs/monolithic\_formulation\_plan.md}.}
+\end{frame}
+
+% =====================================================================
+\section{I. Material}
+\partframe{I}{El material}{Seis fuentes y qué aporta cada una}
+
+\begin{frame}{Qué tenemos y para qué sirve}
+\scriptsize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}L{3.6cm}L{5.4cm}L{4.6cm}@{}}
+\toprule
+\textbf{Fuente} & \textbf{Qué aporta} & \textbf{Uso aquí}\\
+\midrule
+\textbf{HRM y ROM del repositorio} (\texttt{.slx}) & Las ecuaciones PKE + TH ya implementadas: 12 nodos (HRM) y 0-D (ROM) & \key{Fuente de las restricciones}\\
+\textbf{Modelos Julia, ARAMIS} (\texttt{smdfr\_control}) & Mismo reactor como DAE y un \key{MPC no lineal ya escrito} en JuMP + Ipopt con Euler implícito & Plantilla del nivel N3\\
+\textbf{\texttt{SA\_DualFluid.m}} + análisis de Masotti y Mauri & TH estacionaria de 12 nodos; su resultado \key{inicializa} HRM y ROM; $h_{fw}$ domina la incertidumbre de $T_f$ & Nivel N0 y estado inicial\\
+\textbf{Zhang et al. (2022)}, HPR1000 & Método: no lineal $\to$ estacionario $\to$ pequeña perturbación $\to$ $G(s)$, validado contra el no lineal & Nivel N1\\
+\textbf{Wang et al. (2021)}, DFR 1-D & PKE con \key{precursores circulantes} + balances nodalizados; datos del DFR-250M & Validación física de las ecuaciones\\
+\textbf{Homem-de-Mello et al. (2026)}, \emph{Math.\ Program.} (enviado por H. Rozas) & Existe un \key{escenario óptimo único} para programas de dos etapas con recurso fijo y segunda etapa lineal & Capa de riesgo (Parte V)\\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+% =====================================================================
+\section{II. El modelo por dentro}
+\partframe{II}{El modelo por dentro}{Lo que encontramos al abrir el ROM}
+
+\begin{frame}{El ROM son 16 ecuaciones diferenciales}
+\begin{columns}[T]
+\column{.52\textwidth}
+\begin{block}{Cinética puntual}
+\vspace{-.2cm}
+{\small
+\begin{align*}
+\dot N&=\tfrac{\rho-\beta}{\Lambda}N+\textstyle\sum_i\lambda_iC_i\\
+\dot C_i&=\tfrac{\beta_i}{\Lambda}N-(\lambda_i+\lambda_c)C_i+\lambda_eC^e_i\\
+\dot C^e_i&=\lambda_cC_i-(\lambda_i+\lambda_e)C^e_i\\
+\rho&=\rho_0+\alpha_f(T_f-\bar T_{f0})+\alpha_c(T_c-\bar T_{c0})
+\end{align*}}
+\end{block}
+\small Precursores circulantes: $\lambda_c=1/5.43$ s$^{-1}$ (salida del núcleo), $\lambda_e=1/10$ s$^{-1}$ (reingreso). \key{Comprobación}: la reactividad estacionaria que exige la pérdida de precursores es $1.1105\cdot10^{-3}$, igual a $\rho_0$.
+\column{.45\textwidth}
+\begin{block}{Termohidráulica (0-D)}
+\vspace{-.2cm}
+{\small
+\begin{align*}
+M_fc_{pf}\dot T_f&=P-2\md_fc_{pf}\Delta T_f\\&\quad-h_{fw}A_{fw}(T_f-T_w)\\
+M_wc_{pw}\dot T_w&=h_{fw}A_{fw}(T_f-T_w)\\&\quad-h_{wc}A_{wc}(T_w-T_c)\\
+M_cc_{pc}\dot T_c&=-2\md_cc_{pc}\Delta T_c\\&\quad+h_{wc}A_{wc}(T_w-T_c)
+\end{align*}}
+\end{block}
+\small $\Delta T=T-T_{in}$ (de $T_e=2T-T_{in}$). Estados: $N$, 6 $C_i$, 6 $C^e_i$, $T_f$, $T_w$, $T_c$ y el inventario $M$.
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Cómo entra el control: dos caminos hacia la PCT}
+\vspace{-.1cm}
+\begin{center}
+\resizebox{.98\linewidth}{!}{%
+\begin{tikzpicture}[node distance=5mm and 7mm]
+\node[active,minimum width=1.7cm] (u) {$u$ [A]};
+\node[stagebox,minimum width=2.4cm,right=of u] (m) {$\md_{\rm ACS}\approx$\\$204.6(u-56.687)$};
+\node[stagebox,minimum width=2.3cm,right=of m] (M) {$\dot M=\md_{\rm leak}+\sigma\md_{\rm ACS}$\\inventario};
+\node[stagebox,minimum width=2.1cm,right=of M] (mc) {$\md_c=\md_{c0}\frac{M}{M_0}$};
+\node[stagebox,minimum width=2.4cm,right=of mc] (h) {$h_{wc}\propto\md_c^{0.8}$\\$T_f,T_w,T_c$};
+\node[risk,minimum width=1.9cm,right=of h] (y) {$\yhat$\\PCT};
+\draw[arr] (u)--(m); \draw[arr] (m)--(M); \draw[arr] (M)--(mc); \draw[arr] (mc)--(h); \draw[arr] (h)-- node[tag,above=2pt] {$T_w$} (y);
+\node[ghost,minimum width=4.2cm,below=9mm of mc] (p) {$p_4(\md_{\rm net})+0.4$\\corrección polinómica};
+\draw[weak] (m.south) |- (p.west);
+\draw[weak] (p.east) -| (y.south);
+\node[tag,below=1pt of M.south,yshift=-.15cm] {\color{USMBlue}camino acumulado};
+\node[tag] at ($(p.north)+(0,.25)$) {\color{Warn}camino inmediato};
+\end{tikzpicture}}
+\end{center}
+\vspace{.05cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Camino acumulado}
+\small El ACS repone \key{inventario}: 10 kg/s durante 12.5 s suben $M$ un 1.5\% y $\md_c$ unos 85 kg/s. Su efecto \key{crece} a lo largo del horizonte.
+\end{block}
+\column{.49\textwidth}
+\begin{alertblock}{Camino inmediato}
+\small $\yhat=T_w+p_4(\md_{\rm leak}+\md_{\rm ACS}+c)+0.4$: el polinomio que corrige el ROM hacia el HRM responde \key{sin retardo} al caudal neto.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Tres puntos por confirmar}
+\begin{alertblock}{1. La corrección BiLSTM de la PCT no entra al ROM}
+\small La señal \texttt{pred\_delta\_tw\_max} llega al subsistema \texttt{SMDFR 1}, pero dentro no está conectada. La corrección efectiva es el polinomio $p_4$ (\texttt{fit\_poly}), y la BiLSTM sólo aporta el pronóstico de la fuga. Hay que confirmar si es intencional y ajustar la descripción del gemelo.
+\end{alertblock}
+\begin{block}{2. Temperaturas de referencia de la reactividad}
+\small \texttt{mean(Te\_f0, Tin\_f0)} usa el segundo argumento como \emph{dimensión}: $\bar T_{f0}=T_{e,f0}$. Es inocuo si es lo pretendido.
+\end{block}
+\begin{block}{3. Relaciones empíricas a documentar}
+\small La temperatura de entrada del refrigerante usa $T_{in,c}=T_{e,c0}-Q(\md_c)/(\md_cc_{pc})$ con constantes fijadas a mano. A $p_4$ se le restan 2.5 K y se le suman 0.4 K.
+\end{block}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Escalas de tiempo: qué exige la discretización}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}L{3.3cm}L{3.8cm}L{6.6cm}@{}}
+\toprule
+\textbf{Fenómeno} & \textbf{Escala} & \textbf{Consecuencia con $\Delta t=0.5$ s}\\
+\midrule
+Neutrones prontos & $\Lambda/(\beta-\rho_0)\approx5.5\cdot10^{-4}$ s & Euler explícito inestable: \key{salto pronto} ($N$ algebraico) o integración implícita\\
+Pared & $\tau_w\approx0.07$ s & Casi estática: candidata a \key{ecuación algebraica}\\
+Refrigerante y combustible & $\tau_c\approx0.25$ s, $\tau_f\approx0.72$ s & Del orden de $\Delta t$: Euler implícito o subpasos\\
+Precursores y tránsitos & 0.14--79 s; 5.4 s y 10 s & Lentos: bien resueltos\\
+Inventario & integrador & El efecto del ACS se \key{acumula}\\
+\bottomrule
+\end{tabular}
+\vspace{.3cm}
+\begin{block}{Lectura}
+\small Razón de rigidez $\sim10^5$. Con salto pronto y pared cuasiestática quedan \key{14 estados} con dinámica en la escala del control. (Órdenes de magnitud, con los parámetros del ROM.)
+\end{block}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{¿Qué tan no lineal es? Término por término}
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}L{3.4cm}L{3.3cm}L{3.1cm}L{3.6cm}@{}}
+\toprule
+\textbf{Término} & \textbf{Tipo} & \textbf{Linealizado (N1, N2)} & \textbf{Completo (N3)}\\
+\midrule
+$\rho\,N$ & bilineal & jacobiano & exacto\\
+$\md_c\,(T-T_{in})$ & bilineal control $\times$ estado & jacobiano & exacto, o McCormick\\
+$h_{wc}\propto\md_c^{0.8}$ & potencia & jacobiano & exacto\\
+$Q(\md_c)/\md_c$ & racional & jacobiano & exacto ($\md_c$ lejos de 0)\\
+$p_4(\md_{\rm net})$ & polinomio & jacobiano & exacto\\
+$f_{\rm ACS}(u)$ & \key{afín} en la ventana & exacto & exacto\\
+$[z]_+^2$, $|\Delta\md|$ & bisagras & holguras & holguras\\
+\bottomrule
+\end{tabular}
+\vspace{.3cm}
+\captionline{No hay nada exótico: son productos, potencias y un polinomio, todos suaves. Un solver de NLP local (Ipopt) los maneja directamente.}
+\end{frame}
+
+% =====================================================================
+\section{III. Escalera de modelos}
+\partframe{III}{Escalera de modelos}{Un modelo, cuatro usos}
+
+\begin{frame}{Un modelo escrito una vez, cuatro usos}
+\vspace{-.1cm}
+\begin{center}
+\resizebox{.97\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm,y=1cm,
+ lv/.style={stagebox,minimum width=3.6cm,minimum height=.75cm,font=\small},
+ nt/.style={font=\small,anchor=west,align=left}]
+\node[active,minimum width=4.2cm,minimum height=1.6cm] (src) at (0,0) {\textbf{ROM algebraico}\\16 estados, diferenciación\\automática (JuMP, CasADi,\\ModelingToolkit)};
+\node[lv,fill=SoftGray,draw=MidGray] (n0) at (6,1.35) {\textbf{N0} estacionario: $f(x,u)=0$};
+\node[lv] (n1) at (6,.45) {\textbf{N1} LTI: $A,B$ en un punto};
+\node[lv] (n2) at (6,-.45) {\textbf{N2} LTV: $A_k,B_k$ en la trayectoria};
+\node[lv,fill=USMYellow!22,draw=Warn] (n3) at (6,-1.35) {\textbf{N3} no lineal: el modelo mismo};
+\foreach \n in {n0,n1,n2,n3}{\draw[arr] (src.east) -- (\n.west);}
+\node[nt] at ($(n0.east)+(.2,0)$) {chequeo de autoridad, estado inicial};
+\node[nt] at ($(n1.east)+(.2,0)$) {QP convexo; $G(s)$};
+\node[nt] at ($(n2.east)+(.2,0)$) {QP iterado (SQP)};
+\node[nt] at ($(n3.east)+(.2,0)$) {NLP (Ipopt); referencia exacta};
+\end{tikzpicture}}
+\end{center}
+\vspace{.05cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{exampleblock}{Por qué así}
+\small Los cuatro niveles son \key{consistentes por construcción}: N1 y N2 son jacobianos de N3, y N0 es su equilibrio. N3 es la \key{referencia exacta} para medir a los demás y a Luus--Jaakola.
+\end{exampleblock}
+\column{.49\textwidth}
+\begin{alertblock}{Primer requisito}
+\small La réplica algebraica debe reproducir la PCT de Simulink en el horizonte con error $\ll1$ K: la autoridad del control es $\approx1$ K.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{N0: la respuesta estacionaria}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Qué es}
+\small \texttt{SA\_DualFluid.m} resuelve, nodo a nodo, un sistema lineal $5\times5$ en $(T_{e,f},T_f,T_{e,c},T_c,T_w)$ con derivadas nulas. Su salida (\texttt{SA\_DualFluid.mat}) es el \key{estado inicial} del HRM y del ROM.
+\end{block}
+\begin{block}{Qué aporta Masotti y Mauri}
+\small Análisis de sensibilidad global (regresión y descomposición de varianza): la incertidumbre de $T_f$ la domina $h_{fw}$ ($\eta^2\approx0.86$); en el primer nodo pesan las temperaturas de entrada.
+\end{block}
+\column{.47\textwidth}
+\begin{exampleblock}{Sirve para}
+\small
+\begin{itemize}\setlength{\itemsep}{.05cm}
+\item Calcular la \key{ganancia en régimen} de $\md_c$ sobre $T_w$: ¿cuánto puede bajar la PCT el ACS?
+\item Dar el punto de equilibrio para N1 y para escalar variables.
+\item Una restricción terminal cuasiestática.
+\end{itemize}
+\end{exampleblock}
+\begin{alertblock}{No sirve para}
+\small El MPC en sí: ignora el inventario, los precursores y el retardo térmico, que son justo lo que el control explota.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{N1: pequeña perturbación y $G(s)$}
+\begin{columns}[T]
+\column{.42\textwidth}
+\centering
+\begin{tikzpicture}[node distance=2.5mm,
+ s/.style={stagebox,minimum width=5.2cm,minimum height=.62cm,font=\scriptsize}]
+\node[s] (a) {Modelo no lineal por conservación};
+\node[s,below=of a] (b) {Estado estacionario (punto de operación)};
+\node[s,below=of b] (c) {Linealización por pequeña perturbación};
+\node[s,below=of c] (d) {Espacio de estados $\delta\dot x=A\delta x+B\delta u$};
+\node[s,below=of d,fill=USMBlue,text=white] (e) {$G(s)=C(sI-A)^{-1}B+D$};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c)--(d); \draw[arr] (d)--(e);
+\end{tikzpicture}\\[.1cm]
+\scriptsize Procedimiento de Zhang et al. (2022), HPR1000.
+\column{.55\textwidth}
+\begin{block}{Aplicado al ROM}
+\small
+\vspace{-.35cm}
+\begin{align*}
+\delta\dot x&=A\,\delta x+B\,\delta\md_{\rm ACS}+E\,\delta\md_{\rm leak}\\
+\delta\yhat&=C\,\delta x+D\,\delta\md_{\rm ACS}
+\end{align*}
+\vspace{-.5cm}
+
+con $A=\partial f/\partial x$ en el estado de la consulta. $D\neq0$ por el camino inmediato de $p_4$.
+\end{block}
+\begin{exampleblock}{Qué se obtiene}
+\small Un \key{QP} por consulta y $G(s)$ de $\md_{\rm ACS}$ a PCT: separa el camino inmediato ($D$) del acumulado (integrador del inventario).
+\end{exampleblock}
+\begin{alertblock}{Riesgo}
+\small Se validó con perturbaciones pequeñas; la fase aguda no lo es. Por eso existe N2.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{N2: linealizar a lo largo de la trayectoria}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Idea}
+\small En cada consulta se linealiza el ROM alrededor de la \key{trayectoria predicha} en la consulta anterior, desplazada un paso:
+\[
+\delta x_{k+1}=A_k\delta x_k+B_k\delta\md_k+r_k,
+\]
+con $r_k$ el residuo del modelo no lineal. Resolver el QP, actualizar la trayectoria y, si hay tiempo, iterar.
+\end{block}
+\column{.47\textwidth}
+\begin{exampleblock}{Por qué es el punto medio}
+\small
+\begin{itemize}\setlength{\itemsep}{.05cm}
+\item Sigue el transitorio grande, que N1 no sigue.
+\item Cada iteración es un QP: rápido y con certificado dual.
+\item Es la \emph{iteración en tiempo real} clásica del MPC no lineal (SQP truncado).
+\end{itemize}
+\end{exampleblock}
+\begin{alertblock}{Cuidado}
+\small Hay que conservar el término afín $f(x_0)-Ax_0$. La versión de ARAMIS lo omite.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{N3: el reactor como restricciones}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Fusionar simulador y control}
+\small En vez de llamar a Simulink para cada candidato, las ecuaciones de §II pasan a ser \key{restricciones de igualdad} del problema de optimización:
+\[
+x_{k+1}=x_k+\Delta t\,f(x_{k+1},\md_k,\hat d_k)
+\]
+(Euler implícito; o colocación de Radau). Estados y controles son variables del mismo problema.
+\end{block}
+\column{.47\textwidth}
+\begin{exampleblock}{Tamaño}
+\small Con 25 pasos: $\approx$ 420 variables de estado, 26 de control y unas 50 holguras. Es un NLP pequeño para Ipopt.
+\end{exampleblock}
+\begin{block}{Decisiones de modelado}
+\small
+\begin{itemize}\setlength{\itemsep}{.05cm}
+\item Salto pronto: $N$ algebraico, sin escala de $10^{-4}$ s.
+\item Pared cuasiestática: $T_w$ algebraico.
+\item ROM (0-D) para empezar; HRM (12 nodos) como extensión.
+\end{itemize}
+\end{block}
+\end{columns}
+\captionline{Hipótesis a verificar: que resuelva en segundos. La referencia actual es una mediana de 76 s.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Lo que ya existe en Julia (ARAMIS)}
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{exampleblock}{Ya está}
+\small
+\begin{itemize}\setlength{\itemsep}{.06cm}
+\item El \key{mismo reactor y parámetros}: PKE de 6 grupos con precursores circulantes y TH de 3 nodos, como DAE con matriz de masa.
+\item \texttt{smdfr\_mpc\_test\_4.jl}: un \key{MPC no lineal monolítico} en JuMP + Ipopt con Euler implícito, el bilineal $\rho N/\Lambda$ como restricción no lineal y lazo cerrado con la simulación.
+\item Jacobianos con ForwardDiff.
+\end{itemize}
+\end{exampleblock}
+\column{.49\textwidth}
+\begin{alertblock}{Hay que adaptar}
+\small
+\begin{enumerate}\setlength{\itemsep}{.04cm}
+\item Control: de reactividad externa a \key{caudal del ACS} e inventario.
+\item Salida: de potencia a \key{PCT}.
+\item \key{Escalado}: hoy $N\sim10^{13}$, $C_i\sim10^{16}$, $P\sim10^8$.
+\item Estado inicial consistente (N0), no ``por inspección''.
+\item La versión lineal omite la matriz de masa y el término afín.
+\item Globales, \texttt{include} encadenados, sin \texttt{Project.toml}.
+\end{enumerate}
+\end{alertblock}
+\end{columns}
+\captionline{Valoración: la física y el esqueleto de N3 ya están escritos. El trabajo es de adaptación, no de modelación nueva.}
+\end{frame}
+
+% =====================================================================
+\section{IV. Formulación monolítica}
+\partframe{IV}{La formulación monolítica}{El problema de control completo, en una sola página}
+
+\begin{frame}{P-mono: el MPC como optimización}
+\vspace{-.25cm}
+{\small
+\begin{align*}
+\min_{\md_{\rm ACS},\,x,\,s,\,r}\quad & \sum_{k=1}^{K}(\yhat_k-y_{\rm ref})^2+\lambda_m\sum_k s_k^2+\lambda_s\sum_k r_k^2\\
+\text{s.a.}\quad & x_{k+1}=x_k+\Delta t\,f\big(x_{k+1},\sigma_k\md_{{\rm ACS},k},\hat d_k\big) && \text{ROM}\\
+& 0=g(x_k) && \text{salto pronto, pared}\\
+& \yhat_k=T_{w,k}+p_4(\hat d_k+\sigma_k\md_{{\rm ACS},k}+c)+0.4 && \text{PCT}\\
+& |\md_{{\rm ACS},k+1}-\md_{{\rm ACS},k}|\le\Delta\md+s_k,\quad s_k\ge0 && \text{suavidad}\\
+& \mathrm{DSM}_k\le\tau+r_k,\quad r_k\ge0 && \text{margen}\\
+& \md_{\min}\le\md_{{\rm ACS},k}\le\md_{\max},\qquad x_0=\hat x(t_q) && \text{cotas, estado}
+\end{align*}}
+\vspace{-.3cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\small $\hat d_k$: pronóstico de fuga (BiLSTM). $\sigma_k=1$ si el ACS está disponible. $u_k$ se recupera de $\md_{{\rm ACS},k}$ con el mapa afín. El margen también puede ser duro: $\yhat_k\le y_{\rm ref}+\tau(U_y-y_{\rm ref})$.
+\column{.49\textwidth}
+\small Con N1/N2, $f$ y $p_4$ se sustituyen por sus aproximaciones lineales y el problema es un \key{QP}. Con N3, es un \key{NLP}.
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Qué gana P-mono frente a P0}
+\small
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}L{3.3cm}L{5.0cm}L{5.4cm}@{}}
+\toprule
+& \textbf{P0 (hoy)} & \textbf{P-mono}\\
+\midrule
+Modelo & caja negra (Simulink) por candidato & ecuaciones explícitas como restricciones\\
+Búsqueda & Luus--Jaakola, sin garantía & Ipopt (local) o QP (global en N1/N2)\\
+Calidad de la solución & sólo $J\geq0$ como cota & condiciones KKT; cota dual en el QP\\
+Restricciones & todas suaves, dentro del costo & duras o suaves, a elección\\
+Sensibilidades & no hay & multiplicadores: cuánto cuesta cada restricción\\
+Riesgo & a posteriori & capas sobre el mismo problema (Parte V)\\
+\bottomrule
+\end{tabular}
+\vspace{.3cm}
+\captionline{Y responde la pregunta de R. Mena: con P-mono resuelto, se puede medir cuán lejos del óptimo estaban las metaheurísticas.}
+\end{frame}
+
+% =====================================================================
+\section{V. Riesgo}
+\partframe{V}{Riesgo y escenario óptimo}{Tres capas sobre la base monolítica}
+
+\begin{frame}{El riesgo en tres capas, de menor a mayor costo}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm]
+\node[good,minimum width=4.1cm,minimum height=2.1cm] (a) {\textbf{1. Restricción probabilística}\\[.05cm]\small con N1/N2 y error gaussiano:\\[.02cm]$\bar y_k+z_{1-\varepsilon}\sigma_k\le U_y$\\\small sigue siendo un QP};
+\node[stagebox,minimum width=4.1cm,minimum height=2.1cm,right=of a] (b) {\textbf{2. Escenarios (SAA)}\\[.05cm]\small $M$ trayectorias de fuga y\\eventos del ACS; QP o NLP\\$M$ veces más grande};
+\node[risk,minimum width=4.1cm,minimum height=2.1cm,right=of b] (c) {\textbf{3. Escenario óptimo}\\[.05cm]\small un único escenario que\\reproduce la decisión\\estocástica};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c);
+\end{tikzpicture}
+\end{center}
+\vspace{.2cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Qué cubre cada capa}
+\small Las capas 1 y 3 cubren bien el \key{pronóstico} (fuga, error del ROM). La \key{falla del ACS} es discreta: la cubren la capa 2 y el MPC multietapa.
+\end{block}
+\column{.49\textwidth}
+\begin{block}{De dónde sale $\sigma_k$}
+\small De las 59 trayectorias de MC-dropout propagadas por el modelo lineal. La infraestructura ya existe: el código calcula los percentiles 50 y 95.
+\end{block}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{El artículo: \emph{Forecasting outside the Box}}
+\begin{columns}[T]
+\column{.52\textwidth}
+\begin{block}{Resultado central (Teorema 1)}
+\small Sea un programa de dos etapas
+\[
+\min_{z\in Z} f(z)+\E[Q(z,\xi)],
+\]
+\[
+Q(z,\xi)=\min_{y\ge0}\{q^\top y:\ Wy=h-Tz\}
+\]
+con \key{recurso fijo} ($W,q$ deterministas) y duales acotados. Entonces existe un escenario $\xi^\star=(h^\star,T^\star)$ tal que resolver \key{sólo con $\xi^\star$} da la solución estocástica. Puede caer \emph{fuera} del soporte.
+\end{block}
+\column{.45\textwidth}
+\begin{exampleblock}{Intuición: el newsvendor}
+\small Con demanda $D$, el óptimo es $z^\star=F^{-1}(\phi)$: el escenario óptimo es un \key{cuantil}, no la media.
+\end{exampleblock}
+\begin{block}{Con información contextual}
+\small Se aprende un pronóstico puntual $\Psi(\theta,x)$ por optimización \key{binivel}: el pronóstico se evalúa por la calidad de la decisión que induce, no por su error.
+\end{block}
+\end{columns}
+\captionline{Homem-de-Mello, Valencia, F. Lagos, G. Lagos (2026). \emph{Math.\ Program.} doi:10.1007/s10107-026-02359-9.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{¿Aplica a nuestro MPC? Supuesto por supuesto}
+\scriptsize
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}L{3.3cm}L{4.5cm}L{5.4cm}@{}}
+\toprule
+\textbf{Supuesto} & \textbf{Nuestro MPC} & \textbf{Cómo cumplirlo}\\
+\midrule
+Dos etapas & multietapa & $u_0$ como primera etapa; el resto del horizonte como recurso\\
+Segunda etapa \key{lineal} (LP) & costo cuadrático, dinámica no lineal & N1/N2 y seguimiento en norma $L_1$ ($y^+,y^-$, como el newsvendor)\\
+\key{Recurso fijo} & fuga y error del ROM entran en $h$ & \pill{Good}{cumple}\\
+& la falla del ACS altera el efecto de controles futuros ($W$ aleatoria) & \pill{Bad}{no cumple}; sólo si afecta a la primera etapa ($T$ aleatoria)\\
+Duales acotados (supuesto 2) & restricciones suaves con holguras & \pill{Good}{cumple} por diseño\\
+\bottomrule
+\end{tabular}
+\vspace{.3cm}
+\begin{block}{Lectura}
+\small El teorema cubre la incertidumbre de \key{pronóstico} con un MPC lineal y costo $L_1$. Es exactamente la incertidumbre que hoy se trata tomando la mediana de MC-dropout. La falla del ACS queda para las capas 2 y multietapa.
+\end{block}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Experimento: ¿qué cuantil vale por 59 trayectorias?}
+\begin{columns}[T]
+\column{.52\textwidth}
+\begin{block}{Procedimiento}
+\small
+\begin{enumerate}\setlength{\itemsep}{.06cm}
+\item En un estado fijo ($t=1161$ y $1180$ s), resolver la versión SAA con las 59 trayectorias de fuga: decisión $u^\star_{\rm SAA}$.
+\item Para niveles $q\in\{0.05,\dots,0.95\}$, resolver el MPC determinista con el \key{percentil $q$} de la fuga: $u^\star(q)$.
+\item Buscar el $q$ que minimiza la distancia entre $u^\star(q)$ y $u^\star_{\rm SAA}$, y entre sus costos.
+\end{enumerate}
+\end{block}
+\column{.45\textwidth}
+\begin{exampleblock}{Por qué es barato}
+\small P0 ya usa el percentil 50 y el código ya calcula el 95. Con P-mono, cada $u^\star(q)$ es un solo MPC determinista.
+\end{exampleblock}
+\begin{block}{Paso siguiente}
+\small Si el mejor $q$ cambia con el estado, aprender $q(x)$ o un sesgo del pronóstico en función del contexto. Es el pronóstico orientado a la decisión del artículo.
+\end{block}
+\end{columns}
+\end{frame}
+
+% =====================================================================
+\section{VI. Plan}
+\partframe{VI}{Plan sistemático}{De las ecuaciones al lazo cerrado}
+
+\begin{frame}{Seis etapas, cada una con su criterio de cierre}
+\vspace{-.05cm}
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=3.5mm,
+ st/.style={stagebox,minimum width=2.35cm,minimum height=1.2cm,font=\small}]
+\node[st,fill=USMBlue,text=white] (f0) {\textbf{F0}\\Ecuaciones\\fijadas};
+\node[st,fill=USMBlue,text=white,right=of f0] (f1) {\textbf{F1}\\Réplica\\algebraica};
+\node[st,right=of f1] (f2) {\textbf{F2}\\N3 monolítico\\no lineal};
+\node[st,right=of f2] (f3) {\textbf{F3}\\N1 y N2\\(QP, $G(s)$)};
+\node[st,fill=USMYellow!22,draw=Warn,right=of f3] (f4) {\textbf{F4}\\Capas de\\riesgo};
+\node[st,fill=SoftGray,draw=MidGray,right=of f4] (f5) {\textbf{F5}\\Lazo cerrado\\y extensiones};
+\draw[arr] (f0)--(f1); \draw[arr] (f1)--(f2); \draw[arr] (f2)--(f3); \draw[arr] (f3)--(f4); \draw[arr] (f4)--(f5);
+\end{tikzpicture}}
+\vspace{.1cm}
+\scriptsize
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{@{}L{.6cm}L{6.3cm}L{6.5cm}@{}}
+\toprule
+& \textbf{Entregable} & \textbf{Criterio de cierre}\\
+\midrule
+F0 & Ecuaciones del ROM y resolución de los tres puntos por confirmar. & Cada término trazado a un bloque del \texttt{.slx}.\\
+F1 & ROM en Julia (plantilla ARAMIS adaptada): escalado, caudal del ACS, PCT, equilibrio N0. & Reproduce la PCT de Simulink en el horizonte con error $\ll1$ K.\\
+F2 & P-mono no lineal en $t=1161$ y $1180$ s. & Acción y costo frente a Luus--Jaakola, re-simulando en Simulink.\\
+F3 & $A,B,E,C,D$ por consulta; $G(s)$ de $\md_{\rm ACS}$ a PCT; QP. & Error de N1/N2 frente a N3 $\ll1$ K; brecha de costo medida.\\
+F4 & Restricción probabilística, SAA y experimento de cuantiles. & Una decisión cambia por riesgo, con intervalos de confianza.\\
+F5 & 61 consultas con la mejor variante; multietapa y dos protecciones. & Menos de 120 s por consulta; frontera costo--riesgo.\\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Para la próxima reunión (3--4 semanas)}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{Compromisos}
+\small
+\begin{enumerate}\setlength{\itemsep}{.08cm}
+\item \key{F0 cerrado}: confirmar la corrección de la PCT ($p_4$ frente a BiLSTM) y documentar las relaciones empíricas.
+\item \key{F1}: réplica del ROM validada contra Simulink en al menos una trayectoria archivada.
+\item \key{Primer resultado de F2 o F3} en el estado $t=1180$ s.
+\item Revisar la literatura de modelos linealizados de reactores para control (p.\,ej., Na et al., 2003; Kerlin et al., 1976).
+\end{enumerate}
+\end{block}
+\column{.48\textwidth}
+\begin{exampleblock}{Qué podremos mostrar}
+\small
+\begin{itemize}\setlength{\itemsep}{.06cm}
+\item La PCT de Simulink y la de la réplica, superpuestas.
+\item La respuesta a un escalón de $\md_{\rm ACS}$: camino inmediato y acumulado.
+\item La acción de P-mono frente a la de Luus--Jaakola en el mismo estado.
+\end{itemize}
+\end{exampleblock}
+\begin{alertblock}{Qué no prometemos aún}
+\small El tiempo de cálculo de P-mono en el lazo, ni resultados de riesgo.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Decisiones abiertas}
+\begin{columns}[T]
+\column{.49\textwidth}
+\small
+\begin{block}{1. ROM o HRM como restricción}
+El ROM (16 estados) para empezar; el HRM (12 nodos) da un máximo nodal real de la PCT y elimina $p_4$.
+\end{block}
+\begin{block}{2. Herramienta}
+Julia (JuMP + Ipopt) para prototipar; CasADi si conviene integrar con MATLAB y la BiLSTM.
+\end{block}
+\begin{block}{3. Simplificaciones}
+¿Salto pronto y pared cuasiestática? Hay que medir su error.
+\end{block}
+\column{.49\textwidth}
+\small
+\begin{block}{4. Corrección de la PCT}
+Mantener $p_4$, reconectar la BiLSTM o combinarlas.
+\end{block}
+\begin{block}{5. Norma del seguimiento}
+Cuadrática (como P0) o $L_1$ (compatible con el escenario óptimo).
+\end{block}
+\begin{block}{6. Un punto o la trayectoria}
+N1 si basta un punto; N2 si la fase aguda lo exige.
+\end{block}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{En resumen}
+\vspace{.15cm}
+\begin{center}
+\resizebox{.97\linewidth}{!}{%
+\begin{tikzpicture}[node distance=5mm]
+\node[stagebox,minimum width=3.3cm,minimum height=1.45cm] (a) {\textbf{Ecuaciones}\\el ROM son 16 EDO\\ya escritas};
+\node[stagebox,minimum width=3.3cm,minimum height=1.45cm,right=of a] (b) {\textbf{Un modelo}\\N0, N1, N2 y N3\\de la misma fuente};
+\node[active,minimum width=3.3cm,minimum height=1.45cm,right=of b] (c) {\textbf{P-mono}\\NLP o QP en vez\\de metaheurística};
+\node[risk,minimum width=3.3cm,minimum height=1.45cm,right=of c] (d) {\textbf{Riesgo}\\restricción, escenarios,\\escenario óptimo};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c)--(d);
+\end{tikzpicture}}
+\end{center}
+\vspace{.3cm}
+\begin{itemize}\setlength{\itemsep}{.15cm}
+\item Los cuatro caminos (estacionario, pequeña perturbación, PKE + TH, Julia) se ordenan como \key{niveles de un mismo modelo}.
+\item El primer hito es una \key{réplica algebraica validada} del ROM: sin ella no hay formulación monolítica confiable.
+\item El escenario óptimo de Homem-de-Mello et al.\ encaja con la incertidumbre de \key{pronóstico} si el MPC es lineal y de costo $L_1$.
+\end{itemize}
+\vspace{.2cm}
+\centering{\color{USMBlue}\large\bfseries Gracias. Comentarios.}
+\end{frame}
+
+% =====================================================================
+\appendix
+\section{Respaldo}
+\begin{frame}{Respaldo: parámetros del ROM}
+\scriptsize
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{tabular}{@{}L{3.3cm}L{3.3cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Cinética}}\\
+\midrule
+$\Lambda$ & $1.05\cdot10^{-6}$ s\\
+$\beta$ & $3.02\cdot10^{-3}$ (6 grupos)\\
+$\lambda_i$ & 0.0127 -- 7.02 s$^{-1}$\\
+$\tau_c$, $\tau_e$ & 5.43 s, 10 s\\
+$\alpha_f$, $\alpha_c$ & $-2.08\cdot10^{-4}$, $-8.28\cdot10^{-6}$ K$^{-1}$\\
+$\rho_0$ & $1.11\cdot10^{-3}$\\
+$P_0$ & 100 MW\\
+\bottomrule
+\end{tabular}
+\column{.48\textwidth}
+\begin{tabular}{@{}L{3.3cm}L{3.3cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Termohidráulica (0-D)}}\\
+\midrule
+$M_f$, $M_w$, $M_c$ & 1779, 390, 8145 kg\\
+$c_{pf}$, $c_{pw}$, $c_{pc}$ & 400, 690, 140.2 J/(kg K)\\
+$\md_f$, $\md_{c0}$ & 327.7, 5550.5 kg/s\\
+$A_{fw}$, $A_{wc}$ & 117.2, 124.8 m$^2$\\
+$\bar h_{fw}$, $\bar h_{wc}$ & 6160, 24472 W/(m$^2$ K)\\
+$T_{in,f}$, $T_{in,c}$ (diseño) & 1300 K, 973 K\\
+\bottomrule
+\end{tabular}
+\end{columns}
+\vspace{.3cm}
+\captionline{Fuente: \texttt{matlab/parameters\_dualfluid\_rom\_v2.m}. Masas y áreas: sumas de los 3 nodos originales; coeficientes de transferencia: promedios.}
+\end{frame}
+
+\begin{frame}{Respaldo: referencias}
+\small
+\begin{itemize}\setlength{\itemsep}{.15cm}
+\item T. Homem-de-Mello, J. Valencia, F. Lagos, G. Lagos (2026). Forecasting outside the Box: application-driven optimal pointwise forecasts for a class of two-stage stochastic programs. \emph{Math.\ Program.} doi:10.1007/s10107-026-02359-9.
+\item X. Zhang, P. Sun, L. Qiu, S. Pu, X. Wei (2022). Transfer function modeling and simulation of HPR1000. \emph{Ann.\ Nucl.\ Energy} 166:108689. doi:10.1016/j.anucene.2021.108689.
+\item M. Wang, X. He, R. Macián-Juan, X. Wang (2021). One-dimensional transient analysis of the dual-fluid reactor system. \emph{Ann.\ Nucl.\ Energy} 162:108481.
+\item C. Liu, R. Luo, R. Macián-Juan (2021). A New Uncertainty-Based Control Scheme of the SMDFR and Its Optimization. \emph{Energies} 14(20). doi:10.3390/en14206708.
+\item M.\,G. Na, S.\,H. Shin, W.\,C. Kim (2003). A Model Predictive Controller for Nuclear Reactor Power. \emph{Nucl.\ Eng.\ Technol.} 35:399--411.
+\item G. Masotti, R. Mauri. \emph{Sensitivity Analysis of the model of a Small Modular Dual Fluid Reactor} (presentación), y el código \texttt{SA\_DualFluid.m}.
+\end{itemize}
+\end{frame}
+
+\end{document}

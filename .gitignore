@@ -35,3 +35,6 @@ Thumbs.db
 *.snm
 *.toc
 *.synctex.gz
+
+# --- Third-party reference material (papers, collaborators' scripts) -----
+20261011_docs/

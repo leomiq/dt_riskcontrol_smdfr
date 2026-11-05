@@ -1,11 +1,15 @@
 \documentclass[aspectratio=169,10pt]{beamer}
-\usepackage[spanish]{babel}
+\usepackage[spanish,es-nodecimaldot]{babel}
 \usepackage{fontspec}
-\setsansfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,ItalicFont=InterVariable.ttf,BoldItalicFont=InterVariable.ttf]{InterVariable.ttf}
-\setmainfont[Path=../assets/fonts/]{InterVariable.ttf}
+\setsansfont[Path=../assets/fonts/,UprightFont=InterVariable.ttf,BoldFont=InterVariable.ttf,BoldFeatures={FakeBold=2.2},ItalicFont=InterVariable.ttf,ItalicFeatures={FakeSlant=0.18},BoldItalicFont=InterVariable.ttf,BoldItalicFeatures={FakeBold=2.2,FakeSlant=0.18}]{InterVariable.ttf}
+\setmainfont[Path=../assets/fonts/,BoldFont=InterVariable.ttf,BoldFeatures={FakeBold=2.2}]{InterVariable.ttf}
 \usefonttheme{professionalfonts}
-\usepackage{amsmath,amssymb,tikz,booktabs}
-\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{amsmath,amssymb,booktabs,array}
+\usepackage{tikz,pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathmorphing,shapes.geometric,fit,backgrounds}
+
+% ---------- Colores USM ----------
 \definecolor{USMBlue}{HTML}{003876}
 \definecolor{USMDeep}{HTML}{002A5C}
 \definecolor{USMCyan}{HTML}{00AEEF}
@@ -13,296 +17,1054 @@
 \definecolor{USMPale}{HTML}{EAF5FB}
 \definecolor{Ink}{HTML}{12233B}
 \definecolor{SoftGray}{HTML}{F2F5F8}
+\definecolor{MidGray}{HTML}{8A96A3}
 \definecolor{Warn}{HTML}{AA5B00}
+\definecolor{Bad}{HTML}{B3261E}
+\definecolor{Good}{HTML}{1E7B45}
+
 \setbeamercolor{normal text}{fg=Ink,bg=white}
 \setbeamercolor{frametitle}{fg=white,bg=USMBlue}
 \setbeamercolor{structure}{fg=USMBlue}
 \setbeamercolor{block title}{fg=white,bg=USMBlue}
 \setbeamercolor{block body}{fg=Ink,bg=USMPale}
-\setbeamercolor{alerted text}{fg=USMBlue}
+\setbeamercolor{block title alerted}{fg=white,bg=Warn}
+\setbeamercolor{block body alerted}{fg=Ink,bg=USMYellow!14}
+\setbeamercolor{block title example}{fg=white,bg=Good}
+\setbeamercolor{block body example}{fg=Ink,bg=Good!8}
+\setbeamercolor{alerted text}{fg=Warn}
 \setbeamertemplate{navigation symbols}{}
 \setbeamertemplate{itemize items}[circle]
-\setbeamertemplate{footline}{
- \leavevmode\hbox{
- \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.6ex,dp=.8ex,leftskip=1em]{footline}
- \color{USMBlue}\scriptsize UNIVERSIDAD TÉCNICA FEDERICO SANTA MARÍA
- \end{beamercolorbox}
- \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.6ex,dp=.8ex,rightskip=1em plus1fil]{footline}
- \color{USMBlue}\scriptsize\hfill\insertframenumber
+\setbeamertemplate{enumerate items}[default]
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamertemplate{frametitle}{%
+ \nointerlineskip
+ \begin{beamercolorbox}[wd=\paperwidth,ht=2.5ex,dp=1.1ex,leftskip=1em,rightskip=1em]{frametitle}
+ \usebeamerfont{frametitle}\insertframetitle
+ \hfill{\color{USMCyan}\scriptsize\insertsectionhead}
+ \end{beamercolorbox}}
+\setbeamertemplate{footline}{%
+ \leavevmode\hbox{%
+ \begin{beamercolorbox}[wd=.88\paperwidth,ht=2.6ex,dp=.8ex,leftskip=1em]{footline}%
+ \color{USMBlue}\scriptsize UNIVERSIDAD TÉCNICA FEDERICO SANTA MARÍA \quad{\color{MidGray}|\quad Control predictivo informado por riesgo}%
+ \end{beamercolorbox}%
+ \begin{beamercolorbox}[wd=.12\paperwidth,ht=2.6ex,dp=.8ex,rightskip=1em]{footline}%
+ \color{USMBlue}\scriptsize\hfill\insertframenumber%
  \end{beamercolorbox}}}
+
 \tikzset{
  stagebox/.style={draw=USMBlue,line width=.8pt,rounded corners=3pt,fill=USMPale,
-  align=center,inner sep=5pt,minimum height=1.05cm,font=\small},
+  align=center,inner sep=5pt,minimum height=1.0cm,font=\small},
  active/.style={stagebox,fill=USMBlue,text=white},
  risk/.style={stagebox,fill=USMYellow!22,draw=Warn},
+ ghost/.style={stagebox,fill=SoftGray,draw=MidGray,text=Ink},
  arr/.style={-{Latex[length=2.5mm]},line width=1pt,draw=USMCyan},
- weak/.style={-{Latex[length=2.5mm]},line width=.8pt,dashed,draw=Warn}
+ darr/.style={-{Latex[length=2.5mm]},line width=1pt,draw=USMBlue},
+ weak/.style={-{Latex[length=2.5mm]},line width=.8pt,dashed,draw=Warn},
+ tag/.style={font=\scriptsize,fill=white,inner sep=1.5pt}
 }
 \newcommand{\key}[1]{{\color{USMBlue}\bfseries #1}}
-\newcommand{\captionline}[1]{\vspace{.18cm}{\color{USMBlue}\small #1}}
+\newcommand{\warn}[1]{{\color{Warn}\bfseries #1}}
+\newcommand{\captionline}[1]{\par\vspace{.15cm}{\color{USMBlue}\small #1\par}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\pgfplotsset{every axis/.append style={/pgf/number format/1000 sep={}}}
+\newcommand{\yhat}{\hat y}
+\newcommand{\E}{\mathbb E}
+\newcommand{\Prob}{\mathbb P}
+\newcommand{\pill}[2]{\tikz[baseline=(p.base)]\node[fill=#1,text=white,rounded corners=2pt,inner sep=2pt,font=\scriptsize\bfseries](p){#2};}
+
+\newcommand{\partframe}[3]{%
+{\setbeamercolor{background canvas}{bg=USMBlue}
+\begin{frame}[plain]
+\vspace{1.4cm}
+{\color{USMCyan}\Large PARTE #1}\\[.35cm]
+{\color{white}\huge\bfseries #2}\\[.35cm]
+{\color{USMYellow}\rule{7cm}{2pt}}\\[.3cm]
+{\color{white}\normalsize #3}
+\end{frame}}}
+
 \begin{document}
+
+% =====================================================================
 {
 \setbeamercolor{background canvas}{bg=USMBlue}
 \begin{frame}[plain]
-\vspace{.95cm}
-{\color{USMCyan}\large CONTROL Y SEGURIDAD NUCLEAR}\\[.55cm]
-{\color{white}\Huge\bfseries Control predictivo\\[.15cm] informado por riesgo}\\[.45cm]
-{\color{white}\Large Contexto, resultados y vías de exploración}\\[.8cm]
+\vspace{.7cm}
+{\color{USMCyan}\large CONTROL Y SEGURIDAD DE REACTORES MODULARES}\\[.5cm]
+{\color{white}\Huge\bfseries Control predictivo\\[.15cm] informado por riesgo}\\[.4cm]
+{\color{white}\large Un gemelo digital \emph{grey-box} para el SMDFR:\\[.05cm] contexto, formulación del problema y vías de exploración}\\[.6cm]
 {\color{USMYellow}\rule{9.2cm}{2pt}}\\[.25cm]
-{\color{white}\normalsize DT--SMDFR \quad|\quad Universidad Técnica Federico Santa María}\\[.12cm]
-{\color{white}\small Octubre de 2026}
+{\color{white}\normalsize Leonardo Andrés Miqueles Leiva}\\[.08cm]
+{\color{white}\small Universidad Técnica Federico Santa María \quad|\quad Octubre de 2026}
 \end{frame}
 }
 
-\begin{frame}{Pregunta central}
-\vspace{.2cm}
-\begin{block}{Decisión de control}
-¿Qué acción reduce el riesgo térmico futuro, mantiene el seguimiento y puede calcularse dentro del tiempo disponible?
-\end{block}
-\vspace{.35cm}
+% =====================================================================
+\begin{frame}{La charla en tres frases}
+\vspace{.25cm}
+\begin{enumerate}\setlength{\itemsep}{.45cm}
+\item[\pill{USMBlue}{1}] \textbf{Lo que existe.} Un controlador predictivo (MPC) que, apoyado en un gemelo digital del reactor, decide cuánto refrigerante auxiliar inyectar durante una fuga de refrigerante, siguiendo una temperatura de consigna y protegiendo un margen de seguridad \emph{determinista}.
+\item[\pill{Warn}{2}] \textbf{Lo que falta.} Que la \emph{probabilidad} de que fallen las protecciones entre en la decisión. Hoy el riesgo probabilístico se calcula \emph{después} de decidir.
+\item[\pill{Good}{3}] \textbf{La propuesta.} Primero volver tratable el problema (formulación monolítica, modelo lineal, referencia exacta); luego formular un MPC estocástico informado por riesgo y probar que el riesgo cambia decisiones.
+\end{enumerate}
+\vspace{.3cm}
 \begin{center}
-\begin{tikzpicture}[node distance=5mm]
-\node[stagebox,minimum width=2.15cm] (o) {Estado\\observado};
-\node[stagebox,minimum width=2.15cm,right=of o] (d) {Acción de\\control};
-\node[stagebox,minimum width=2.15cm,right=of d] (f) {Futuros\\posibles};
-\node[risk,minimum width=2.15cm,right=of f] (r) {Costo y\\riesgo};
-\node[active,minimum width=2.15cm,right=of r] (a) {Mejor acción\\factible};
-\draw[arr] (o)--(d);
-\draw[arr] (d)--(f);
-\draw[arr] (f)--(r);
-\draw[arr] (r)--(a);
+\begin{tikzpicture}[node distance=4mm]
+\node[ghost,minimum width=2.4cm] (a) {I. Contexto};
+\node[ghost,minimum width=2.4cm,right=of a] (b) {II. Formulación};
+\node[ghost,minimum width=2.4cm,right=of b] (c) {III. Resultados};
+\node[ghost,minimum width=2.4cm,right=of c] (d) {IV. Vías y plan};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c); \draw[arr] (c)--(d);
 \end{tikzpicture}
 \end{center}
-\captionline{Meta: usar el riesgo calculado para comparar cada acción candidata.}
 \end{frame}
 
-\begin{frame}{Contexto actual: riesgo después de la decisión}
-\vspace{.15cm}
+% =====================================================================
+\section{I. Contexto}
+\partframe{I}{Contexto}{El reactor, el accidente, el actuador y el gemelo digital}
+
+\begin{frame}{¿Por qué un control \emph{informado por riesgo}?}
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{block}{Enfoque clásico}
+\begin{itemize}
+\item Límites térmicos fijos y lógicas \emph{on/off}.
+\item El riesgo se estudia \key{fuera de línea} (APS), para escenarios genéricos.
+\item El controlador no sabe si la protección de respaldo está disponible.
+\end{itemize}
+\end{block}
+\column{.48\textwidth}
+\begin{block}{Con un gemelo digital}
+\begin{itemize}
+\item Se conoce el \key{estado actual} y se pronostica el futuro cercano.
+\item Se puede estimar la \key{probabilidad} de que una protección falle, \emph{condicionada} al estado actual.
+\item Esa información podría cambiar \key{qué acción conviene hoy}.
+\end{itemize}
+\end{block}
+\end{columns}
+\vspace{.35cm}
+\begin{alertblock}{Pregunta de investigación}
+¿Qué acción de control mantiene la temperatura en su consigna, \textbf{reduce la probabilidad de exceder el límite de seguridad} considerando que las protecciones pueden fallar, y puede calcularse en el tiempo disponible?
+\end{alertblock}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{El reactor: \emph{Small Modular Dual Fluid Reactor} (SMDFR)}
+\begin{columns}[c]
+\column{.56\textwidth}
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[font=\small]
+% núcleo
+\node[draw=USMBlue,line width=1pt,fill=USMYellow!30,rounded corners=4pt,minimum width=2.4cm,minimum height=2.6cm,align=center] (core) at (0,0) {\textbf{Núcleo}\\[.1cm]combustible\\líquido};
+% intercambiador
+\node[stagebox,minimum width=2.3cm] (hx) at (4.75,.85) {Intercambiador\\$\rightarrow$ conversión};
+% circuito de plomo: rama caliente arriba, rama fría abajo
+\draw[line width=2.2pt,USMCyan,-{Latex[length=3mm]}] (1.2,.85) -- (hx.west);
+\draw[line width=2.2pt,USMCyan,-{Latex[length=3mm]}] (hx.south) -- (4.75,-.85) -- (1.2,-.85);
+\node[font=\scriptsize,USMDeep,align=center] at (2.4,0) {circuito de\\plomo líquido};
+% fuga
+\draw[line width=1.4pt,Bad,decorate,decoration={zigzag,amplitude=1.5pt,segment length=4pt},-{Latex[length=2.5mm]}] (3.9,-.85) -- ++(.8,-.9) node[right,font=\scriptsize\bfseries,Bad,align=left] {fuga\\(LOCA)};
+% ACS
+\node[active,minimum width=2.0cm] (acs) at (2.4,-2.4) {ACS\\bomba MHD};
+\draw[darr,line width=1.4pt] (acs.north) -- (2.4,-.95);
+\node[font=\scriptsize,anchor=west] at (2.5,-1.3) {$u\to\dot m_{\rm ACS}$};
+% pasivo
+\node[risk,minimum width=2.2cm] (plug) at (-.6,-2.4) {Tapón de sal\\(pasivo)};
+\draw[weak] (-.6,-1.3) -- (plug.north);
+\node[font=\scriptsize,MidGray] at (-.6,-3.2) {drenaje al tanque};
+\end{tikzpicture}}
+\column{.42\textwidth}
+\begin{itemize}\setlength{\itemsep}{.15cm}
+\item Dos fluidos en circuitos separados: \key{combustible líquido} y \key{refrigerante de plomo}.
+\item Escenario: \key{pérdida de refrigerante} (LOCA de pequeña ruptura, $k_{\rm leak}\in[8,10]$ kg/s).
+\item Protección activa: \key{sistema de enfriamiento auxiliar (ACS)} impulsado por una bomba magnetohidrodinámica.
+\item Protección pasiva: tapón que se funde y drena el combustible.
+\end{itemize}
+\end{columns}
+\captionline{Base física: X. Wang (TUM) y Liu, Luo, Macián-Juan, \emph{Energies} 14(20), 2021.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{El accidente de referencia: una escala de temperaturas}
+\begin{columns}[c]
+\column{.47\textwidth}
+\centering
+\begin{tikzpicture}[x=1cm,y=.042cm]
+\fill[Good!10] (0,1135) rectangle (2.3,1180);
+\fill[USMYellow!25] (0,1180) rectangle (2.3,1220);
+\fill[Bad!12] (0,1220) rectangle (2.3,1258);
+\draw[-{Latex},line width=.8pt] (0,1135) -- (0,1262) node[above,font=\scriptsize] {PCT [K]};
+\foreach \y/\lab/\col in {1144/{1144: nominal, $y_{\rm nom}$}/Ink, 1179.27/{1179.3: consigna, $y_{\rm ref}$}/USMBlue, 1220/{1220: emergencia}/Warn, 1244/{1244: límite, $U_y$}/Bad}{
+ \draw[\col,line width=1pt] (0,\y) -- (2.3,\y);
+ \node[left,font=\scriptsize,text=\col] at (0,\y) {\lab};}
+\node[font=\scriptsize,Good,align=center] at (1.15,1160) {operación};
+\node[font=\scriptsize,Warn,align=center] at (1.15,1200) {ACS\\demandado};
+\node[font=\scriptsize,Bad,align=center] at (1.15,1251) {sobre el límite};
+\draw[decorate,decoration={brace,amplitude=4pt},line width=.8pt] (2.42,1244) -- (2.42,1179.27) node[midway,right,font=\scriptsize,align=left,xshift=3pt] {64.7 K\\de\\margen};
+\end{tikzpicture}
+\column{.5\textwidth}
+\begin{itemize}\setlength{\itemsep}{.2cm}
+\item Variable crítica: \key{temperatura pico de vaina} (PCT). No se mide directamente; la estima un \emph{sensor virtual}.
+\item La fuga calienta el núcleo; sobre \key{1180 K} se demanda el ACS.
+\item El controlador decide la corriente del ACS cada \key{0.5 s} entre $t=1160$ y $1190$ s: \key{61 decisiones}.
+\item Margen determinista normalizado:
+\[
+\mathrm{DSM}_k=\frac{\yhat_k-y_{\rm ref}}{U_y-y_{\rm ref}}\in[0,1]
+\]
+\small $0$: en la consigna; $1$: en el límite.
+\end{itemize}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{El actuador: de corriente eléctrica a caudal de plomo}
+\begin{columns}[c]
+\column{.55\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=5.4cm,
+ xlabel={corriente $u$ [A]},ylabel={caudal $\dot m_{\rm ACS}$ [kg/s]},
+ xmin=56.66,xmax=57.0,ymin=-2,ymax=68,
+ xtick={56.7,56.75,56.8,56.9,57.0},
+ xticklabel style={/pgf/number format/.cd,fixed,precision=2},
+ tick label style={font=\scriptsize},label style={font=\small},
+ grid=major,grid style={SoftGray},axis line style={MidGray}]
+\fill[USMCyan!18] (axis cs:56.69,-2) rectangle (axis cs:56.75,68);
+\fill[USMYellow!18] (axis cs:56.75,-2) rectangle (axis cs:56.90,68);
+\addplot[USMBlue,line width=1.4pt] coordinates {(56.66,0) (56.6872,0.006) (56.69,0.580) (56.70,2.628) (56.72,6.723) (56.75,12.865) (56.80,23.098) (56.85,33.326) (56.90,43.550) (56.95,53.770) (57.0,63.986)};
+\node[font=\scriptsize,USMDeep,align=center] at (axis cs:56.72,58) {cota\\original};
+\node[font=\scriptsize,Warn,align=center] at (axis cs:56.825,58) {cota\\ampliada};
+\addplot[only marks,mark=*,mark size=1.6pt,Bad] coordinates {(56.69,0.580) (56.75,12.865) (56.90,43.550)};
+\end{axis}
+\end{tikzpicture}
+\column{.43\textwidth}
+Balance de la bomba (modelo de circuito equivalente):
+\[
+\Delta P = Cu - BQ - AQ^2,\qquad \dot m_{\rm ACS}=\rho Q
+\]
+\begin{itemize}\setlength{\itemsep}{.12cm}
+\item La bomba arranca en $u\approx 56.687$ A; luego $\approx$\key{205 kg/s por A}.
+\item Cota original $[56.69,\,56.75]$ A: máximo \key{12.9 kg/s}. Ampliada a 56.90 A: \key{43.6 kg/s}.
+\item $u_{\min}$ \warn{no} es caudal cero (0.58 kg/s), y el ACS \warn{sólo enfría}.
+\end{itemize}
+\end{columns}
+\captionline{Consecuencia de control: el actuador satura con facilidad y no puede corregir un sobre-enfriamiento.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{El gemelo digital \emph{grey-box}: física reducida + aprendizaje}
+\vspace{.05cm}
+\begin{center}
+\resizebox{.97\linewidth}{!}{%
+\begin{tikzpicture}[node distance=6mm and 15mm]
+\node[ghost,minimum width=2.6cm,minimum height=1.25cm] (hrm) {\textbf{Reactor}\\(modelo de alta\\resolución, HRM)};
+\node[stagebox,minimum width=2.7cm,minimum height=1.25cm,right=of hrm] (bb) {\textbf{BiLSTM}\\MC-dropout\\(59 trayectorias)};
+\node[stagebox,minimum width=2.6cm,minimum height=1.25cm,right=of bb] (rom) {\textbf{ROM}\\física reducida\\$x_{k+1}=f(\cdot)$};
+\node[active,minimum width=2.7cm,minimum height=1.25cm,right=of rom] (gb) {\textbf{PCT estimada}\\$\yhat_k=h(x_k)+\hat\Delta_k$};
+\draw[arr] (hrm) -- node[tag,above=2pt] {mediciones} (bb);
+\draw[arr] (bb) -- node[tag,above=2pt,align=center] {fuga $\hat d_k$} (rom);
+\draw[arr] (rom) -- node[tag,above=2pt] {$h(x_k)$} (gb);
+\draw[arr] (bb.south) -- ++(0,-.55) -| node[tag,pos=.25,below] {corrección $\hat\Delta_k$ (error del ROM)} (gb.south);
+\node[risk,minimum width=2.6cm,below=1.15cm of rom,xshift=-1.6cm] (u) {corriente candidata\\$u_k\ \to\ \dot m_{\rm ACS}$};
+\draw[darr] (u.east) -| ($(rom.south)+(.6,0)$);
+\end{tikzpicture}}
+\end{center}
+\vspace{-.1cm}
+\begin{columns}[T]
+\column{.32\textwidth}
+\begin{block}{Caja blanca}
+El ROM conserva la física y es rápido, pero tiene sesgo.
+\end{block}
+\column{.32\textwidth}
+\begin{block}{Caja negra}
+La red pronostica la fuga y el error del ROM, con incertidumbre (MC-dropout).
+\end{block}
+\column{.32\textwidth}
+\begin{block}{Grey-box}
+La suma es un \key{sensor virtual} de PCT y el \key{modelo de predicción} del MPC.
+\end{block}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{La otra incertidumbre: las protecciones pueden fallar}
+\begin{columns}[c]
+\column{.52\textwidth}
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\scriptsize,
+ nd/.style={circle,draw=USMBlue,fill=USMPale,inner sep=1.6pt,minimum size=5mm}]
+\draw[-{Latex},MidGray] (0,-2.2) -- (6.3,-2.2) node[right] {$t$};
+\node[nd,fill=USMBlue,text=white] (r) at (0,0) {0};
+\node[nd] (a) at (2.3,1.0) {1};
+\node[nd,draw=Bad,fill=Bad!12] (b) at (2.3,-1.0) {2};
+\node[nd] (a1) at (4.7,1.55) {3};
+\node[nd,draw=Bad,fill=Bad!12] (a2) at (4.7,.45) {4};
+\node[nd] (b1) at (4.7,-.45) {5};
+\node[nd,draw=Bad,fill=Bad!12] (b2) at (4.7,-1.55) {6};
+\draw[darr] (r) -- node[above,sloped] {ACS disponible} (a);
+\draw[darr,draw=Bad] (r) -- node[below,sloped] {ACS falla} (b);
+\draw[darr] (a) -- (a1); \draw[darr,draw=Bad] (a) -- node[below=1pt,sloped,pos=.45] {falla} (a2);
+\draw[darr] (b) -- node[above,sloped,pos=.6] {reparación} (b1); \draw[darr,draw=Bad] (b) -- (b2);
+\draw[dashed,MidGray] (1.15,-2.2) -- (1.15,1.9) node[above] {demanda};
+\draw[dashed,MidGray] (3.5,-2.2) -- (3.5,1.9) node[above] {nuevo evento};
+\node[anchor=west] at (5.05,1.55) {$p_3$}; \node[anchor=west] at (5.05,.45) {$p_4$};
+\node[anchor=west] at (5.05,-.45) {$p_5$}; \node[anchor=west] at (5.05,-1.55) {$p_6$};
+\end{tikzpicture}
+\column{.46\textwidth}
+\begin{itemize}\setlength{\itemsep}{.15cm}
+\item El ACS tiene \key{5 componentes} (árbol de fallas); cada uno falla y se repara con tasas $\lambda_c,\mu_c$.
+\item Un \key{árbol dinámico de eventos} (DET) simula el ROM y \key{ramifica} cuando cambia el estado del ACS: modo $\sigma=(\text{demanda},\text{disponible})$.
+\item Cada ruta $\omega$ tiene probabilidad $p(\omega)$. Las fallas raras se muestrean con \key{muestreo por importancia}: se simula con $q$ y se pondera con $w=p/q$.
+\item Resultado: un \key{margen probabilístico de seguridad} (PSM) a partir del cuantil 95\% de la PCT máxima.
+\end{itemize}
+\end{columns}
+\end{frame}
+
+% =====================================================================
+\section{II. Formulación}
+\partframe{II}{Formulación del problema}{Del MPC implementado al MPC estocástico informado por riesgo}
+
+\begin{frame}{Control predictivo en una lámina}
+\begin{columns}[c]
+\column{.55\textwidth}
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\scriptsize]
+\draw[-{Latex},MidGray] (-3,0) -- (4.3,0) node[right] {$t$};
+\draw[-{Latex},MidGray] (-3,0) -- (-3,3.1) node[above] {PCT};
+\draw[USMBlue,line width=.9pt,dashed] (-3,1.45) -- (4.1,1.45) node[right] {$y_{\rm ref}$};
+\draw[Bad,line width=.9pt] (-3,2.75) -- (4.1,2.75) node[right] {$U_y$};
+\draw[Ink,line width=1.3pt] plot[smooth] coordinates {(-3,1.2) (-2.2,1.6) (-1.4,2.1) (-.6,2.05) (0,1.95)};
+\draw[USMCyan,line width=1.3pt,dashed] plot[smooth] coordinates {(0,1.95) (.8,1.8) (1.7,1.62) (2.7,1.52) (3.8,1.48)};
+\draw[Warn,line width=.8pt,densely dotted] plot[smooth] coordinates {(0,1.95) (.8,2.2) (1.7,2.42) (2.7,2.5) (3.8,2.55)};
+\draw[MidGray] (0,0) -- (0,3.0) node[above,Ink] {$t_q$ (ahora)};
+\draw[decorate,decoration={brace,amplitude=4pt,mirror}] (0,-.15) -- (3.8,-.15) node[midway,below=4pt] {horizonte $N=25$ pasos (12.5 s)};
+\node[Ink] at (-1.6,.35) {pasado medido};
+\node[USMCyan,anchor=west] at (2.3,1.15) {predicción con $u^\star$};
+\node[Warn,anchor=west] at (1.6,2.27) {otra $u$};
+\foreach \x/\h in {0/.55,.5/.62,1/.66,1.5/.62,2/.58,2.5/.55,3/.53,3.5/.52}{\draw[USMBlue,fill=USMBlue!25] (\x,-1.85) rectangle ++(.5,\h);}
+\draw[Bad,line width=1.4pt] (0,-1.85) rectangle ++(.5,.55);
+\node[anchor=east] at (-.1,-1.55) {$u_0,u_1,\dots,u_N$};
+\node[Bad,anchor=north] at (.25,-1.9) {sólo se aplica $u_0^\star$};
+\end{tikzpicture}
+\column{.43\textwidth}
+En cada instante de consulta $t_q$:
+\begin{enumerate}\setlength{\itemsep}{.15cm}
+\item Leer el estado (sensor virtual y modo del ACS).
+\item Pronosticar fuga y error del ROM (BiLSTM).
+\item Buscar la secuencia $u_0,\dots,u_N$ que minimiza un costo sobre el horizonte.
+\item Aplicar \key{sólo} $u_0^\star$, avanzar $\Delta t=0.5$ s y repetir.
+\end{enumerate}
+\vspace{.1cm}
+\small Variables de decisión: $N+1=26$ corrientes. Optimizador sin gradientes: Luus--Jaakola (alternativa: algoritmo genético).
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Modelo de predicción: un sistema híbrido estocástico}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Dinámica en el horizonte}
+\vspace{-.2cm}
+\begin{align*}
+\dot m_k &= f_{\rm ACS}(u_k) &&\text{actuador}\\
+x_{k+1} &= f\big(x_k,\sigma_k,\dot m_k,\hat d_k\big) &&\text{ROM}\\
+\yhat_k &= h(x_k)+\hat\Delta_k &&\text{PCT grey-box}\\
+\sigma_{k+1} &\sim P\big(\cdot\mid\sigma_k,\yhat_k;\lambda,\mu\big) &&\text{modo ACS}
+\end{align*}
+\small $k=0,\dots,N$ y $x_0$ inicializado desde la planta.
+\end{block}
+\column{.47\textwidth}
+\small
+\begin{tabular}{@{}>{\color{USMBlue}}l L{4.7cm}@{}}
+\toprule
+$u_k$ & corriente de la bomba MHD [A]\\
+$x_k$ & estado del ROM (temperaturas, caudales)\\
+$\sigma_k$ & modo del ACS: sin demanda / demandado y disponible / demandado y fallado\\
+$\hat d_k$ & caudal de fuga pronosticado\\
+$\hat\Delta_k$ & corrección del error del ROM\\
+$\lambda,\mu$ & tasas de falla y reparación\\
+\bottomrule
+\end{tabular}
+\end{columns}
+\vspace{.25cm}
+\begin{block}{Dos fuentes de incertidumbre, $\xi=(\text{pronóstico},\ \text{eventos del ACS})$}
+\textbf{Continua:} fuga y error del ROM (59 trayectorias de MC-dropout).\\
+\textbf{Discreta:} instantes de falla y reparación del ACS, que generan las ramas del árbol.
+\end{block}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Problema P0: el MPC implementado hoy}
+\vspace{-.1cm}
+{\small
+\[
+\min_{u_0,\dots,u_N}\ J(u)=
+\underbrace{\sum_{j\in\mathcal I(u)}\big(\yhat_j-y_{\rm ref}\big)^2}_{J_T:\ \text{seguimiento}}
++\underbrace{\lambda_m\sum_{k=0}^{N-1}\Big[\,|\dot m_{k+1}-\dot m_k|-\Delta\dot m\,\Big]_+^2}_{J_m:\ \text{suavidad del actuador}}
++\underbrace{\lambda_s\sum_{j\in\mathcal I(u)}\Big[\,\mathrm{DSM}_j-\tau\,\Big]_+^2}_{J_s:\ \text{margen determinista}}
+\]
+\vspace{-.15cm}
+\[
+\text{sujeto a}\quad u_{\min}\leq u_k\leq u_{\max},\qquad \text{dinámica del gemelo},\qquad [z]_+=\max(z,0).
+\]}
+\begin{columns}[T]
+\column{.5\textwidth}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+$y_{\rm ref}$ & consigna & 1179.27 K\\
+$U_y$ & límite & 1244 K\\
+$\Delta\dot m$, $\lambda_m$ & salto admisible, peso & 5 kg/s, $10^{-4}$\\
+$\tau$, $\lambda_s$ & umbral DSM, peso & 0.00238, $10^{4}$\\
+$[u_{\min},u_{\max}]$ & cotas & $[56.69,\,56.90]$ A\\
+\bottomrule
+\end{tabular}
+\column{.47\textwidth}
+\begin{itemize}\setlength{\itemsep}{.1cm}\small
+\item $\mathcal I(u)$: muestras futuras de \key{todos los nodos} de \key{un} árbol, concatenadas.
+\item Pronóstico: \key{mediana} de las 59 trayectorias.
+\item $|\mathrm{DSM}|\leq 1$ se verifica, pero el optimizador no lo impone.
+\end{itemize}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Lo que P0 no ve: cuatro brechas}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{1. No es una esperanza}
+Concatena nodos de un árbol sin ponderarlos por $p(\omega)$; el número de muestras cambia con $u$.
+\end{block}
+\begin{block}{2. El riesgo llega tarde}
+El PSM probabilístico se calcula \key{después} de elegir la acción.
+\end{block}
+\column{.49\textwidth}
+\begin{block}{3. Horizonte demasiado corto}
+En 12.5 s el árbol casi nunca ramifica: suele quedar \key{sólo la raíz}. La falla del ACS no se ve.
+\end{block}
+\begin{block}{4. Margen de una sola trayectoria}
+El DSM mide la trayectoria mediana: no dice cuán probable ni cuán severo es exceder el límite.
+\end{block}
+\end{columns}
+\vspace{.05cm}
 \begin{center}
 \begin{tikzpicture}[node distance=6mm]
-\node[stagebox,minimum width=2.55cm] (t) {Gemelo digital\\estado y pronóstico};
-\node[active,minimum width=2.65cm,right=of t] (c) {Control predictivo\\seguimiento + margen};
-\node[stagebox,minimum width=2.5cm,right=of c] (u) {Acción del\\ACS};
-\node[risk,minimum width=2.55cm,below=1.05cm of c] (p) {Árbol de eventos\\PSM a posteriori};
-\draw[arr] (t)--(c);
-\draw[arr] (c)--(u);
-\draw[arr] (u.south) |- (p.east);
-\draw[weak] (p.west) -- ++(-1.6,0) node[left,font=\small,align=right] {no retroalimenta\\esta búsqueda};
+\node[active,minimum width=2.6cm,minimum height=.8cm] (c) {MPC decide $u_0^\star$};
+\node[stagebox,minimum width=2.4cm,minimum height=.8cm,right=of c] (a) {se aplica};
+\node[risk,minimum width=2.8cm,minimum height=.8cm,right=of a] (p) {IS-MCDET calcula PSM};
+\draw[arr] (c) -- (a); \draw[arr] (a) -- (p);
+\draw[weak] (p.north) -- ++(0,.3) -| node[tag,pos=.25,above] {hoy no existe esta flecha} (c.north);
 \end{tikzpicture}
 \end{center}
-\captionline{ACS: enfriamiento auxiliar. PSM: margen probabilístico de seguridad.}
-\vspace{.05cm}
-\begin{columns}[T]
-\column{.48\textwidth}
-\begin{block}{Lo que ya hace}
-Predice temperatura y evalúa seguimiento, cambios de caudal y una penalización térmica determinista.
-\end{block}
-\column{.48\textwidth}
-\begin{block}{Lo que aún falta}
-Ponderar rutas por probabilidad y usar el riesgo probabilístico para elegir cada acción candidata.
-\end{block}
-\end{columns}
 \end{frame}
 
-\begin{frame}{Cuatro desafíos que definen el problema}
+% ---------------------------------------------------------------------
+\begin{frame}{Problema P1: MPC estocástico informado por riesgo}
+\vspace{-.15cm}
+\begin{block}{Formulación objetivo en el instante $t_q$}
+\vspace{-.25cm}
+\begin{align*}
+\min_{\pi}\quad & \E_{p}\Big[\sum_{k=0}^{N}\ell\big(\yhat_k,\dot m_k\big)\Big]\;+\;\lambda_R\,\rho\big(Z^\pi\big),
+\qquad Z^\pi=\max_{0\leq k\leq N_R}\yhat_k-U_y\\
+\text{s.a.}\quad & \Prob_p\big(Z^\pi>0\ \big|\ \mathcal I_q\big)\leq\varepsilon\\
+& u_k=\pi_k(\mathcal I_k)\in[u_{\min},u_{\max}]\quad\text{(sólo usa información ya observada)}\\
+& \text{dinámica híbrida del gemelo, con $\sigma_k$ aleatorio}
+\end{align*}
+\end{block}
 \begin{columns}[T]
-\column{.49\textwidth}
-\begin{block}{1. Objetivo comparable}
-El costo actual concatena nodos de un árbol; las rutas no se ponderan y el número de muestras puede cambiar.
-\end{block}
-\vspace{.1cm}
-\begin{block}{2. Riesgo dentro del control}
-El margen determinista mide una trayectoria; falta probabilidad de falla y cola térmica.
-\end{block}
-\column{.49\textwidth}
-\begin{block}{3. Calidad de la solución}
-Una buena búsqueda no prueba optimalidad. Hace falta una cota inferior válida y un candidato factible.
-\end{block}
-\vspace{.1cm}
-\begin{block}{4. Protecciones múltiples}
-Con dos sistemas activos importan disponibilidad, orden de activación, retardos y respuesta pasiva.
-\end{block}
+\column{.32\textwidth}
+\small\key{$\E_p[\cdot]$:} promedio sobre rutas del árbol, ponderado por su probabilidad. Corrige la brecha 1.
+\column{.32\textwidth}
+\small\key{$\rho$, $\varepsilon$:} el riesgo entra en \emph{cada} candidato, como costo o como restricción. Corrige 2 y 4.
+\column{.32\textwidth}
+\small\key{$N_R\geq N$:} un horizonte de riesgo más largo que el de seguimiento. Corrige 3.
 \end{columns}
+\vspace{.2cm}
+\captionline{$\ell$ conserva los términos de P0 (seguimiento y suavidad). $\pi$ es una \emph{política}: la acción puede depender de lo que se observe.}
 \end{frame}
 
-\begin{frame}{Resultado 1: costo local y diferencia con la referencia}
+% ---------------------------------------------------------------------
+\begin{frame}{¿Qué medida de riesgo $\rho$? Tres candidatas}
+\vspace{.1cm}
+\small
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}>{\raggedright\arraybackslash\bfseries}p{2.3cm}L{3.3cm}L{3.2cm}L{3.8cm}@{}}
+\toprule
+& \textbf{Definición} & \textbf{Ventaja} & \textbf{Dificultad}\\
+\midrule
+Probabilidad de excedencia & $\Prob(Z>0)$ & Lenguaje regulatorio directo. & Discontinua; eventos raros exigen muchas muestras o IS.\\
+Margen por cuantil (PSM) & $\dfrac{U_y-q_{0.95}(\max\yhat)}{U_y-y_{\rm nom}}$ & Continuidad con la tesis (IS-MCDET). & No convexo; no ve lo que ocurre más allá del cuantil.\\
+CVaR del exceso & $\E\big[Z\mid Z\geq\mathrm{VaR}_\alpha\big]$ & Mide severidad de la cola; convexo en $Z$. & Hay que elegir $\alpha$; unidades en K, no probabilidad.\\
+\bottomrule
+\end{tabular}
+\vspace{.35cm}
+\begin{alertblock}{Decisión previa a cualquier experimento}
+Fijar el evento (¿$\max\yhat>U_y$ en qué horizonte?), la medida, $\alpha$ o $\varepsilon$, antes de comparar métodos. Un PSM y una probabilidad no son intercambiables.
+\end{alertblock}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Del problema al cómputo: escenarios ponderados}
 \begin{columns}[T]
 \column{.52\textwidth}
-\begin{block}{Consulta fija, ejecución local}
-\begin{tabular}{@{}lr@{}}
-Seguimiento térmico & $0.348407$\\
-Cambios de caudal & $0.013619$\\
-Penalización de seguridad & $0$\\ \midrule
-Costo total, candidato factible & $\mathbf{0.362026}$
-\end{tabular}
-\end{block}
-\column{.44\textwidth}
-\begin{block}{Lectura física}
-Margen térmico mínimo pronosticado: \key{64.42 K} respecto de $1244$ K.
-\end{block}
-\begin{block}{Reproducibilidad}
-El costo archivado es $0.326151$; la ejecución local difiere \key{+11.0\,\%}.
+Con escenarios $\omega_1,\dots,\omega_M$ simulados bajo $q$ y pesos $w_i=p(\omega_i)/q(\omega_i)$, $\bar w_i=w_i/\sum_l w_l$:
+\begin{align*}
+\hat J(u)&=\sum_i \bar w_i\,J(u,\omega_i)\\
+\hat P(u)&=\sum_i \bar w_i\,\mathbf 1\{Z_i(u)>0\}\\
+\widehat{\mathrm{CVaR}}_\alpha(u)&=\min_\eta\ \eta+\tfrac{1}{1-\alpha}\sum_i\bar w_i\,[Z_i(u)-\eta]_+
+\end{align*}
+\small (última fórmula: Rockafellar y Uryasev, 2000)
+\column{.45\textwidth}
+\begin{block}{Tres reglas de buena práctica}
+\begin{enumerate}\setlength{\itemsep}{.1cm}
+\item \key{Escenarios comunes}: todos los candidatos $u$ se evalúan con los mismos $\omega_i$. La diferencia de costo es entonces efecto de $u$, no ruido de muestreo.
+\item \key{Tamaño efectivo}: reportar $\mathrm{ESS}=(\sum w_i)^2/\sum w_i^2$ e intervalos de confianza.
+\item \key{Validar fuera de muestra}: elegir con unos escenarios y evaluar con otros.
+\end{enumerate}
 \end{block}
 \end{columns}
-\vspace{.15cm}
-\captionline{La factibilidad se verificó en las muestras del piloto. El margen mostrado no es una garantía probabilística.}
 \end{frame}
 
-\begin{frame}{Resultado 2: efecto del margen determinista en los barridos}
-\vspace{.2cm}
-\begin{center}
+% ---------------------------------------------------------------------
+\begin{frame}{Dos niveles de ambición: lazo abierto o multietapa}
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{block}{P1a: una secuencia común}
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\scriptsize]
+\draw[USMBlue,line width=1.4pt] (0,0) -- (1.4,0);
+\draw[USMBlue,line width=1.4pt] (1.4,0) -- (3.6,.7);
+\draw[USMBlue,line width=1.4pt] (1.4,0) -- (3.6,-.7);
+\node[above] at (2.5,.45) {$u_{0:N}$};
+\node[below] at (2.5,-.45) {$u_{0:N}$};
+\node[above] at (.7,0) {$u_{0:N}$};
+\fill[Bad] (1.4,0) circle (2pt);
+\end{tikzpicture}\\[.1cm]
+\raggedright
+Misma dimensión que P0 (26 variables); cambia sólo el \key{costo}. Primer paso natural.
+\end{block}
+\column{.48\textwidth}
+\begin{block}{P1b: acción que reacciona al evento}
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,font=\scriptsize]
+\draw[USMBlue,line width=1.4pt] (0,0) -- (1.4,0);
+\draw[Good,line width=1.4pt] (1.4,0) -- (3.6,.7);
+\draw[Bad,line width=1.4pt] (1.4,0) -- (3.6,-.7);
+\node[above,USMBlue] at (.7,0) {$u_{0:k_e}$ común};
+\node[above,Good] at (2.5,.45) {$u^{\rm ok}$};
+\node[below,Bad] at (2.5,-.45) {$u^{\rm falla}$};
+\fill[Bad] (1.4,0) circle (2pt);
+\end{tikzpicture}\\[.1cm]
+\raggedright
+\key{No anticipación}: antes del evento, la acción es la misma en todas las ramas. Más variables, decisiones más realistas.
+\end{block}
+\end{columns}
+\vspace{.3cm}
+\captionline{Recomendación: resolver P1a primero. Pasar a P1b sólo si P1a muestra que el riesgo sí cambia las decisiones.}
+\end{frame}
+
+% =====================================================================
+\section{III. Resultados}
+\partframe{III}{Lo que ya sabemos}{Resultados en lazo cerrado y estado de la base computacional}
+
+\begin{frame}{Lazo cerrado: 61 decisiones durante el accidente}
+\begin{columns}[c]
+\column{.6\textwidth}
+\centering
 \begin{tikzpicture}
-\node[stagebox,minimum width=4.65cm,minimum height=2.15cm] (a) at (0,0)
- {\textbf{Convergencia}\\[.12cm]\Large 2 de 49\\[.08cm]\small configuraciones\\cambian la acción};
-\node[stagebox,minimum width=4.65cm,minimum height=2.15cm] (b) at (5.35,0)
- {\textbf{Fase aguda}\\[.12cm]\Large 0 de 49\\[.08cm]\small configuraciones\\cambian la acción};
-
+\begin{axis}[width=\linewidth,height=3.55cm,name=top,
+ ylabel={PCT [K]},xmin=1160,xmax=1190,ymin=1177.4,ymax=1181.5,
+ restrict y to domain=1170:1190,unbounded coords=jump,
+ xticklabels={},tick label style={font=\scriptsize},label style={font=\small},
+ grid=major,grid style={SoftGray},axis line style={MidGray},
+ legend columns=3,legend style={font=\scriptsize,at={(.5,1.04)},anchor=south,draw=none,fill=none,/tikz/every even column/.append style={column sep=6pt}}]
+\addplot[MidGray,line width=1.1pt] table[x=t,y=pctA] {plotdata/closed_loop_AD.dat};
+\addplot[USMBlue,line width=1.3pt] table[x=t,y=pctD] {plotdata/closed_loop_AD.dat};
+\addplot[Warn,dashed,line width=.9pt,domain=1160:1190] {1179.2712};
+\legend{A: base ($\lambda_s{=}0$),D: reajustado ($\lambda_s{=}10^4$),consigna}
+\end{axis}
+\begin{axis}[width=\linewidth,height=3.1cm,at={(top.below south west)},anchor=north west,yshift=-.15cm,
+ xlabel={$t$ [s]},ylabel={$\dot m_{\rm ACS}$ [kg/s]},xmin=1160,xmax=1190,ymin=0,ymax=46,
+ tick label style={font=\scriptsize},label style={font=\small},
+ grid=major,grid style={SoftGray},axis line style={MidGray}]
+\addplot[MidGray,line width=1.1pt,const plot] table[x=t,y=mdotA] {plotdata/closed_loop_AD.dat};
+\addplot[USMBlue,line width=1.3pt,const plot] table[x=t,y=mdotD] {plotdata/closed_loop_AD.dat};
+\end{axis}
 \end{tikzpicture}
-\end{center}
-\vspace{.12cm}
-\begin{itemize}
-\item En convergencia, los dos cambios requieren un umbral por debajo de la banda térmica alcanzable.
-\item En fase aguda, el seguimiento ya lleva el enfriamiento al límite permitido.
+\column{.38\textwidth}
+\begin{itemize}\setlength{\itemsep}{.15cm}\small
+\item Mismo accidente y optimizador (Luus--Jaakola, semilla 1).
+\item \textbf{A}: sin margen, cota 56.75 A.\\ \textbf{D}: margen activo, cota 56.90 A, búsqueda reajustada.
+\item D inyecta más refrigerante mientras el margen está comprometido y reduce antes el error.
+\item Pero termina \key{bajo} la consigna ($-34$ mK/s): el ACS no puede calentar.
 \end{itemize}
-\captionline{Resultado del barrido estudiado; no implica que una métrica probabilística tenga el mismo comportamiento.}
-\end{frame}
-
-\begin{frame}{Resultado 3: cotas de optimalidad en el ejemplo y el piloto}
-\vspace{.15cm}
-\begin{columns}[T]
-\column{.49\textwidth}
-\begin{block}{Ejemplo híbrido de dos modos}
-\[
-0.499024391\leq J^\star\leq 0.500000000
-\]
-Brecha $0.000975609$; óptimo analítico $0.5$.
-\end{block}
-\column{.49\textwidth}
-\begin{block}{Piloto del reactor}
-\[
-0\leq J^\star\leq 0.362026
-\]
-La cota inferior disponible no mide cercanía al óptimo.
-\end{block}
-\end{columns}
-\vspace{.3cm}
-\begin{center}
-\begin{tikzpicture}[x=1cm,y=1cm]
-\node[stagebox,minimum width=2.4cm] (d) at (0,0) {Caja de\\controles};
-\node[stagebox,minimum width=2.4cm] (e) at (3.1,0) {Todas las ramas\\y temperaturas};
-\node[active,minimum width=2.4cm] (l) at (6.2,0) {Cota inferior\\de la caja};
-\draw[arr] (d)--(e);
-\draw[arr] (e)--(l);
-\end{tikzpicture}
-\end{center}
-\captionline{La pieza pendiente es encerrar rigurosamente el pronóstico térmico para todos los controles y ramas.}
-\end{frame}
-
-\begin{frame}{Control informado por riesgo: evaluar cada candidato}
 \vspace{.05cm}
-\begin{center}
-\resizebox{.94\linewidth}{!}{%
-\begin{tikzpicture}[node distance=5mm]
-\node[active,minimum width=2.0cm] (u) {Candidato\\de control};
-\node[stagebox,minimum width=2.0cm,right=of u] (s) {Mismas\\realizaciones};
-\node[stagebox,minimum width=2.1cm,right=of s] (r) {Rutas, temperaturas\\y pesos};
-\node[risk,minimum width=2.0cm,right=of r] (m) {Costo esperado\\y riesgo};
-\node[active,minimum width=1.9cm,right=of m] (o) {Comparar\\candidatos};
-\draw[arr] (u)--(s);
-\draw[arr] (s)--(r);
-\draw[arr] (r)--(m);
-\draw[arr] (m)--(o);
-\end{tikzpicture}%
-}
-\end{center}
+\tiny\color{MidGray} Se omite una muestra transitoria en $t=1160.5$ s (PCT $\approx 1146$ K), común a ambas corridas. D cambia dos cosas a la vez: cota y peso.
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Lazo cerrado: indicadores y lo que se puede afirmar}
+\begin{columns}[T]
+\column{.54\textwidth}
+\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Indicador & A & D\\
+\midrule
+PCT máxima & 1181.21 K & 1181.21 K\\
+Margen mínimo & 62.79 K & 62.79 K\\
+IAE (error integrado) & 35.16 K·s & \key{28.65 K·s}\\
+Error en régimen & \key{+0.07 K} & +0.70 K\\
+Variación total de $u$ & \key{0.86 A} & 2.54 A\\
+Tiempo por consulta & 351.8 s & \key{76.0 s}\\
+\bottomrule
+\end{tabular}\\[.1cm]
+\scriptsize\color{MidGray} Tiempo: mediana del optimizador por consulta.
+\column{.44\textwidth}
+\begin{exampleblock}{Tres afirmaciones, y no más}
+\begin{enumerate}\setlength{\itemsep}{.1cm}
+\item \textbf{La envolvente no cambia}: el pico ocurre en la primera consulta, antes de que el control actúe.
+\item \textbf{El seguimiento mejora}: IAE $-18.5$\%, a cambio de un actuador más activo.
+\item \textbf{El cómputo mejora}: $4.6\times$ más rápido tras corregir la búsqueda.
+\end{enumerate}
+\end{exampleblock}
+\end{columns}
 \vspace{.25cm}
-\[
-\min_{\pi}\ \mathbb E[J(\pi,\omega)]+\lambda_R R(\pi)
-\qquad
-\text{sujeto a}\quad
-\mathbb P\!\left(\max_k T_k>1244\ {\rm K}\right)\leq\varepsilon .
-\]
-\vspace{.05cm}
-\begin{columns}[T]
-\column{.49\textwidth}
-\begin{block}{Métrica principal a probar}
-Probabilidad de exceder el límite durante un horizonte común.
-\end{block}
-\column{.49\textwidth}
-\begin{block}{Métricas complementarias}
-Margen por cuantil y costo medio de los peores casos (CVaR).
-\end{block}
-\end{columns}
+\begin{alertblock}{Lo que no se puede afirmar}
+Que el controlador reduzca el \emph{riesgo}: ninguna corrida evaluó la probabilidad de falla dentro de la decisión, y hay una sola realización por configuración.
+\end{alertblock}
 \end{frame}
 
-\begin{frame}{Vías de exploración más prometedoras}
+% ---------------------------------------------------------------------
+\begin{frame}{¿Cuándo puede actuar un término de seguridad?}
+\begin{columns}[T]
+\column{.49\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=3.3cm,title={\small Fase aguda ($t=1161$ s)},
+ xlabel={$u$ [A]},ylabel={$J_T$},xmin=56.685,xmax=56.755,ymin=0,ymax=190,
+ xtick={56.69,56.72,56.75},xticklabel style={/pgf/number format/.cd,fixed,precision=2},
+ tick label style={font=\scriptsize},label style={font=\scriptsize},
+ grid=major,grid style={SoftGray},axis line style={MidGray}]
+\addplot[USMBlue,line width=1.3pt,mark=*,mark size=1.4pt] coordinates {(56.690,170.29) (56.714,107.79) (56.750,48.28)};
+\addplot[only marks,mark=*,mark size=2.6pt,Bad] coordinates {(56.750,48.28)};
+\end{axis}
+\end{tikzpicture}\\
+\small Seguimiento y seguridad piden \key{lo mismo}: más refrigerante. Óptimo en la cota: \key{0 de 49} ajustes lo mueven.
+\column{.49\textwidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[width=\linewidth,height=3.3cm,title={\small Convergencia ($t=1180$ s)},
+ xlabel={$u$ [A]},ylabel={$J_T$},xmin=56.685,xmax=56.755,ymin=0,ymax=21,
+ xtick={56.69,56.72,56.75},xticklabel style={/pgf/number format/.cd,fixed,precision=2},
+ tick label style={font=\scriptsize},label style={font=\scriptsize},
+ grid=major,grid style={SoftGray},axis line style={MidGray}]
+\addplot[USMBlue,line width=1.3pt,mark=*,mark size=1.4pt] coordinates {(56.690,19.53) (56.702,8.94) (56.714,2.73) (56.726,0.8195) (56.738,3.16) (56.750,9.69)};
+\addplot[only marks,mark=*,mark size=2.6pt,Bad] coordinates {(56.726,0.8195)};
+\end{axis}
+\end{tikzpicture}\\
+\small Óptimo \key{interior}: aquí un término de seguridad puede desplazar la decisión (2 de 49 ajustes).
+\end{columns}
+\vspace{.1cm}
+\begin{block}{Implicación para la investigación}
+Para ver si el riesgo cambia decisiones se necesitan escenarios donde \key{seguimiento y seguridad compitan}: ACS degradado, fallas dentro del horizonte o un horizonte de riesgo más largo.
+\end{block}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Estado de la base computacional: tres advertencias}
 \begin{columns}[T]
 \column{.32\textwidth}
-\begin{block}{1. Escenarios comunes}
-Evaluar cada control sobre las mismas realizaciones. Comparar costo y riesgo sin que cambie el ruido de muestreo.
+\begin{block}{Reproducibilidad}
+El piloto en MATLAB R2024b da $J=0.362$ frente a $0.326$ archivado en R2024a: \warn{+11\%}. La causa aún no está aislada.
 \end{block}
 \column{.32\textwidth}
-\begin{block}{2. Fallas raras}
-Usar muestreo por importancia para la cola; registrar pesos, tamaño efectivo e incertidumbre.
+\begin{block}{Búsqueda}
+Luus--Jaakola devolvía acciones hasta $\sim\!190\times$ peores que una malla simple; se corrigió. Sin embargo, una buena búsqueda \key{no demuestra} optimalidad.
 \end{block}
 \column{.32\textwidth}
-\begin{block}{3. Cotas globales}
-Construir encierros térmicos por regiones de control y ramas; medir una brecha de optimalidad válida.
+\begin{block}{Tiempo de cálculo}
+Mediana de 76 s por consulta, dentro de la ventana de \key{120 s} de un monitor de riesgo en línea. Pero un PSM por candidato (Wilks 95/95: \key{59 corridas}) multiplicaría el costo $\sim\!59\times$.
 \end{block}
 \end{columns}
 \vspace{.3cm}
 \begin{center}
 \begin{tikzpicture}[node distance=5mm]
-\node[stagebox,minimum width=3.05cm] (a) {Primero: decisión\\sensible al riesgo};
-\node[stagebox,minimum width=3.05cm,right=of a] (b) {Después: cola\\estadísticamente estable};
-\node[stagebox,minimum width=3.05cm,right=of b] (c) {En paralelo: calidad\\de la optimización};
-\draw[arr] (a)--(b);
-\draw[arr] (b)--(c);
+\node[ghost,minimum width=3.4cm] (a) {Cotas de optimalidad};
+\node[font=\small,right=of a,text width=9.2cm,align=left] {Se implementó una ramificación y acotamiento \emph{condicional}; funciona en un ejemplo híbrido (brecha $<10^{-3}$), pero para el gemelo real la única cota inferior hoy es $J\geq 0$. \key{Queda como línea secundaria.}};
 \end{tikzpicture}
 \end{center}
 \end{frame}
 
-\begin{frame}{Con varios sistemas, la estrategia es una secuencia causal}
+% =====================================================================
+\section{IV. Vías y plan}
+\partframe{IV}{Vías de exploración y plan}{Qué probar, en qué orden y cómo saber si funcionó}
+
+\begin{frame}{Reunión del 22 de octubre: lo que cambia en el plan}
+\vspace{-.05cm}
+\begin{alertblock}{Diagnóstico compartido}
+Ni siquiera el MPC determinista se resuelve con holgura, y meter el riesgo probabilístico lo multiplica. \textbf{Antes de volverlo estocástico, hay que volverlo tratable.}
+\end{alertblock}
 \vspace{.05cm}
-\begin{center}
-\begin{tikzpicture}[node distance=8mm and 9mm]
-\node[stagebox,minimum width=2.4cm] (obs) {Estado y demanda\\observados};
-\node[active,minimum width=2.4cm,right=of obs] (acs) {Activar ACS\\si corresponde};
-\node[stagebox,minimum width=2.35cm,right=of acs] (out) {Observar\\éxito o falla};
-\node[active,minimum width=2.45cm,right=of out] (b) {Decidir sobre\\sistema B};
-\node[risk,minimum width=2.65cm,below=1.15cm of out] (pas) {Protección pasiva\\según demanda y estado};
-\draw[arr] (obs)--(acs);
-\draw[arr] (acs)--(out);
-\draw[arr] (out)--(b);
-\draw[weak] (obs.south) |- (pas.west);
-\draw[weak] (out.south)--(pas.north);
-\end{tikzpicture}
-\end{center}
-\vspace{.2cm}
-\begin{itemize}
-\item ACS$\rightarrow$B y B$\rightarrow$ACS pueden producir riesgos y respuestas térmicas distintos.
-\item La acción en cada instante usa sólo fallas y demandas ya observadas.
-\item La protección pasiva responde a demanda y disponibilidad; el controlador decide sobre los sistemas activos.
+\begin{columns}[T]
+\column{.49\textwidth}
+\small
+\begin{block}{R. Mena (USM)}
+\begin{itemize}\setlength{\itemsep}{.05cm}
+\item Escribir el control como \key{problema de optimización monolítico}, no en la forma que exige la metaheurística. Cuadrados y valores absolutos caben en solvers actuales, con aproximaciones cónicas si hace falta.
+\item Usar ese óptimo como \key{referencia} para medir Luus--Jaakola y el genético.
 \end{itemize}
+\end{block}
+\column{.49\textwidth}
+\small
+\begin{block}{H. Rozas (U. de Chile)}
+\begin{itemize}\setlength{\itemsep}{.05cm}
+\item \key{Linealizar} el reactor en torno a un punto de operación: MPC lineal-cuadrático clásico, con acceso a MPC robusto, distribucionalmente robusto y contextual.
+\item \key{Aprender un escenario único} que, en el MPC determinista, reproduzca la decisión estocástica.
+\end{itemize}
+\end{block}
+\end{columns}
+\vspace{.1cm}
+\captionline{Acuerdo: buscar modelos linealizados del reactor, reformular el plan y volver a reunirse en 3--4 semanas.}
 \end{frame}
 
-\begin{frame}{Secuencia de trabajo y criterio de éxito}
+% ---------------------------------------------------------------------
+\begin{frame}{Diez vías de exploración, en orden de ejecución}
+\scriptsize
+\renewcommand{\arraystretch}{1.18}
+\begin{tabular}{@{}L{.55cm}L{3.7cm}L{7.3cm}l@{}}
+\toprule
+& \textbf{Vía} & \textbf{Idea en una línea} & \textbf{Prioridad}\\
+\midrule
+V1 & Problema monolítico & P0 con dinámica como restricciones y holguras explícitas; solver convencional. & \pill{Bad}{alta}\\
+V2 & Modelo lineal del reactor & Identificar $A,B,C$ en torno a puntos de operación $\Rightarrow$ MPC lineal-cuadrático (QP). & \pill{Bad}{alta}\\
+V3 & Referencia exacta & Comparar Luus--Jaakola y genético contra el óptimo de V1--V2. & \pill{Bad}{alta}\\
+V4 & Riesgo en cada candidato & Restricción probabilística o $\hat J+\lambda_R\hat\rho$ con escenarios comunes. & \pill{Bad}{alta}\\
+V5 & Horizonte de riesgo extendido & Evaluar $\rho$ sobre $N_R\gg N$ para que las fallas del ACS sean visibles. & \pill{Bad}{alta}\\
+V6 & Escenario orientado a la decisión & Aprender fuera de línea un escenario que reproduzca la decisión estocástica. & \pill{Warn}{media}\\
+V7 & Cómputo del modelo no lineal & Bloqueo de movimientos y arranque en caliente, si se mantiene el ROM. & \pill{Warn}{media}\\
+V8 & MPC multietapa & Acciones distintas tras observar éxito o falla del ACS. & \pill{Warn}{media}\\
+V9 & Varias protecciones y pasivo & Con un solo sistema, la falla no admite respaldo; con dos, el orden importa. & \pill{Warn}{media}\\
+V10 & Cotas del modelo no lineal & Encierros del ROM por cajas de control. & \pill{MidGray}{baja}\\
+\bottomrule
+\end{tabular}
+\captionline{V1--V3 son la base que pidió la reunión: sin ellas, V4--V6 no caben en 120 s ni tienen contra qué compararse.}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V1: el control como problema de optimización}
+\begin{columns}[T]
+\column{.55\textwidth}
+{\small
+\vspace{-.3cm}
+\begin{align*}
+\min_{\dot m,\,x,\,s,\,r}\ & \sum_{k}(\yhat_k-y_{\rm ref})^2+\lambda_m\sum_k s_k^2+\lambda_s\sum_k r_k^2\\
+\text{s.a.}\ & x_{k+1}=f(x_k,\dot m_k,\hat d_k),\quad \yhat_k=h(x_k)+\hat\Delta_k\\
+& |\dot m_{k+1}-\dot m_k|\leq\Delta\dot m+s_k,\quad s_k\geq0\\
+& \mathrm{DSM}_k\leq\tau+r_k,\quad r_k\geq0\\
+& \dot m_{\min}\leq\dot m_k\leq\dot m_{\max}
+\end{align*}\par}
+\small Las bisagras $[z]_+^2$ de P0 se escriben \key{exactamente} con holguras: $\min s^2$ con $s\geq z$, $s\geq0$. El margen puede pasar a restricción \key{dura y lineal}: $\yhat_k\leq y_{\rm ref}+\tau(U_y-y_{\rm ref})$.
+\column{.42\textwidth}
+\begin{exampleblock}{El actuador ya es lineal}
+En $[56.69,\,56.90]$ A,
+\[
+\dot m_{\rm ACS}\approx 204.6\,(u-56.687)
+\]
+con error $<0.007$ kg/s. Se puede decidir \key{el caudal} y recuperar $u$ después.
+\end{exampleblock}
+\begin{alertblock}{Lo único no lineal}
+$f$ y $h$: la dinámica térmica del ROM (transferencia de calor con retardo). Si se linealiza (V2), el problema completo es un \key{QP convexo}.
+\end{alertblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V2: un modelo lineal en torno a un punto de operación}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Modelo de predicción lineal}
+\vspace{-.2cm}
+\begin{align*}
+\delta x_{k+1}&=A\,\delta x_k+B\,\delta\dot m_k+E\,\delta\hat d_k\\
+\yhat_k&=\bar y+C\,\delta x_k+\hat\Delta_k
+\end{align*}
+\small Identificado con respuestas del ROM (escalones o señales pseudoaleatorias) en el estado de cada consulta; el retardo térmico entra como estados adicionales.
+\end{block}
+\begin{alertblock}{Criterio de validez}
+\small La autoridad del control sobre la PCT es $\approx 1$ K: el error lineal debe ser \key{$\ll 1$ K}. En la fase aguda quizá haga falta más de un punto.
+\end{alertblock}
+\column{.47\textwidth}
+\begin{exampleblock}{Lo que se abre}
+\small
+\begin{itemize}\setlength{\itemsep}{.06cm}
+\item Un \key{QP} pequeño por consulta (típicamente milisegundos).
+\item Restricción probabilística con error gaussiano: un \key{ajuste determinista}
+\[
+\Prob(\yhat_k>U_y)\leq\varepsilon\iff \bar y_k+z_{1-\varepsilon}\sigma_k\leq U_y
+\]
+con $\sigma_k$ de las 59 trayectorias de MC-dropout.
+\item MPC robusto, distribucionalmente robusto y contextual.
+\item Falla del ACS: un modelo por modo $\sigma$ (conmutado).
+\end{itemize}
+\end{exampleblock}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V3: ¿qué tan buena era la metaheurística?}
 \begin{center}
-\begin{tikzpicture}[node distance=7mm]
-\node[stagebox,minimum width=2.5cm] (a) {1. Conciliar\\línea base};
-\node[stagebox,minimum width=2.5cm,right=of a] (b) {2. Riesgo en\\cada candidato};
-\node[stagebox,minimum width=2.5cm,right=of b] (c) {3. Validar fuera\\de muestra};
-\node[stagebox,minimum width=2.5cm,right=of c] (d) {4. Dos sistemas\\y pasivo};
-\draw[arr] (a)--(b);
-\draw[arr] (b)--(c);
-\draw[arr] (c)--(d);
+\begin{tikzpicture}[node distance=5mm and 8mm]
+\node[stagebox,minimum width=2.7cm] (s) {Mismo estado\\de consulta};
+\node[ghost,minimum width=2.7cm,above right=1mm and 9mm of s] (lj) {Luus--Jaakola\\y genético};
+\node[active,minimum width=2.7cm,below right=1mm and 9mm of s] (qp) {Solver sobre\\V1 + V2};
+\node[risk,minimum width=3.1cm,right=50mm of s] (rom) {Re-simular ambas\\acciones en el ROM};
+\node[stagebox,minimum width=2.6cm,right=of rom] (m) {Brecha, acción\\y tiempo};
+\draw[arr] (s) -- (lj); \draw[arr] (s) -- (qp);
+\draw[arr] (lj) -- (rom); \draw[arr] (qp) -- (rom); \draw[arr] (rom) -- (m);
 \end{tikzpicture}
 \end{center}
-\vspace{.35cm}
-\begin{block}{Una mejora será convincente cuando}
-La nueva métrica cambie alguna decisión, reduzca el riesgo fuera de muestra a un costo térmico aceptable y cumpla el tiempo disponible por consulta.
+\vspace{.1cm}
+\begin{columns}[T]
+\column{.32\textwidth}
+\begin{block}{Dos brechas}
+Sobre el modelo lineal (exacta, con la cota dual del solver) y sobre el ROM (la que importa físicamente).
 \end{block}
-\vspace{.12cm}
-\captionline{En paralelo: obtener cotas para el modelo real y cuantificar la brecha de optimalidad.}
+\column{.32\textwidth}
+\begin{block}{Casos}
+$t=1161$ s (aguda), $t=1180$ s (convergencia), fuga severa y lazo cerrado completo.
+\end{block}
+\column{.32\textwidth}
+\begin{block}{Por qué sirve}
+Da la referencia que las cotas del modelo no lineal (V10) no lograron dar: hoy sólo se sabe que $J\geq0$.
+\end{block}
+\end{columns}
 \end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V4 + V5: que el riesgo cambie una decisión}
+\begin{columns}[T]
+\column{.5\textwidth}
+\begin{block}{Experimento mínimo, sobre la base V1--V2}
+\small
+\begin{enumerate}\setlength{\itemsep}{.05cm}
+\item Primero, la \key{restricción probabilística} ajustada por cuantil (barata, cerrada).
+\item Luego, \key{$M$ escenarios} (pronóstico $\times$ eventos del ACS) con sus pesos: $\hat J$, $\hat P$ y $\widehat{\mathrm{CVaR}}$ con \key{los mismos} escenarios para todo candidato.
+\item Comparar la acción de P0 con la de P1a para varios $\lambda_R$ o $\varepsilon$, y re-simularlas en el ROM.
+\end{enumerate}
+\end{block}
+\column{.47\textwidth}
+\begin{block}{Casos de prueba}
+\begin{itemize}\setlength{\itemsep}{.08cm}
+\item $t=1161$ s, fase aguda (control saturado).
+\item $t=1180$ s, convergencia (óptimo interior).
+\item Fuga severa ($B=15$).
+\item ACS degradado (capacidad reducida en el HRM).
+\item Falla del ACS \key{forzada} dentro del horizonte.
+\end{itemize}
+\end{block}
+\end{columns}
+\vspace{.02cm}
+\begin{exampleblock}{Éxito}
+Al menos un caso donde $u^\star_{\rm P1a}\neq u^\star_{\rm P0}$, con la diferencia de riesgo fuera de los intervalos de confianza y a un costo de seguimiento declarado.
+\end{exampleblock}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V6: un escenario que valga por muchos}
+\vspace{-.05cm}
+\begin{center}
+\resizebox{.74\linewidth}{!}{%
+\begin{tikzpicture}[node distance=5mm and 9mm]
+\node[font=\small\bfseries,USMBlue] (off) {Fuera de línea};
+\node[stagebox,minimum width=2.6cm,below=2mm of off.south west,anchor=north west] (c) {Contextos $c$\\(estado, pronóstico)};
+\node[stagebox,minimum width=2.9cm,right=of c] (sp) {MPC estocástico\\con muchos escenarios};
+\node[active,minimum width=2.9cm,right=of sp] (g) {Entrenar $g_\theta$:\\$c\ \mapsto\ \hat\xi$};
+\draw[arr] (c) -- (sp); \draw[arr] (sp) -- node[tag,above=2pt] {$u^\star_{\rm est}(c)$} (g);
+\node[font=\small\bfseries,USMBlue,anchor=north west] (on) at ($(c.south west)+(0,-.3)$) {En línea};
+\node[stagebox,minimum width=2.6cm,below=2mm of on.south west,anchor=north west] (c2) {Contexto\\actual $c_q$};
+\node[stagebox,minimum width=2.9cm,right=of c2] (g2) {Un escenario\\$\hat\xi=g_\theta(c_q)$};
+\node[risk,minimum width=2.9cm,right=of g2] (mpc) {MPC \key{determinista}\\con $\hat\xi$};
+\draw[arr] (c2) -- (g2); \draw[arr] (g2) -- (mpc);
+\draw[weak] (g.south) -- (g2.north east);
+\end{tikzpicture}}
+\end{center}
+\vspace{-.05cm}
+\begin{columns}[T]
+\column{.49\textwidth}
+\begin{block}{La idea}
+\small El predictor no minimiza el error de pronóstico: produce el escenario que, puesto en el MPC determinista, da una decisión con garantías \key{similares} a las del problema estocástico. La dificultad se traslada \key{fuera de línea}.
+\end{block}
+\column{.49\textwidth}
+\begin{alertblock}{Condiciones}
+\small Es una idea conceptual: no se sabe si funciona aquí y las garantías hay que demostrarlas. Requiere resolver miles de MPC fuera de línea, lo que exige la base V1--V2.
+\end{alertblock}
+\end{columns}
+\par\vspace{.05cm}{\tiny\color{USMBlue} Base: Homem-de-Mello, Valencia, F. Lagos, G. Lagos (2026), \emph{Math.\ Program.}, doi:10.1007/s10107-026-02359-9.\par}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{V7: si se mantiene el modelo no lineal}
+\begin{columns}[T]
+\column{.52\textwidth}
+\begin{block}{Bloqueo de movimientos}
+Hoy se buscan 26 corrientes independientes. Con tramos constantes,
+\[
+u_k=\textstyle\sum_{j=1}^{n_b}\theta_j\,\phi_j(k),\qquad n_b\approx 3\text{--}5,
+\]
+la búsqueda baja de 26 a pocas dimensiones. \emph{Hipótesis a verificar:} la respuesta térmica es lenta frente a 0.5 s y se pierde poco desempeño.
+\end{block}
+\column{.45\textwidth}
+\begin{block}{Además}
+\begin{itemize}\setlength{\itemsep}{.1cm}
+\item \key{Arranque en caliente}: partir de la solución anterior desplazada un paso.
+\item \key{Presupuesto fijo} de evaluaciones, igual para todos los métodos.
+\item Medir el tiempo de \key{cada} pieza: BiLSTM, ROM, árbol, búsqueda.
+\end{itemize}
+\end{block}
+\end{columns}
+\vspace{.1cm}
+\begin{alertblock}{Cuándo hace falta}
+Si el modelo lineal (V2) no resulta válido en el transitorio, el riesgo se evalúa sobre el ROM: P1a multiplica cada evaluación por $M$ escenarios ($M=59$ para un PSM de Wilks). Sin V7 no cabe en 120 s.
+\end{alertblock}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Plan por etapas}
+\vspace{.05cm}
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[node distance=3.5mm,
+ st/.style={stagebox,minimum width=2.35cm,minimum height=1.25cm,font=\small}]
+\node[st,fill=USMBlue,text=white] (e0) {\textbf{E0}\\Línea base\\congelada};
+\node[st,fill=USMBlue,text=white,right=of e0] (e1) {\textbf{E1}\\Monolítico y\\lineal (V1--V2)};
+\node[st,fill=USMBlue,text=white,right=of e1] (e2) {\textbf{E2}\\Referencia\\exacta (V3)};
+\node[st,right=of e2] (e3) {\textbf{E3}\\Riesgo en la\\decisión (V4--V5)};
+\node[st,right=of e3] (e4) {\textbf{E4}\\Lazo cerrado\\y tiempo real};
+\node[st,fill=SoftGray,draw=MidGray,right=of e4] (e5) {\textbf{E5}\\Multietapa y\\protecciones};
+\draw[arr] (e0)--(e1); \draw[arr] (e1)--(e2); \draw[arr] (e2)--(e3); \draw[arr] (e3)--(e4); \draw[arr] (e4)--(e5);
+\node[ghost,font=\scriptsize,minimum height=.55cm,inner sep=2pt,fit={($(e3.south west)+(0,-.25)$) ($(e4.south east)+(0,-.8)$)}] (v6) {};
+\node[font=\scriptsize] at (v6.center) {V6 (escenario aprendido) y V7 (ROM) según E1};
+\node[ghost,font=\scriptsize,minimum height=.55cm,inner sep=2pt,fit={($(e1.south west)+(0,-.25)$) ($(e2.south east)+(0,-.8)$)}] (v10) {};
+\node[font=\scriptsize] at (v10.center) {V10 (cotas) secundaria};
+\end{tikzpicture}}
+\vspace{.1cm}
+\scriptsize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}L{.6cm}L{6.4cm}L{6.4cm}@{}}
+\toprule
+& \textbf{Entregable} & \textbf{Criterio de cierre}\\
+\midrule
+E0 & Configuración única; mismo vector $u$ evaluado en R2024a y R2024b. & Diferencia del 11\% explicada o acotada.\\
+E1 & Modelo lineal identificado desde el ROM en $\geq2$ puntos (aguda, convergencia); P0 escrito como QP con holguras. & Error de predicción $\ll 1$ K en el horizonte; el QP reproduce P0 en puntos de prueba.\\
+E2 & Luus--Jaakola, genético y solver sobre los mismos estados; acciones re-simuladas en el ROM. & Brecha de optimalidad y tiempo de las metaheurísticas medidos frente a la referencia.\\
+E3 & Restricción probabilística y escenarios sobre la base lineal; evaluador de escenarios del árbol. & Una decisión cambia por riesgo, con intervalos de confianza.\\
+E4 & Lazo cerrado con varias semillas; escenario aprendido (V6) como alternativa en línea. & Frontera costo--riesgo fuera de muestra; menos de 120 s por consulta.\\
+E5 & Modos para dos sistemas activos y el pasivo; política multietapa. & Casos A$\to$B, B$\to$A, falla común y activación pasiva.\\
+\bottomrule
+\end{tabular}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{Decisiones abiertas para discutir}
+\begin{columns}[T]
+\column{.49\textwidth}
+\small
+\begin{block}{1. Puntos de operación}
+¿Uno o varios modelos lineales? ¿Cuánto error lineal se tolera en la fase aguda?
+\end{block}
+\begin{block}{2. Solver y forma del problema}
+¿QP, cónico o no lineal? ¿Comercial o abierto? ¿Margen como restricción dura o suave?
+\end{block}
+\begin{block}{3. Medida y evento}
+¿Probabilidad, PSM por cuantil o CVaR? ¿Con qué $\varepsilon$ o $\alpha$ y en qué horizonte?
+\end{block}
+\column{.49\textwidth}
+\small
+\begin{block}{4. ¿Riesgo en el costo o restricción?}
+$\lambda_R\rho$ exige calibrar $\lambda_R$; $\Prob\leq\varepsilon$ es interpretable pero puede ser infactible.
+\end{block}
+\begin{block}{5. Presupuesto}
+120 s por consulta: ¿cuántos escenarios caben? ¿Hace falta el escenario aprendido (V6)?
+\end{block}
+\begin{block}{6. Segunda protección}
+¿Qué sistema activo adicional, con qué tasas, retardos y dependencias con el pasivo?
+\end{block}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------
+\begin{frame}{En resumen}
+\vspace{.2cm}
+\begin{center}
+\begin{tikzpicture}[node distance=6mm]
+\node[stagebox,minimum width=3.6cm,minimum height=1.5cm] (a) {\textbf{Hoy}\\MPC sobre gemelo digital:\\seguimiento + margen\\determinista};
+\node[risk,minimum width=3.6cm,minimum height=1.5cm,right=of a] (b) {\textbf{Brecha}\\la probabilidad de falla\\de las protecciones no\\entra en la decisión};
+\node[active,minimum width=3.6cm,minimum height=1.5cm,right=of b] (c) {\textbf{Propuesta}\\base tratable (monolítica\\y lineal) y luego\\riesgo en la decisión};
+\draw[arr] (a)--(b); \draw[arr] (b)--(c);
+\end{tikzpicture}
+\end{center}
+\vspace{.3cm}
+\begin{itemize}\setlength{\itemsep}{.2cm}
+\item Primero, \key{volver tratable el problema}: escribirlo de forma monolítica, linealizar el reactor y medir cuán lejos del óptimo estaban las metaheurísticas.
+\item Sobre esa base, el resultado que importa es \key{una decisión que cambia por riesgo}, con intervalos de confianza y en menos de 120 s.
+\item El escenario aprendido, el multietapa y varias protecciones vienen \key{después}.
+\end{itemize}
+\vspace{.3cm}
+\centering{\color{USMBlue}\large\bfseries Gracias. Preguntas y comentarios.}
+\end{frame}
+
+% =====================================================================
+\appendix
+\section{Respaldo}
+\begin{frame}{Respaldo: parámetros del lazo y del árbol}
+\small
+\begin{columns}[T]
+\column{.48\textwidth}
+\begin{tabular}{@{}L{3.1cm}L{3.4cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{MPC}}\\
+\midrule
+Paso $\Delta t$ & 0.5 s\\
+Horizonte $N$ & 25 pasos (12.5 s)\\
+Consultas & 61, $t\in[1160,1190]$ s\\
+Calentamiento del ROM & 10 s antes de $t_q$\\
+Luus--Jaakola & 30 pases, 5 iteraciones, 24 muestras\\
+Contracción $\gamma$ & 0.90; parada relativa 0.1\%\\
+\bottomrule
+\end{tabular}
+\column{.48\textwidth}
+\begin{tabular}{@{}L{3.1cm}L{3.4cm}@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Árbol de eventos y pronóstico}}\\
+\midrule
+Componentes del ACS & 5\\
+Ramas por evento & 2 (transición y complemento)\\
+MC-dropout & 59 trayectorias\\
+Pronóstico en P0 & mediana (percentil 50)\\
+PSM & cuantil 95\% con cota de confianza\\
+$y_{\rm nom}$ del PSM & 1144 K\\
+\bottomrule
+\end{tabular}
+\end{columns}
+\vspace{.4cm}
+\captionline{Código y datos: \texttt{github.com/leomiq/dt\_riskcontrol\_smdfr}, DOI 10.5281/zenodo.22407139.}
+\end{frame}
+
+\begin{frame}{Respaldo: referencias metodológicas}
+\small
+\begin{itemize}\setlength{\itemsep}{.2cm}
+\item R.\,T. Rockafellar, S. Uryasev (2000). Optimization of Conditional Value-at-Risk. \emph{Journal of Risk} 2(3). doi:10.21314/jor.2000.038.
+\item A. Shapiro (2003). Monte Carlo Sampling Methods. \emph{Handbooks in OR \& MS} 10. doi:10.1016/S0927-0507(03)10006-0.
+\item M.\,C. Campi, S. Garatti (2008). The Exact Feasibility of Randomized Solutions of Uncertain Convex Programs. \emph{SIAM J. Optim.} 19(3). doi:10.1137/07069821X.
+\item C. Liu, R. Luo, R. Macián-Juan (2021). A New Uncertainty-Based Control Scheme of the SMDFR and Its Optimization. \emph{Energies} 14(20). doi:10.3390/en14206708.
+\item S.\,S. Wilks (1941). Determination of Sample Sizes for Setting Tolerance Limits. \emph{Ann. Math. Statist.} 12(1). Base de las 59 corridas para 95/95.
+\end{itemize}
+\vspace{.3cm}
+\begin{alertblock}{Límite de transferencia}
+Las garantías por escenarios de Campi y Garatti suponen convexidad; el gemelo híbrido con modos discretos no la cumple. Cualquier garantía de ese tipo requiere un argumento nuevo.
+\end{alertblock}
+\end{frame}
+
 \end{document}
