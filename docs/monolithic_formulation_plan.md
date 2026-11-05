@@ -66,7 +66,9 @@ estacionaria que exige la pérdida de precursores es
 $\beta-\sum_i\beta_i\lambda_i/(\lambda_i+\lambda_c-\lambda_c\lambda_e/(\lambda_i+\lambda_e))
 =1.1105\cdot10^{-3}$, que coincide con $\rho_0=1.11\cdot10^{-3}$ del modelo.
 
-**Termohidráulica** (nodo promedio, $T_e=2T-T_{in}$):
+**Termohidráulica** (nodo promedio, $T_e=2T-T_{in}$; en el combustible
+$T_{in,f}=T_{e,f0}$, de modo que $T_{in,f}-T_{e,f}=2(T_{e,f0}-T_f)$; en la reactividad
+$\tfrac12(T_e+T_{in})=T$ y $\bar T_0=T_{e,0}$):
 
 $$
 M_fc_{pf}\dot T_f=P+\dot m_fc_{pf}(T_{in,f}-T_{e,f})-h_{fw}A_{fw}(T_f-T_w)
@@ -77,8 +79,10 @@ M_wc_{pw}\dot T_w=h_{fw}A_{fw}(T_f-T_w)-h_{wc}(\dot m_c)A_{wc}(T_w-T_c)
 $$
 
 $$
-M_cc_{pc}\dot T_c=\dot m_cc_{pc}(T_{in,c}-T_{e,c})+h_{wc}(\dot m_c)A_{wc}(T_w-T_c)
+M\,c_{pc}\dot T_c=\dot m_cc_{pc}(T_{in,c}-T_{e,c})+h_{wc}(\dot m_c)A_{wc}(T_w-T_c)
 $$
+
+(la capacidad térmica del refrigerante usa el inventario **actual** $M$, no $M_0$).
 
 **Inventario de refrigerante y actuador**: el control actúa a través del inventario.
 
@@ -95,30 +99,38 @@ en el MPC se usa el pronóstico de la BiLSTM.
 **Salida (PCT)**:
 
 $$
-\hat y=T_w+p_4(\dot m_{\rm net}+c)+0.4,\qquad \dot m_{\rm net}=\dot m_{\rm leak}+\dot m_{\rm ACS},
+\hat y=T_w+p_4(\dot m_{\rm net}+5550)+0.4,\qquad \dot m_{\rm net}=\dot m_{\rm leak}+\dot m_{\rm ACS},
 $$
 
-donde $p_4$ es el polinomio de grado 4 de `fit_poly` (diferencia HRM−ROM ajustada contra el
-caudal neto).
+donde $p_4$ es el polinomio de grado 4 de `fit_poly`: una **regresión estadística** de
+$\Delta\mathrm{PCT}=\mathrm{PCT}_{\rm HRM}-T_{w,\rm ROM}$ contra el caudal neto, con el término
+constante desplazado en −2.5 K.
 
-**Dimensión**: 16 estados ($N$, 6 $C_i$, 6 $C^e_i$, $T_f$, $T_w$, $T_c$, $M$) y una
-entrada de control.
+**Dimensión**: 17 estados ($N$, 6 $C_i$, 6 $C^e_i$, $T_f$, $T_w$, $T_c$, $\Delta M$) y una
+entrada de control. **Integración en Simulink**: `ode1be` (Euler implícito) con
+$\Delta t=0.5$ s y **una sola iteración de Newton**.
 
-### 3.1 Puntos a confirmar antes de escribir restricciones
+### 3.1 Puntos resueltos (F0, 5-11-2026)
 
-1. **La corrección BiLSTM de la PCT no entra al ROM.** La entrada `pred_delta_tw_max` llega
-   al subsistema `SMDFR 1`, pero dentro no está conectada. La corrección efectiva es $p_4$.
-   La BiLSTM sólo aporta el pronóstico de la fuga. Hay que confirmar si es intencional y
-   corregir la descripción del gemelo (README, presentación anterior y tesis hablan de
-   $\hat\Delta_k$ como salida de la red).
+1. **ΔPCT por regresión, no por BiLSTM (decisión).** La entrada `pred_delta_tw_max` llega al
+   subsistema `SMDFR 1` pero no está conectada; lo confirmó L. Miqueles. La corrección de la
+   PCT es la regresión $p_4(\dot m_{\rm net})$, y la formulación monolítica se construye así. La
+   BiLSTM sólo aporta el pronóstico de la fuga. Queda pendiente corregir la descripción del
+   gemelo (README, presentaciones y tesis hablan de $\hat\Delta_k$ como salida de la red).
 2. `Tbar_f0 = mean(Te_f0, Tin_f0)` usa el segundo argumento como dimensión, así que
-   $\bar T_{f0}=T_{e,f0}$ (y lo mismo para el refrigerante). Es inocuo si es lo pretendido.
+   $\bar T_{f0}=T_{e,f0}$ y $\bar T_{c0}=T_{e,c0}$. Se adopta tal cual: es lo que el ROM
+   simula.
 3. La temperatura de entrada del refrigerante usa una relación empírica
    $T_{in,c}=T_{e,c0}-Q(\dot m_c)/(\dot m_cc_{pc})$ con
-   $Q=Q_0\dot m_c/2775-(5500-\dot m_c)$ y $Q_0=0.578\cdot8.2564\cdot10^7$ W. Conviene
-   documentar su origen.
-4. Hay un desplazamiento de −2.5 K en el término constante de $p_4$
-   ([`pilot_reproducibility.md`](pilot_reproducibility.md)) además del +0.4 K de la salida.
+   $Q=Q_0\dot m_c/2775-(5500-\dot m_c)$ y $Q_0=0.578\cdot8.2564\cdot10^7$ W. Se adopta tal
+   cual; su origen sigue sin documentar.
+4. El −2.5 K de $p_4$ está en `poly_vector` del espacio de trabajo del modelo; el +0.4 K, en
+   el bloque `Polynomial fit`. El archivo de la consulta de 1180 s se generó **antes** del
+   +0.4 K: el re-run en R2024b difiere en exactamente 0.4000 K (desviación 7·10⁻⁷ K).
+   Además, el ROM **no** es la causa de la brecha del 11 % del piloto R2024a/R2024b.
+
+**Trazabilidad**: cada término de esta sección está en `julia/SMDFRROM.jl` con el nombre del
+bloque MATLAB Function del `.slx` del que sale.
 
 ---
 
@@ -150,7 +162,7 @@ Las magnitudes salen de los parámetros del ROM:
 | Inventario | 10 kg/s durante 12.5 s cambian $M$ en 1.5 % y $\dot m_c$ en ≈ 85 kg/s | Integrador: el efecto del ACS se **acumula** en el horizonte |
 
 La razón de rigidez entre neutrones prontos y el precursor más lento es del orden de
-$10^5$. Con PJA y pared cuasiestática, el sistema dinámico efectivo tiene 14 estados.
+$10^5$. Con PJA y pared cuasiestática, el sistema dinámico efectivo tiene 15 estados.
 
 ### 4.2 Las no linealidades y su tratamiento
 
@@ -176,16 +188,15 @@ $$
 \min_{\dot m_{\rm ACS},\,x,\,s,\,r}\quad & \sum_{k=1}^{K}(\hat y_k-y_{\rm ref})^2+\lambda_m\sum_k s_k^2+\lambda_s\sum_k r_k^2\\
 \text{s.a.}\quad & x_{k+1}=x_k+\Delta t\,f(x_{k+1},\dot m_{{\rm ACS},k},\hat d_k)\quad\text{(ROM de §3, implícito)}\\
 & 0=g(x_k)\quad\text{(PJA y pared cuasiestática, opcional)}\\
-& \hat y_k=T_{w,k}+p_4(\hat d_k+\dot m_{{\rm ACS},k}+c)+0.4\\
+& \hat y_k=T_{w,k}+p_4(\hat d_k+\dot m_{{\rm ACS},k}+5550)+0.4\\
 & \lvert\dot m_{{\rm ACS},k+1}-\dot m_{{\rm ACS},k}\rvert\le\Delta\dot m+s_k,\quad s_k\ge0\\
 & \mathrm{DSM}_k\le\tau+r_k,\quad r_k\ge0\qquad(\text{o la versión dura }\hat y_k\le y_{\rm ref}+\tau(U_y-y_{\rm ref}))\\
 & \dot m_{\min}\le\dot m_{{\rm ACS},k}\le\dot m_{\max},\qquad x_0=\hat x(t_q).
 \end{aligned}
 $$
 
-**Tamaño**: con $K=25$, son 16 × 26 ≈ 420 variables de estado, 26 de control y unas 50
-holguras. Es un NLP pequeño. Que se resuelva en segundos es una **hipótesis a verificar**;
-la referencia actual es una mediana de 76 s con Luus–Jaakola.
+**Tamaño**: con $K=26$, son 17 × 26 = 442 variables de estado, 26 de control y unas 50
+holguras. Es un NLP pequeño: Ipopt lo resuelve en ≈ 0.1 s (§8.1).
 
 **Ventajas frente a P0**: el costo y las restricciones se evalúan sobre un modelo explícito
 (sin una caja negra de Simulink), el solver entrega multiplicadores y, en N1, una cota dual.
@@ -301,6 +312,52 @@ lo que corresponde al pronóstico orientado a la decisión del artículo.
 
 **Para la próxima reunión (3–4 semanas)**: F0 cerrado, F1 con la réplica validada en al
 menos una trayectoria, y un primer resultado de F2 o F3 en el estado $t=1180$ s.
+
+### 8.1 Avance (5-11-2026)
+
+**F0 cerrado** (§3.1). **F1 cerrado** en la consulta archivada $t_q=1180$ s
+(`models/LJ_test_sampled_vel_ACS_2_loop_1180.mat`):
+
+- `matlab/f1_export_rom_reference.m` reconstruye la simulación del nodo raíz como `DET_2`:
+  estado del HRM en $t_q-10$ s inyectado al ROM, 10 s de calentamiento y luego 26 pasos con
+  el pronóstico de fuga y la acción `u_opt`. La simula en Simulink con registro de todos los
+  estados. El punto de operación archivado no se puede reutilizar, porque el modelo se llamaba
+  `SMDFR_rom_…`, así que el contenedor se reconstruye y se copian los mismos valores.
+- `julia/SMDFRROM.jl` es la réplica algebraica; `julia/validate_replica.jl` la compara con
+  Simulink:
+
+| Esquema de la réplica | Error máx. de $\hat y$ en el horizonte | Error máx. en toda la ventana |
+|---|---:|---:|
+| `ode1be` (1 Newton), entradas en $t_{n+1}$ | **2.2·10⁻⁶ K** | 1.1·10⁻⁴ K |
+| `ode1be`, entradas en $t_n$ | 7.2·10⁻² K | 7.2·10⁻² K |
+| Euler implícito convergido, entradas en $t_{n+1}$ | 3.7·10⁻⁴ K | 0.88 K |
+
+  El mapa de salida, la reactividad y la bomba coinciden a precisión de máquina. El Euler
+  implícito convergido se aparta en el calentamiento, por el transitorio rápido que produce
+  inyectar el estado del HRM, pero no en el horizonte. Por eso el NLP parte del estado en
+  $t_q-\Delta t$.
+
+**F2, primer resultado** (`julia/f2_monolithic_nlp.jl`). P0 se resuelve como NLP en JuMP +
+Ipopt, con Euler implícito como restricciones, variables escaladas, holguras exactas para
+las bisagras y el caudal del ACS como decisión. Cada acción se re-simula en Simulink:
+
+| | Luus–Jaakola (archivado) | NLP monolítico |
+|---|---:|---:|
+| Costo P0 en Simulink | 4.0810 | **0.2440** |
+| Primera acción $u_0$ | 56.690 A | 56.750 A (cota) |
+| PCT máxima en el horizonte | 1179.715 K | 1179.579 K |
+| Tiempo de cálculo | minutos (versión anterior al ajuste de LJ) | **≈ 0.1 s** |
+
+- Las cuatro inicializaciones (acción LJ, $u_{\min}$, $u_{\max}$, punto medio) llegan al mismo
+  óptimo, 0.244034 en el modelo de Euler implícito. No hay indicio de mínimos locales en este
+  caso, pero eso no es una garantía.
+- Estructura de la solución: satura en $u_{\max}$ durante 3 s para bajar la PCT y luego
+  sigue la referencia exactamente ($\hat y=y_{\rm ref}$ desde $t=1184$ s).
+- **Límites del resultado**: es una sola consulta y sólo el nodo raíz, sin ramas del árbol;
+  la acción de Luus–Jaakola es de la versión **anterior** a la corrección de la búsqueda
+  (techo del radio y parada relativa), así que la brecha de 16.7× no describe a la versión
+  actual. Falta repetir la comparación con LJ corregido y con el algoritmo genético en
+  varias consultas (E2/V3).
 
 ---
 
