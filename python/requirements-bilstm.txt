@@ -1,0 +1,12 @@
+# Grey-box BiLSTM path (MC-dropout leak forecast called from MATLAB through pyenv,
+# python/mc_inference.py; training script lstm_test_..._BILSTM.py).
+# Only needed to run the full closed loop (run_phase2c_full_loop.m) or to
+# regenerate forecasts; the NLP/QP work in julia/ does not need it.
+#
+# torch must come from the PyTorch index to get the CUDA build. CUDA 12.1 wheels
+# need NVIDIA driver >= 530; check with nvidia-smi. Install with:
+#   .venv\Scripts\python -m pip install -r python/requirements-bilstm.txt --index-url https://download.pytorch.org/whl/cu121 --extra-index-url https://pypi.org/simple
+# (CPU only: drop both index options.)
+-r requirements.txt
+torch>=2.2
+scikit-learn>=1.4   # training script only

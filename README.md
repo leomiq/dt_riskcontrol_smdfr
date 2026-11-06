@@ -177,9 +177,14 @@ presentations/   Beamer source and PDF of the research presentation
 
 ## Requirements
 
-- MATLAB R2024a with Simulink, and a C compiler for `mex` (verified with MinGW64)
-- Python 3.10+ with `numpy`, `scipy`, `matplotlib`; `torch` additionally for the
-  grey-box inference path
+Step-by-step setup on a new Windows PC: `docs/setup_entorno.md`; check with
+`tools/check_env.ps1`.
+
+- MATLAB R2024a/R2024b with Simulink (Parallel Computing Toolbox recommended), and a
+  C compiler for `mex` only to rebuild the S-functions (verified with MinGW64)
+- Julia 1.10.4 for the monolithic NLP/QP work (`julia/`, pinned by `Manifest.toml`)
+- Python 3.11 (3.9–3.12 for MATLAB's `pyenv`) with `python/requirements.txt`;
+  `python/requirements-bilstm.txt` (torch) additionally for the grey-box inference path
 - Windows x64 for the pre-compiled `.mexw64` binaries. On any other platform,
   rebuild them from `matlab/mex_sources/` first (see below).
 

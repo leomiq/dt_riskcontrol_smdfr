@@ -1,0 +1,9 @@
+# Python environment for dt_riskcontrol_smdfr (analysis, figures, KPI scripts).
+# Python 3.11 recommended: MATLAB R2024b's pyenv supports 3.9-3.12 (not 3.13).
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r python/requirements.txt
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8
+h5py>=3.10          # v7.3 MAT files (compare_solvers_and_penalty.py)
+pandas>=2.1         # BiLSTM training/dataset scripts
