@@ -121,6 +121,9 @@ The actuator part of V1–V2 is already linear. Over `u ∈ [56.69, 56.90] A`,
 the MHD pump map is `ṁ ≈ 204.6 (u − 56.687)` with an error below 0.007 kg/s,
 so the coolant flow can be the decision variable. The remaining nonlinearity is
 the thermal dynamics of the ROM, which includes the heat-transfer lag.
+The current bound itself has no physical meaning: the pump ECM is sized as a
+main-circuit pump, and the ACS make-up flow uses the foot of its curve. The bound
+is therefore set in kg/s, and an actuator ramp is added (plan §8.3, §9.6).
 
 Stages:
 
@@ -145,6 +148,21 @@ constraints (N3). It then checks when the optimal-scenario result of Homem-de-Me
 (2026, *Math. Program.*, doi:10.1007/s10107-026-02359-9) applies to the forecast
 uncertainty.
 
+Status (6 Nov 2026, plan §8.1–8.4):
+
+- **F1–F3 closed.** The algebraic ROM replica in `julia/` reproduces Simulink to
+  about 1e-6 K. The monolithic NLP and the linearized QP solve P0 in about 0.1 s and
+  are solved at t_q = 1161 and 1180 s. At 1180 s they beat the corrected Luus–Jaakola
+  and GA by 28–56 % in cost; at 1161 s the LJ/GA runs did not finish.
+- **F4, first result.** The BiLSTM MC-dropout ensemble was regenerated without MATLAB
+  (`python/f4_leak_ensemble.py`). The forecast is biased and overconfident: 90 % band
+  coverage is 0.44. Its effect on the PCT is still only about 0.025 K, so neither
+  quantile decisions nor a two-stage SAA change the first action, with or without
+  actuator saturation (`julia/f4_risk_decisions.jl`, `julia/f4_actuator_sweep.jl`).
+- **Next steps.** Set the injection ramp and flow limits from the ACS specification.
+  Run ACS-failure scenarios and the ROM–HRM mismatch as the risk sources that can move
+  the decision. Then run the closed loop on the 61 queries.
+
 - [Monolithic formulation plan](docs/monolithic_formulation_plan.md) and
   [its presentation](presentations/monolithic_formulation.pdf) (Spanish)
 - [Improvement plan and exploration avenues](docs/implementation_route.md) (Spanish)
@@ -167,7 +185,9 @@ matlab/mex_sources/   C sources for the seven Level-2 S-functions
 models/          Simulink models, trained BiLSTM weights, normalisation and
                  fixed-state inputs needed to run the pilot
 python/          MC-dropout inference bridge, training pipeline, plotting and
-                 KPI-compilation scripts
+                 KPI-compilation scripts; F4 ensemble and calibration (f4_*.py)
+julia/           Algebraic ROM replica, monolithic NLP (F2), linearized QP (F3),
+                 risk and actuator studies (F4)
 results/         Arrays and tables that regenerate the thesis figures without
                  re-running the simulations
 docs/            DSM-penalty record, improvement plan, reproducibility notes,

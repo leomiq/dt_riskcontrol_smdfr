@@ -34,6 +34,12 @@ sincroniza también los cachés de Simulink. Recomendación: clonar en una carpe
 de OneDrive (p. ej. `C:\dev\dt_riskcontrol_smdfr`) desde el remoto de GitHub, y copiar a
 mano lo que no está versionado (`20261011_docs/`, archivos `.mat` sueltos que necesites).
 
+**Ya ocurrió (6-11-2026)**: con las dos PC abiertas sobre la carpeta, OneDrive reemplazó
+`README.md`, `docs/monolithic_formulation_plan.md` y `julia/Project.toml`/`Manifest.toml`
+por versiones más antiguas de la otra máquina. Guardó las de leo_acer como copias
+`*-leo_acer.*`, que hubo que restaurar a mano. Antes de trabajar, revisar `git status` en
+busca de archivos `*-<nombre-del-PC>.*` o de cambios que no son propios.
+
 Si se sigue trabajando en la copia de OneDrive, marcar la carpeta del proyecto con
 **"Mantener siempre en este dispositivo"** (clic derecho en el Explorador). Con *Archivos a
 petición*, los `.mat`, `.slx` y `.git` pueden quedar sólo en la nube y fallar al abrirse
@@ -131,6 +137,11 @@ recuperarlo del PC anterior o de Cineca, o comprobar que la arquitectura de
 `model_200x200_drop1_1.pth` coincide y cambiar la ruta. Además, el archivo se busca en el
 directorio de trabajo de Python: ejecutar MATLAB desde la carpeta que lo contiene o usar
 una ruta absoluta.
+Avance (6-11-2026): la arquitectura de `model_200x200_drop1_1.pth` **sí coincide**, y su
+ensamble contiene la muestra archivada en 1180 s (ver §8.2 de
+`monolithic_formulation_plan.md`). Los scripts F4 (`python/f4_*.py`) lo cargan con ruta
+absoluta. En leo_acer (sin GPU) basta torch en CPU:
+`.venv\Scripts\python -m pip install "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu`.
 
 ## 5. Claude Code
 

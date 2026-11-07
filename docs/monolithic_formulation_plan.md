@@ -436,6 +436,205 @@ todos reciben la misma serie.
   sobre todo si encuentran la esquina.
 - El LJ y el GA a 1161 s no se completaron (procesos detenidos por falta de memoria).
 
+### 8.2 F4, primer resultado (6-11-2026, leo_acer, sin MATLAB)
+
+**Ensamble de la BiLSTM regenerado** (`python/f4_leak_ensemble.py`). La ventana de entrada se
+reconstruye como en `DET_scheduler_v1_perc_online_LJ.m`: últimas 200 muestras de
+`X_1_trajectory` (fuga del HRM) y `X_2_trajectory` (Te_c, nodo 12), normalizadas con
+`X_minmax`. Los pesos `models/model_200x200_drop1_1.pth` tienen la arquitectura de
+`mc_inference.py` (2 capas bidireccionales de 32, FC 64→10→2) y la muestra archivada en
+1180 s cae dentro del ensamble (rango por paso entre 0.08 y 0.93; percentil 27 de distancia a
+la mediana). Esto es evidencia de que son los pesos del lazo, aunque no una prueba: el
+`model_100x100_drop2_BILSTM.pth` que carga `mc_inference.py` sigue sin aparecer.
+
+- **El lazo archivado usaba `N_par = 1`**: en 1180 s, `Y_denorm` y `Y_denorm_95` son **una
+  sola muestra de dropout**, no un percentil. El MPC de P0 decidía con una realización
+  aleatoria del pronóstico.
+
+**Calibración** (`python/f4_forecast_calibration.py`, 16 consultas 1160–1167.5 s con la fuga
+real registrada, 500 trayectorias):
+
+| Indicador | Valor | Nominal |
+|---|---:|---:|
+| Cobertura de la banda central del 90 % | 0.44 | 0.90 |
+| PIT en el decil superior | 0.57 | 0.10 |
+| RMSE de la mediana / desviación del ensamble | 0.164 / 0.084 kg/s | ≈ 1 |
+| Error de la fuga integrada en el horizonte | +1.5 kg, $z\approx+7$ | $|z|\lesssim 2$ |
+| Efecto equivalente sobre la PCT ($\partial\hat y/\partial\Delta M$ de F3) | ≤ 0.025 K | — |
+
+El pronóstico está **sesgado** (la fuga real es ≈ 0.12 kg/s menor en magnitud) y es
+**sobreconfiado**: el MC-dropout con $p=0.05$ subestima la incertidumbre. Sin embargo, el
+error completo pesa ≈ 0.025 K, y la dispersión del ensamble ≈ 0.003 K. Las dos cifras quedan
+muy por debajo de la autoridad del actuador (≈ 2.4 K) y del desvío inicial en 1161 s (2.1 K).
+
+**¿Cambia la decisión?** (`julia/f4_risk_decisions.jl`, NLP N3). Se compararon el NLP
+determinista con la fuga en p05, p50 y p95, sin dropout, la fuga de F2 y la fuga real
+(oráculo), y un **SAA en dos etapas** con 59 escenarios ($\dot m_0$ común y el resto como
+recurso, la estructura de §7.1). Todo se evaluó fuera de muestra sobre 941 miembros.
+
+| | 1161 s | 1180 s |
+|---|---|---|
+| $u_0$ de todas las variantes | 56.750 A ($u_{\max}$) | 56.750 A ($u_{\max}$) |
+| Costo propio p05 / p50 / p95 | 48.87 / 48.37 / 47.77 | 0.248 / 0.244 / 0.240 |
+| Costo medio fuera de muestra (lazo abierto), rango entre variantes | 48.350 (idéntico) | 0.2443–0.2480 |
+| Valor en dos etapas de $\dot m_0$ (100 miembros, recurso reoptimizado) | 48.343 | 0.2439 |
+| Tiempo: NLP determinista / SAA con 59 escenarios | 0.03 s / 2.2 s | 0.03 s / 2.3 s |
+
+- **No hay una decisión que cambie por el riesgo de pronóstico**, así que el criterio de
+  cierre de F4 no se cumple con esta fuente de incertidumbre. La causa es estructural: en
+  ambas consultas la primera acción está en la cota de la bomba, y la incertidumbre de fuga
+  mueve la PCT tres órdenes de magnitud menos de lo que haría falta para sacarla de ahí.
+- En 1180 s la única diferencia está en el recurso, cuando el óptimo deja la saturación
+  (desde $t\approx1184$ s): p05 y p95 cuestan +1.3 % y +1.5 % fuera de muestra, frente a la
+  mediana o el SAA. El SAA de 59 escenarios es tratable (≈ 2 s), así que la capa 2 de §7 es
+  viable en tiempo real.
+- **Implicación para el plan**: el riesgo que puede mover la decisión no es el error de
+  pronóstico de la fuga. Son los eventos del árbol (falla del ACS, deriva de la fuga) y el
+  desajuste ROM–HRM. Este último exige MATLAB (leo_asus). El siguiente experimento de F4
+  debería usar escenarios de falla del ACS, con $W$ aleatoria y fuera del teorema de §7.1,
+  y consultas donde $u_0$ no esté saturado: con autoridad ampliada, o más tarde en el
+  transitorio.
+- **Condición de validez**: todo lo anterior usa la cota archivada (56.75 A ↔ 12.86 kg/s)
+  y la rampa blanda de P0. §8.3 muestra cómo cambia con otras cotas.
+
+### 8.3 Cotas del actuador con base física (6-11-2026)
+
+**El problema.** La cota archivada $u\in[56.69,\,56.75]$ A decide los resultados de F2–F4:
+en 1161 s el óptimo es la esquina $u_{\max}$, y en F4 el riesgo no mueve $u_0$ en parte
+porque $u_0$ está saturado. Hasta aquí esa cota no tenía justificación física. El
+argumento de `DSM_PENALTY_RESULTS.md` ("el PID llegó a 57.26 A") sólo muestra que el
+*modelo* se evaluó allí, no que el actuador pueda hacerlo.
+
+**Qué es el actuador en el modelo.** En el ROM, $\dot m_{\rm ACS}$ es una **inyección de
+reposición de inventario**: $\dot{\Delta M}=\dot m_{\rm leak}+\dot m_{\rm ACS}$. El caudal
+primario es una consecuencia, $\dot m_c=\dot m_{\rm nom}\,M_{\rm act}/M_c$ con
+$\dot m_{\rm nom}=5550.5$ kg/s y $M_c=8144.8$ kg. No es una bomba que impulse directamente
+el circuito primario.
+
+**Referencia bibliográfica aportada** (nota de revisión del 6-11-2026; las citas no se
+verificaron aquí):
+
+- Liu et al. (2021), tabla 3: caudal nominal de Pb de 5550.5 kg/s para el SMDFR de 100 MWt.
+  **Coincide con `mdot_c` del modelo** (5550.50).
+- Banda exploratoria de ±10 % y ±20 % sobre ese nominal: hipótesis de simulación, no una
+  capacidad homologada.
+- Velocidad admisible ≈ 2 m/s (Li et al., 2025, para LBE), una rampa de 5 kg/s por paso y
+  la cota admisible $\dot m_{\max}=\min\{\dot m_{\rm MHD},\dot m_{\rm vel},\dot m_{\rm térm}\}$.
+
+**Traducción al modelo** (verificada numéricamente con `julia/F4Lib.jl`):
+
+| Criterio de la referencia | Qué acota en nuestro modelo | Valor en las consultas | ¿Restringe el MPC? |
+|---|---|---|---|
+| Banda ±20 % sobre $\dot m_c$ | El inventario: $0.8\le M_{\rm act}/M_c\le1.2$ | $\dot m_c/\dot m_{\rm nom}=0.590$ (1161 s) y 0.603 (1180 s): ya se perdió ≈ 40 % del inventario (≈ 3300 kg) | **No**: la cota inferior ya está violada por el LOCA. Recuperar 0.8 exige ≈ 1700 kg, es decir ≈ 200 s con 8.3 kg/s netos o ≈ 40 s con 39 kg/s, muy por encima del horizonte de 12.5 s. Es un objetivo de recuperación de largo plazo, no una restricción de la consulta |
+| Velocidad ≤ 2 m/s en el ducto | $\dot m\le\rho A v$ | Ducto del ECM de 0.515 × 0.515 m: **5543 kg/s** | No para la inyección. Revela que el ECM de `CurrentToMassFlow.m` es una **bomba principal** (ΔP = 15 kPa, nominal a ≈ 2 m/s y a 86.9 A, del orden de Kwak y Kim, 2021), y que el ACS usa el pie de su curva (0–13 kg/s, 0.06 A sobre el arranque de 56.687 A) |
+| Criterio térmico $\Delta T=P/(\dot m_c c_p)$ | Consistencia energética | $P\approx114$ MW, $\Delta T\approx248$ K (nominal 128.5 K) | No es una cota del actuador. Confirma que el transitorio está lejos de la envolvente nominal |
+| Rampa de 5 kg/s por paso (10 kg/s²) | $\lvert\dot m_k-\dot m_{k-1}\rvert\le5$ | En P0 es una penalización con $\lambda_m=10^{-4}$, prácticamente nula, y no incluye el paso desde la acción aplicada | **Sí**, si se impone como cota dura (ver barrido) |
+
+**Consecuencia: la cota en amperios no es física.** Toda la decisión cabe en 0.06 A (0.1 %
+de la corriente), y 1 mA equivale a 0.2 kg/s. Un cálculo de orden de magnitud de una bomba
+de conducción, $\Delta p\approx BI/h$, da ≈ 110 Pa con 57 A, 1 T y 0.515 m, frente a los
+15 kPa del ECM. El ECM sirve como parametrización, pero **la cota defendible se expresa en
+kg/s** y la fija la especificación del sistema de inyección, que aún no existe. Mientras
+tanto, se adopta como cota física superior la de velocidad del ducto (5543 kg/s), $\dot m_{\min}=0$
+(una bomba de reposición no invierte el flujo) y la rampa dura de 5 kg/s por paso como
+límite dinámico del actuador. Además, los resultados se dan en función de $\dot m_{\max}$.
+
+**Barrido** (`julia/f4_actuator_sweep.jl`, `results/f4_risk/actuator_sweep.csv`). Para cada
+cota se resolvió el NLP con la fuga p50, p05 y p95, y el SAA en dos etapas con 59 miembros,
+con costo fuera de muestra en 300 miembros:
+
+| $t_q$ | Rampa | $\dot m_{\max}$ [kg/s] | Costo óptimo (p50) | $\dot m_0$ p50 | $\dot m_0$ p05 / p95 / SAA | Qué limita a $\dot m_0$ |
+|---|---|---:|---:|---:|---|---|
+| 1161 | blanda | 12.86 (archivada) | 48.37 | 12.86 | iguales | $\dot m_{\max}$ |
+| 1161 | blanda | 43.55 | 10.33 | 43.55 | iguales | $\dot m_{\max}$ |
+| 1161 | blanda | 125 | 3.60 | 125.0 | iguales | $\dot m_{\max}$ |
+| 1161 | blanda | 5543 | 3.09 | 171.84 | 172.05 / 171.57 / 171.82 | nada (interior) |
+| 1161 | **dura** | ≥ 43.55 | **17.47** | 17.86 | iguales | rampa |
+| 1180 | blanda | 12.86 (archivada) | 0.244 | 12.86 | iguales | $\dot m_{\max}$ |
+| 1180 | blanda | ≥ 43.55 | 0.063 | 36.36 | 36.47 / 36.24 / 36.35 | nada (interior) |
+| 1180 | **dura** | ≥ 25 | **0.161** | 14.48 | iguales | rampa |
+
+Validez del modelo: con $\dot m_{\rm net}>0.5$ kg/s, $p_4$ ya se evalúa fuera de los datos
+de su ajuste ([1738, 5550.5] kg/s), pero el término extrapolado aporta ≤ 0.017 K en todos
+los casos. En el horizonte el caudal primario sólo pasa de 0.59 a 0.61 del nominal, así que
+el ROM no sale de su rango.
+
+**Lectura**:
+
+1. **Con la rampa dura, la cota de caudal deja de importar**: desde 25–44 kg/s la limita
+   la rampa, y el resultado es el mismo para cualquier $\dot m_{\max}$ mayor, hasta los
+   5543 kg/s del ducto. Si la rampa de 10 kg/s² es la dinámica real del actuador, la
+   autoridad del MPC queda fijada por ella, no por la cota en amperios. Así, la cuestión
+   física abierta pasa de "¿qué $u_{\max}$?" a "¿qué rampa admite la inyección?".
+2. Con la rampa blanda de P0, el resultado depende de la cota hasta ≈ 40 kg/s (1180 s) o
+   ≈ 170 kg/s (1161 s). Por encima de eso el óptimo es interior. Las conclusiones de F2
+   ("satura y luego sigue la referencia") y de la autoridad (§8.1) son de la cota archivada.
+3. **Riesgo (F4) cuando $u_0$ es interior**: el pronóstico p05 o p95 mueve $\dot m_0$
+   ≤ 0.5 kg/s (≤ 0.6 %). Fuera de muestra, decidir con p05 o p95 cuesta +5 a +6 % frente al
+   SAA en 1180 s, y +0.03 % en 1161 s. El SAA y la mediana empatan. La conclusión de §8.2 se
+   mantiene: la incertidumbre de pronóstico de la fuga no cambia la decisión de forma
+   relevante, ni siquiera sin saturación.
+4. La banda de ±20 % sobre el caudal primario no es una restricción útil para la consulta
+   del MPC durante este LOCA. Sí lo sería en una capa de recuperación de minutos, o como
+   restricción de estado (inventario) en un MPC de horizonte largo.
+
+### 8.4 Estado y próximos pasos (6-11-2026)
+
+**Estado.**
+
+| Etapa | Estado | Dónde |
+|---|---|---|
+| F0 Ecuaciones | Cerrada | §3.1 |
+| F1 Réplica algebraica | Cerrada (error ≈ 10⁻⁶ K frente a Simulink en 1161 s y 1180 s) | `julia/SMDFRROM.jl`, §8.1 |
+| F2 NLP monolítico | Resuelto en 1161 s y 1180 s. En 1180 s es 28–56 % mejor que LJ y GA corregidos; en 1161 s LJ y GA no terminaron (falta de memoria) | `julia/f2_monolithic_nlp.jl`, §8.1 |
+| F3 QP linealizado | Cerrada en dos consultas; brecha frente al NLP ≤ 0.003 % | `julia/f3_linearized_qp.jl`, §8.1 |
+| F4 Riesgo | Abierta. Ensamble regenerado y calibración medida; el riesgo de pronóstico no cambia la decisión | `python/f4_*.py`, `julia/f4_*.jl`, §8.2–8.3 |
+| F5 Lazo cerrado | Sin empezar | — |
+
+**Cambios de esta sesión** (leo_acer, sin MATLAB):
+
+- `.venv` con `torch` en CPU. Se verificó que `model_200x200_drop1_1.pth` es compatible
+  con `mc_inference.py`, y se halló que el lazo archivado usaba `N_par = 1`.
+- Ensamble de 1000 trayectorias en 1161 s y 1180 s; calibración en 16 consultas (cobertura
+  de 0.44 frente a 0.90).
+- Decisiones con cuantiles y SAA en dos etapas, con evaluación fuera de muestra (§8.2).
+- Cotas del actuador traducidas a unidades físicas y barrido de $\dot m_{\max}$ con rampa
+  blanda o dura (§8.3, §9.6).
+- `julia/F4Lib.jl`: código común de F4 (carga de la consulta, NLP determinista y SAA con
+  límites del actuador configurables).
+
+**Próximos pasos**, en orden de prioridad:
+
+1. **Fijar el actuador con quien conozca el sistema de inyección** (§9.6): la rampa
+   admisible, el caudal máximo y si el ACS repone inventario o impulsa el caudal primario.
+   Es la decisión que más cambia los resultados: el costo óptimo en 1161 s va de 3.1 a 48.4
+   según la cota y la rampa. Mientras no se fije, informar cada resultado con la cota a la
+   que vale. *(Ninguna máquina; decisión del equipo.)*
+2. **F4 con riesgo que sí pueda mover la decisión: falla del ACS** (leo_acer). Escenarios
+   de falla y reparación como en `DET_2.m` (modo $\sigma\in\{0,1\}$, tasas $\lambda,\mu$),
+   en un SAA o un MPC multietapa con no anticipación. La falla vuelve aleatoria $W$, así
+   que queda fuera del teorema de §7.1; comparar la decisión con y sin falla.
+   Criterio: una primera acción que cambie por el riesgo, con intervalo de confianza.
+3. **Desajuste ROM–HRM como incertidumbre** (leo_asus, requiere MATLAB). Re-simular en el
+   HRM las acciones del NLP y medir el error de predicción del ROM. Si es del orden de 1 K,
+   y no de 0.01 K como el de la fuga, es la incertidumbre relevante para la restricción
+   probabilística de la capa 1 de §7.
+4. **Recalibrar o sustituir el MC-dropout** (leo_acer). Corregir el sesgo de
+   ≈ 0.12 kg/s, por ejemplo con un modelo de error ajustado a los residuos de §8.2 o con
+   predicción conformal. Su efecto sobre la PCT es pequeño, pero un pronóstico sobreconfiado
+   invalida cualquier restricción probabilística basada en él. Además, el lazo debe usar
+   `N_par` > 1, porque con una muestra decide con una realización aleatoria.
+5. **Más consultas para F2–F4** (leo_asus). Reconstruir varias consultas de las 61 con
+   `matlab/build_query_from_archive.m`, de modo que las conclusiones no dependan de sólo dos.
+6. **F5, lazo cerrado** (leo_asus). Las 61 consultas con el NLP o el QP y las cotas del
+   paso 1, frente al lazo LJ archivado, con menos de 120 s por consulta. El NLP tarda
+   ≈ 0.1 s y el SAA ≈ 2 s, así que el tiempo no es un obstáculo.
+
+Pendientes menores: decidir la corrección $p_4$ (§9.4), que se evalúa en
+$\dot m_{\rm net}+5550$ y no en $\dot m_c$; actualizar `mc_inference.py` para que cargue
+`model_200x200_drop1_1.pth` si se confirma que el 100x100 no existe; y clonar el
+repositorio fuera de OneDrive (ver `setup_entorno.md`).
+
 ---
 
 ## 9. Decisiones abiertas
@@ -446,3 +645,13 @@ todos reciben la misma serie.
 3. **PJA y pared cuasiestática**: reducen la rigidez, pero hay que medir su error.
 4. **Corrección de la PCT**: mantener $p_4$, reconectar la BiLSTM o ambas.
 5. **Norma del seguimiento**: cuadrática (P0) o $L_1$ (compatible con el teorema de §7.1).
+6. **Cota del actuador en unidades físicas** (§8.3): la cota en amperios (56.75 o 56.90 A)
+   **no tiene significado físico**. El ECM es el de una bomba principal y la ventana de
+   0.06 A es un artefacto de usar el pie de su curva. La decisión es de caudal:
+   $\dot m_{\rm ACS}\in[0,\dot m_{\max}]$ kg/s, con una rampa $\lvert\Delta\dot m\rvert\le$
+   5 kg/s por paso como restricción dura. Falta fijar, con la especificación del sistema de
+   inyección: (a) $\dot m_{\max}$, que deja de ser relevante si la rampa dura es la dinámica
+   real; (b) la rampa admisible, que pasa a ser el parámetro que decide la autoridad; y
+   (c) si el ACS es de verdad una inyección de inventario o debería actuar sobre el caudal
+   primario. En el caso (c), la estructura del modelo cambia y la banda de ±20 % sobre
+   $\dot m_c$ se aplicaría directamente.
