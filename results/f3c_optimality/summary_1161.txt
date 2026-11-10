@@ -1,0 +1,35 @@
+=== F3c, t_q = 1161 s; ṁ ∈ [0.5798, 12.8648] kg/s, K = 26
+Monolithic NLP (BE, Ipopt): LOCALLY_SOLVED, J_BE = 48.0283922815, 0.027 s
+Consistency: reduced-space J_BE(u_NLP) = 48.0283928981 (must match the NLP objective)
+
+--- Step 1: local optimality certificate of the NLP solution (BE model)
+  [BE] J = 48.0283928981 | active: 26 upper, 0 lower, 0 free
+  [BE] stationarity on free vars max|∂J/∂u| = 0.000e+00; min bound multiplier = 4.228e-03 (must be > 0)
+  [BE] reduced Hessian on free vars: λ_min = Inf, λ_max = NaN, cond = NaN
+  [BE] strict local minimum: YES (KKT + strict complementarity + SOSC); quadratic-model bound on remaining local improvement ≈ 0.000e+00
+  (7.3 s)
+
+--- Step 2: P0 on the exact Simulink discretization (ode1be), reduced-space NLP
+  ode1be NLP (start = BE optimum): LOCALLY_SOLVED, 7 it, 5.24 s, J_ode1be = 48.0269430530
+  ode1be NLP (start = mid-range):  LOCALLY_SOLVED, 12 it, 0.08 s, J_ode1be = 48.0269430530, max|Δu| to previous = 0.000e+00
+  J_ode1be(u_BE*) = 48.0269437343 vs J_ode1be(u_ode1be*) = 48.0269430530 → BE optimum is 6.81e-07 (0.0000 %) above the ode1be optimum
+  max_k |u_BE − u_ode1be| = 0.000e+00 kg/s; Δu₀ = 0.000e+00 kg/s
+  [ode1be] J = 48.0269437343 | active: 26 upper, 0 lower, 0 free
+  [ode1be] stationarity on free vars max|∂J/∂u| = 0.000e+00; min bound multiplier = 4.231e-03 (must be > 0)
+  [ode1be] reduced Hessian on free vars: λ_min = Inf, λ_max = NaN, cond = NaN
+  [ode1be] strict local minimum: YES (KKT + strict complementarity + SOSC); quadratic-model bound on remaining local improvement ≈ 0.000e+00
+
+--- Step 3a: multistart of the monolithic NLP (BE), 500 random + structured + LJ/GA starts
+  587 starts in 24.0 s; converged 587; failed 0
+  best J = 48.0283928981, worst converged J = 48.0283928981, NLP J = 48.0283928981
+  distinct local optima (max|Δu| > 1e-3 kg/s): 1
+    #1: J = 48.0283928981, found 587 times (alternating,bang-bang,constant,uniform,walk), max|u − u_NLP| = 0.000e+00
+  any start better than the NLP by > 1e-8: no
+
+--- Step 3b: differential evolution on J_BE(u) (derivative-free, DE/rand/1/bin)
+  90060 evaluations in 89.1 s: best J = 48.0283928981 (NLP: 48.0283928981; DE − NLP = -1.101e-12, -0.000 %)
+  NLP polished from the DE best: J = 48.0283928981, max|u − u_NLP| = 0.000e+00
+
+--- Step 3c: eigenvalues of ∇²J(u) at 300 points of the control box (ode1be model)
+  81.5 s. λ_min over samples: min -2.173e-06, median -1.035e-06, max 1.037e-05; λ_max median 3.558e-02
+  points with a negative eigenvalue: 255 of 300 (most negative -2.173e-06, relative to λ_max -6.107e-05)

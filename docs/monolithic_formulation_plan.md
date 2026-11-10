@@ -307,6 +307,7 @@ lo que corresponde al pronóstico orientado a la decisión del artículo.
 | **F1** Réplica algebraica | Escribir el ROM en un lenguaje con diferenciación automática | Código del ROM (16 estados) y su estado estacionario (N0) | La réplica reproduce la PCT de Simulink en el horizonte, con error ≪ 1 K, sobre trayectorias archivadas |
 | **F2** Monolítico no lineal (N3) | Resolver P0 como NLP | Solver sobre los estados $t=1161$ y $1180$ s | Acción y costo comparados con Luus–Jaakola, re-simulando en Simulink (V3) |
 | **F3** Linealizado (N1, N2) | QP y funciones de transferencia | $A,B,E,C,D$ en cada consulta; $G(s)$ de $\dot m_{\rm ACS}$ a PCT; MPC lineal | Error de N1/N2 frente a N3 ≪ 1 K; brecha de costo medida |
+| **F3c** Certificación de N3 | Brecha de optimalidad del NLP **no lineal**, no del QP (§8.5) | Certificado local (KKT y segundo orden), NLP sobre `ode1be`, evidencia global y cota inferior rigurosa | "La solución está a menos de X % del óptimo global de P0" en cada consulta |
 | **F4** Riesgo | Las capas de §7 | Restricción probabilística, SAA y experimento de cuantiles | Una decisión que cambia por riesgo, con intervalos de confianza |
 | **F5** Lazo cerrado | Tiempo real y extensiones | 61 consultas con la mejor variante; luego multietapa y dos protecciones | Menos de 120 s por consulta; frontera costo–riesgo fuera de muestra |
 
@@ -634,6 +635,62 @@ Pendientes menores: decidir la corrección $p_4$ (§9.4), que se evalúa en
 $\dot m_{\rm net}+5550$ y no en $\dot m_c$; actualizar `mc_inference.py` para que cargue
 `model_200x200_drop1_1.pth` si se confirma que el 100x100 no existe; y clonar el
 repositorio fuera de OneDrive (ver `setup_entorno.md`).
+
+### 8.5 F3c: certificación de optimalidad del NLP no lineal (9-11-2026)
+
+**Punto de partida.** `julia/f3_certificates_condensed.jl` (documentado en
+`docs/estado_mpc_monolitico.pdf`, §5–6.3) dio un certificado dual con brecha ≈ 10⁻¹² para
+el **QP linealizado** (N1, N2). Ese certificado no vale para P0 no lineal (N3). Una
+brecha de optimalidad para N3 necesita una **cota superior** (UB), que es cualquier
+solución factible y ya existe (el óptimo de Ipopt), y una **cota inferior** (LB), que hoy
+es sólo $J\ge0$. Como N3 no es convexo, la LB exige una relajación o una cota rigurosa.
+Los pasos 1 y 3 dan **evidencia**, no una brecha; los pasos 4 y 5 dan una **brecha**.
+
+| Paso | Qué produce | Tipo de resultado | Máquina | Criterio de cierre |
+|---|---|---|---|---|
+| **1. Certificado local** | Residuos KKT y condiciones suficientes de segundo orden (hessiana reducida de $J(u)$ por diferenciación automática a través de la simulación, restringida a las direcciones libres de restricciones activas) | Prueba de **mínimo local estricto**, con su margen $\lambda_{\min}$ | leo_acer | KKT ≤ tolerancia y $\lambda_{\min}>0$ en las dos consultas |
+| **2. P0 sobre `ode1be`** | NLP en espacio reducido con la discretización exacta de Simulink (una iteración de Newton, explícita en $x_{k-1}$), frente al NLP con Euler implícito convergido | El óptimo del **mismo** modelo que corre en el lazo, y la diferencia entre ambas definiciones de P0 | leo_acer | Diferencia de costo y de $u_0$ medida |
+| **3. Evidencia global** | (a) Multistart masivo con Sobol (≥ 500 arranques, más las esquinas y las soluciones de LJ y GA). (b) Búsqueda global sin derivadas sobre la réplica (evolución diferencial o CMA-ES, ~10⁵ evaluaciones). (c) Muestreo de los valores propios de $\nabla^2J(u)$ en la caja de control | Número de óptimos locales distintos, mejor costo encontrado y señal de convexidad (evidencia, no prueba) | leo_acer | Ningún arranque ni búsqueda mejora el NLP más allá de la tolerancia |
+| **4a. Cota inferior semi-rigurosa** | $\hat y_k(u)=a_k(u)+e_k(u)$ con $a_k$ afín y $\lvert e_k\rvert\le\varepsilon_k$ estimado por muestreo con factor de seguridad. Como $(\hat y_k-y_{\rm ref})^2\ge(\lvert a_k-y_{\rm ref}\rvert-\varepsilon_k)_+^2$ es convexo, minimizar la cota es un problema convexo | Estimación de la brecha $J_{\rm NLP}-LB$: indica si 4b vale la pena | leo_acer | Brecha estimada en las dos consultas |
+| **4b. Cota inferior rigurosa** | Igual que 4a, con $\varepsilon_k$ por aritmética de intervalos o modelos de Taylor (`IntervalArithmetic.jl`, `TaylorModels.jl`, Newton por intervalos en cada paso implícito). Si la brecha es grande, ramificación y acotamiento en espacio reducido, subdividiendo la caja de control como en `matlab/m1_branch_and_bound.m` | **Certificado de optimalidad global** de N3, con brecha X % | leo_acer | Brecha ≤ 1 % (o la que fije el equipo) |
+| **5. Solvers globales genéricos** (opcional) | NLP completo en SCIP (`SCIP.jl`) o EAGO.jl con límite de tiempo | Contraste independiente; cualquier cota dual > 0 ya mejora $J\ge0$ | leo_acer | Cota obtenida o no viable documentado |
+
+Orden: 1 → 2 → 3 → 4a → 4b; el paso 5 es opcional. Los pasos 1–3 dicen si hay motivos
+para dudar del óptimo de Ipopt. El 4a dice, en pocas horas, si la brecha rigurosa será
+útil antes de invertir en intervalos. El 4b es el certificado propiamente dicho. Todo
+corre sobre la réplica en Julia, que simula en milisegundos: es lo que hace viable ahora
+la línea V10 de `implementation_route.md`, que con Simulink sólo había cerrado un problema
+de juguete.
+
+**Resultados de los pasos 1–4a (9-11-2026, leo_acer).** Scripts
+`julia/f3c_optimality.jl` (pasos 1–3) y `julia/f3c_lower_bound.jl` (paso 4a), con el costo
+reducido común en `julia/ReducedP0.jl`. Resultados en `results/f3c_optimality/`.
+
+| Paso | 1180 s | 1161 s |
+|---|---|---|
+| 1. Certificado local (BE) | **Mínimo local estricto**: 6 cotas activas con multiplicadores ≥ 3.2·10⁻⁴; 20 variables libres con gradiente 9·10⁻¹⁰; hessiana reducida definida positiva (λ_min = 4.3·10⁻⁶, condición 4.6·10³) | **Mínimo local estricto en un vértice**: 26 cotas activas, multiplicadores ≥ 4.2·10⁻³ |
+| 2. P0 sobre `ode1be` | El óptimo BE queda 4.5·10⁻⁹ por encima del óptimo `ode1be`; mismo $u_0$; $\max_k\lvert\Delta u_k\rvert$ = 6·10⁻⁴ kg/s; también es mínimo local estricto | 6.8·10⁻⁷ por encima; la misma acción |
+| 3a. Multistart (≈ 590 arranques) | 593/593 convergen al mismo óptimo (a ≤ 5·10⁻⁶ kg/s); ninguno lo mejora | 587/587 al mismo óptimo |
+| 3b. Evolución diferencial (90 060 evaluaciones) | +2.4·10⁻⁷ sobre el NLP; pulida, el mismo óptimo | Igual al NLP |
+| 3c. Hessiana en 300 puntos de la caja | Definida positiva en los 300 (λ_min ≥ 3.2·10⁻⁶) | **No convexa**: valores propios negativos en 255/300, pero mínimos (≥ −2.2·10⁻⁶, ≈ 0.006 % de λ_max) |
+| 4a.2 Residuo $\max_u\lvert e_k\rvert$ | Crece con $k$ hasta 0.010 K; la búsqueda adversaria no lo supera en ningún paso | Hasta 0.038 K (el óptimo es un vértice, y el modelo afín se aleja más) |
+| 4a.4 Brecha $(UB-LB)/UB$ con factor 1 / 1.5 / 2 | **0.30 / 0.45 / 0.59 %** | **1.2 / 1.8 / 2.4 %** |
+| 4a.5 Brecha en sub-cajas de semiancho ρ = 0.5 / 0.25 / 0.1 | 0.11 / 0.029 / 0.005 % | 0.45 / 0.11 / 0.018 % |
+
+**Lectura.**
+
+- Los pasos 1–3 no dan ninguna señal de un óptimo mejor que el de Ipopt. Hay un solo óptimo
+  local en ≈ 590 arranques por consulta, y la búsqueda global sin derivadas tampoco lo
+  mejora.
+- La no convexidad de 1161 s, aunque mínima, muestra que la convexidad no se puede suponer:
+  hace falta la cota del paso 4.
+- El paso 4a da una brecha **semi-rigurosa** de 0.3–0.6 % (1180 s) y 1.2–2.4 % (1161 s)
+  sobre toda la caja de control.
+- El residuo baja de forma cuadrática con el tamaño de la caja, como el resto de Taylor. En
+  ramificación y acotamiento, uno o dos niveles de subdivisión bastarían para llevar la
+  brecha por debajo de ~0.1 %.
+- Queda pendiente el paso 4b: reemplazar la estimación por muestreo de $\varepsilon_k$ por
+  una cota con aritmética de intervalos. Con eso la brecha pasa a ser un certificado.
 
 ---
 

@@ -1,0 +1,27 @@
+=== F3c step 4a, t_q = 1161 s, box ṁ ∈ [0.5798, 12.8648]^26 kg/s
+UB = J(u*) = 48.0283928981 (monolithic NLP, Ipopt, LOCALLY_SOLVED)
+
+4a.1 G = ∂ŷ/∂u at u*: lower-triangular yes, |G| ∈ [4.313e-03, 8.092e-03] K/(kg/s)
+
+4a.2 max_{u∈box} |e_k(u)|, e = ŷ − a
+  sampling: 3000 random + 63 extreme patterns in 4.1 s; max_k ε_k = 3.767e-02 K (step 26)
+  adversarial (2 Ipopt solves per k) in 151.5 s; max_k ε_k = 3.767e-02 K; adversary raised ε above sampling in 0 of 26 steps (max ratio 1.00)
+  ε_k [K] by step: 4.424e-05 7.625e-05 2.984e-04 6.349e-04 1.088e-03 1.659e-03 2.348e-03 3.156e-03 4.082e-03 5.126e-03 6.289e-03 7.568e-03 8.966e-03 1.048e-02 1.211e-02 1.386e-02 1.572e-02 1.770e-02 1.979e-02 2.200e-02 2.433e-02 2.677e-02 2.932e-02 3.199e-02 3.477e-02 3.767e-02
+
+4a.3–4a.4 convex relaxation (Clarabel) and gap; LB = dual bound of the relaxation
+  safety  LB              gap = UB − LB    gap / UB
+   0.0    48.0283928981    1.3749e-11         0.000 %   (no residual bound: the linear model alone, NOT a valid bound)
+   1.0    47.4496222506    5.7877e-01         1.205 %
+   1.5    47.1661957369    8.6220e-01         1.795 %
+   2.0    46.8867417633    1.1417e+00         2.377 %
+
+4a.5 sub-boxes around u* (half-width ρ·(ṁ_max − ṁ_min)); ε by sampling only, safety 1.5
+  ρ       max ε [K]    LB(sub-box)      gap/UB (sub-box)
+  1.00    3.767e-02    47.1661989080       1.795 %
+  0.50    9.341e-03    47.8107386149       0.453 %
+  0.25    2.326e-03    47.9739279792       0.113 %
+  0.10    3.712e-04    48.0196841787       0.018 %
+  0.05    9.273e-05    48.0262166273       0.005 %
+  0.02    1.483e-05    48.0280448014       0.001 %
+  (a sub-box bound is only valid on that sub-box: certifying the whole box needs covering it,
+   i.e. branch and bound; the ρ at which the gap becomes small sets the subdivision depth)

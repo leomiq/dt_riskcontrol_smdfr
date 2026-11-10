@@ -313,6 +313,12 @@ puntos de operación), reformular el plan y volver a reunirse en 3–4 semanas.
   validada) para cotas inferiores reales y una brecha $U-L$ con significado.
 - **Estado**: algoritmo y ejemplo híbrido listos; falta el encierro térmico del ROM. Si no
   es viable, V3 da la referencia práctica.
+- **Actualización (9-11-2026)**: con la réplica algebraica en Julia (F1), cada evaluación
+  pasa de minutos a milisegundos, y la vía se vuelve viable para el ROM real. Queda
+  incorporada como etapa **F3c** del plan monolítico
+  ([`monolithic_formulation_plan.md`](monolithic_formulation_plan.md) §8.5): certificado
+  local, NLP sobre `ode1be`, evidencia global y cota inferior rigurosa sobre la caja de
+  control.
 
 ---
 
