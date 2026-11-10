@@ -1,0 +1,105 @@
+%======================================================================
+\section{Notación}
+%======================================================================
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y@{}}\toprule
+Símbolo & Significado\\\midrule
+\multicolumn{2}{@{}l}{\emph{Reactor}}\\
+$N$, $C_i$, $C^e_i$ & Población de neutrones; precursores dentro y fuera del núcleo (6 grupos)\\
+$\rho$, $\rho_0$, $\beta$, $\Lambda$ & Reactividad; reactividad estacionaria; fracción de neutrones retardados; tiempo de generación\\
+$\lambda_i$, $\lambda_c$, $\lambda_e$ & Constantes de decaimiento de los precursores; tasas de salida y de regreso al núcleo\\
+$\alpha_f$, $\alpha_c$ & Coeficientes de realimentación de temperatura del combustible y del refrigerante\\
+$T_f$, $T_w$, $T_c$ & Temperaturas medias del combustible, la pared y el plomo\\
+$M_c$, $\Delta M$ & Inventario nominal de plomo; inventario ganado (negativo: perdido)\\
+$\mdot_c$, $\mdot_{\rm nom}$ & Caudal primario actual y nominal (5550.5~kg/s)\\
+$h_{fw}$, $h_{wc}$, $A_{fw}$, $A_{wc}$ & Coeficientes y áreas de transferencia de calor combustible--pared y pared--plomo\\
+$p_4$ & Polinomio de corrección de la PCT (de la media al pico)\\
+\multicolumn{2}{@{}l}{\emph{Control}}\\
+$x$, $\delta_k$ & Estado del ROM (17 componentes); desviación respecto de una trayectoria nominal\\
+$u_k=\mdot_{{\rm ACS},k}$ & Caudal del ACS en el paso $k$ (la decisión), en kg/s\\
+$\hat d_k=\mdot_{{\rm leak},k}$ & Pronóstico de la fuga\\
+$\hat y_k$, $y_{\rm ref}$, $U_y$ & PCT estimada, referencia y límite de seguridad\\
+$K$, $\Delta t$ ($h$), $t_q$ & Horizonte (26 pasos), paso de tiempo (0.5~s), instante de la consulta\\
+$\lambda_m$, $\lambda_{\rm pct}$, $\Delta\mdot$ & Pesos de las penalizaciones de suavidad y de seguridad; salto de caudal admitido\\
+$\lambda^{\rm A}_j$, $\mu^{\rm A}_j$ & Tasas de falla y de reparación de los componentes del ACS\\
+\multicolumn{2}{@{}l}{\emph{Optimización}}\\
+$J$, $J^\star$ & Costo P0 y su óptimo global\\
+$UB$, $LB$ & Cotas superior e inferior de $J^\star$\\
+$A$, $B$, $E$, $D$ & Jacobianos de la dinámica respecto del estado, el control y la fuga; derivada de $p_4$\\
+$G$, $G(s)$ & Matriz condensada de sensibilidad de la salida al control (26$\times$26); función de transferencia\\
+$[A](Z)$ & Jacobiano evaluado con aritmética de intervalos sobre la caja $Z$\\
+$\varepsilon_k$ & Cota del residuo no lineal en el paso $k$\\
+N1, N2, N3 & Formulaciones LTI, LTV iterada y no lineal\\
+BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iteración de Newton (Simulink)\\\bottomrule
+\end{tabularx}
+\end{table}
+
+%======================================================================
+\section{Glosario}
+%======================================================================
+\begin{description}[style=nextline, leftmargin=0pt, itemsep=3pt]
+  \item[ACS] Sistema auxiliar de enfriamiento: repone plomo en el circuito primario con una
+        bomba MHD.
+  \item[A-estable] Propiedad de un integrador numérico que no amplifica los modos que decaen,
+        cualquiera sea el paso.
+  \item[BiLSTM] Red neuronal recurrente bidireccional con celdas de memoria de corto y largo
+        plazo; aquí pronostica la fuga.
+  \item[Brecha de optimalidad] Diferencia relativa entre una cota superior (el costo de una
+        solución) y una cota inferior demostrada del óptimo global.
+  \item[Cinética puntual] Modelo de la población de neutrones que supone una forma espacial
+        fija del flujo.
+  \item[Condiciones KKT] Condiciones de primer orden que cumple todo mínimo local regular de un
+        problema con restricciones.
+  \item[Convexo] Problema cuyo conjunto factible y costo son convexos; en él, todo mínimo local
+        es global.
+  \item[DET] Árbol dinámico de eventos: simulación que se ramifica cuando un componente falla o
+        se repara.
+  \item[Diferenciación automática] Cálculo exacto de derivadas propagando la regla de la cadena
+        por las operaciones de un programa.
+  \item[Disparo simple] Formulación de control óptimo en la que sólo los controles son
+        variables y el costo se obtiene simulando.
+  \item[HRM] Modelo de alta resolución (12 nodos) del SMDFR; hace de planta.
+  \item[LOCA] Accidente con pérdida de refrigerante.
+  \item[Metaheurística] Método de búsqueda general que sólo evalúa el costo (LJ, GA, DE, PSO).
+  \item[MC-dropout] Estimación de la incertidumbre de una red neuronal repitiendo la inferencia
+        con dropout activo.
+  \item[MPC] Control predictivo basado en modelo: optimiza un horizonte futuro, aplica la primera
+        acción y repite.
+  \item[NLP / QP] Programa no lineal / programa cuadrático.
+  \item[PCT] Temperatura pico de la vaina (aquí, de la pared de los tubos): el indicador de
+        seguridad.
+  \item[Precursores] Fragmentos de fisión que emiten neutrones retardados al decaer.
+  \item[PSM / DSM] Margen probabilístico / determinista de seguridad.
+  \item[Reactividad] Medida de cuánto se aparta el reactor de la criticidad,
+        $\rho=(k-1)/k$.
+  \item[ROM] Modelo reducido (un nodo por material) usado por el controlador para predecir.
+  \item[SAA] Aproximación de una esperanza por el promedio sobre escenarios muestreados.
+  \item[Transcripción directa] Formulación monolítica: estados y controles son variables, y la
+        dinámica discretizada es un conjunto de restricciones.
+\end{description}
+
+%======================================================================
+\section{Reproducibilidad}
+%======================================================================
+\begin{itemize}\sloppy
+  \item \textbf{Réplica y NLP}: \code{julia/SMDFRROM.jl}, \code{validate\_replica.jl},
+        \code{f2\_monolithic\_nlp.jl}.
+  \item \textbf{QP, certificados y forma condensada}: \code{julia/f3\_certificates\_condensed.jl}.
+  \item \textbf{Certificación}: \code{julia/ReducedP0.jl}, \code{f3c\_optimality.jl}
+        (pasos 1--3), \code{f3c\_lower\_bound.jl} (4a), \code{f3c\_rigorous.jl} (4b; centro
+        con \code{F3C\_CENTER=mid}), \code{f3c\_compare\_decisions.jl}.
+  \item \textbf{Riesgo y actuador}: \code{python/f4\_leak\_ensemble.py},
+        \code{f4\_forecast\_calibration.py}, \code{julia/f4\_risk\_decisions.jl},
+        \code{f4\_actuator\_sweep.jl}.
+  \item \textbf{Análisis didácticos} (valores propios, respuesta en frecuencia, curva de la
+        bomba, autoridad): \code{julia/didactic\_analysis.jl} $\Rightarrow$
+        \code{results/didactic/}.
+  \item \textbf{Resultados}: \code{results/f1\_rom\_replica/}, \code{f3\_certificates/},
+        \code{f3c\_optimality/}, \code{f4\_risk/}, \code{didactic/}.
+  \item \textbf{Figuras}: \code{python/make\_status\_figures.py} (resultados) y
+        \code{python/make\_didactic\_figures.py} (capítulos introductorios). Las figuras de
+        rigidez y de brecha de optimalidad en una dimensión son ejemplos ilustrativos, no
+        resultados del modelo.
+  \item \textbf{Documento}: \code{tectonic -X compile estado\_mpc\_monolitico.tex} desde
+        \code{docs/}; los capítulos están en \code{docs/estado/}.
+\end{itemize}

@@ -1,0 +1,217 @@
+%======================================================================
+\section{Formulaciones propuestas}\label{sec:niveles}
+%======================================================================
+
+Todas las formulaciones de esta sección atacan el mismo problema: P0 determinista, con el
+árbol reducido a la raíz, el mismo costo y las mismas cotas del actuador. Difieren en tres
+cosas: qué son las incógnitas, cómo entra la dinámica y si el problema resultante es
+convexo. A ellas se suman tres formulaciones auxiliares, una para el riesgo y dos para la
+certificación. La tabla~\ref{tab:formulaciones} las resume, y la figura~\ref{fig:niveles}
+ilustra la diferencia entre los tres niveles del modelo.
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{20mm} >{\raggedright\arraybackslash}p{20mm} Y >{\raggedright\arraybackslash}p{16mm} >{\raggedright\arraybackslash}p{18mm} Y@{}}\toprule
+Formulación & Incógnitas & Dinámica & ¿Convexa? & Algoritmo & Para qué\\\midrule
+P0-DET (actual) & 26 corrientes & simulación del árbol en Simulink (caja negra) & no; discontinua & LJ, GA & referencia histórica\\
+N3 monolítica & 26 caudales, 442 estados, 51 holguras & Euler implícito convergido como igualdades & no & Ipopt, hessiana exacta & el problema exacto\\
+N3 reducida & 26 caudales & simulación derivable (BE o \code{ode1be}) & no & Ipopt, gradiente exacto & certificación; versión Simulink\\
+N1 dispersa / condensada & 519 / 77 variables & lineal, una sola linealización & sí (QP) & Clarabel & tiempo real, certificado dual\\
+N2 & 77 por iteración & lineal por paso, re-linealizada & sí, en cada iteración & SQP + Clarabel & converge a N3\\
+SAA de dos etapas & 26 + 25 por escenario & N3 en cada escenario de fuga & no & Ipopt & riesgo de pronóstico (F4)\\
+QP con restricción probabilística & como N1 & lineal & sí & QP & capa 1 de riesgo (propuesta)\\
+Relajación de cota inferior & 26 caudales y holguras & modelo afín más cota del residuo & sí (QP) & Clarabel & cota inferior certificada (F3c)\\\bottomrule
+\end{tabularx}
+\caption{Formulaciones del problema de control y para qué sirve cada una.}
+\label{tab:formulaciones}
+\end{table}
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  curve/.style={line width=1.2pt, draw=accent},
+  tang/.style={line width=0.9pt, draw=orange!85!black},
+  pt/.style={circle, fill=orange!85!black, inner sep=1.4pt},
+  ttl/.style={font=\small\bfseries, text=ink},
+  sub/.style={font=\scriptsize, text=black!65, align=center}]
+\begin{scope}
+  \draw[black!40, ->] (0,0) -- (4.2,0) node[below left, sub]{$x$};
+  \draw[black!40, ->] (0,0) -- (0,3) node[below left, sub, rotate=90]{$f(x)$};
+  \draw[curve] (0.2,0.4) .. controls (1.5,0.5) and (2.6,1.4) .. (4,2.8);
+  \draw[tang] (0.2,0.42) -- (4,1.25);
+  \node[pt] at (0.7,0.53) {};
+  \node[ttl] at (2.1,3.3) {N1 (LTI)};
+  \node[sub] at (2.1,-0.55) {una tangente en el punto de consulta,\\válida en todo el horizonte};
+\end{scope}
+\begin{scope}[xshift=5.6cm]
+  \draw[black!40, ->] (0,0) -- (4.2,0) node[below left, sub]{$x$};
+  \draw[black!40, ->] (0,0) -- (0,3) node[below left, sub, rotate=90]{$f(x)$};
+  \draw[curve] (0.2,0.4) .. controls (1.5,0.5) and (2.6,1.4) .. (4,2.8);
+  \foreach \x/\y/\s in {0.7/0.53/0.25, 1.6/0.82/0.45, 2.5/1.33/0.75, 3.4/2.08/0.95}
+    { \draw[tang] ({\x-0.42},{\y-0.42*\s}) -- ({\x+0.42},{\y+0.42*\s}); \node[pt] at (\x,\y) {}; }
+  \node[ttl] at (2.1,3.3) {N2 (LTV, iterado)};
+  \node[sub] at (2.1,-0.55) {una tangente por paso $k$, sobre la trayectoria\\del incumbente; se re-linealiza en cada iteración};
+\end{scope}
+\begin{scope}[xshift=11.2cm]
+  \draw[black!40, ->] (0,0) -- (4.2,0) node[below left, sub]{$x$};
+  \draw[black!40, ->] (0,0) -- (0,3) node[below left, sub, rotate=90]{$f(x)$};
+  \draw[curve] (0.2,0.4) .. controls (1.5,0.5) and (2.6,1.4) .. (4,2.8);
+  \node[ttl] at (2.1,3.3) {N3 (no lineal)};
+  \node[sub] at (2.1,-0.55) {la dinámica exacta como restricción;\\sin aproximación};
+\end{scope}
+\end{tikzpicture}}
+\caption{Los tres niveles del modelo. La curva azul es la dinámica no lineal y en naranja
+están sus aproximaciones lineales.}
+\label{fig:niveles}
+\end{figure}
+
+\subsection{P0-DET: la formulación actual (disparo simple de caja negra)}
+Es el problema de la sección~\ref{sec:actual}: las incógnitas son las 26 corrientes, y el
+costo $J_{\rm DET}(u)$ se obtiene simulando el árbol de eventos en Simulink. No hay
+ecuaciones explícitas ni derivadas, y por eso se resuelve con búsqueda aleatoria
+(Luus--Jaakola) o evolutiva (GA). Cuando el árbol queda en la raíz, $J_{\rm DET}$ coincide
+con el costo determinista P0 de la sección~\ref{sec:modelo}, que es lo que resuelven las
+formulaciones siguientes.
+
+\subsection{N3 monolítica: el NLP exacto}
+Las incógnitas son los caudales $u_k$, los estados escalados $z_k$ ($x_k=S\circ z_k$, con
+$S_j=\max(|x_{0,j}|,1)$) y dos juegos de holguras. El problema es
+\begin{align*}
+\min_{u,\,z,\,s,\,r}\quad & \sum_{k=1}^{K}(\hat y_k-y_{\rm ref})^2+\lambda_m\sum_{k=1}^{K-1}s_k^2+\lambda_{\rm pct}\sum_{k=1}^{K}r_k^2\\
+\text{s.a.}\quad & S\circ(z_k-z_{k-1})=\Delta t\,f\big(S\circ z_k,\hat d_k,u_k\big),\qquad z_0=x_0\oslash S,\qquad k=1,\dots,K,\\
+& \hat y_k=S_{T_w}z_{k,T_w}+p_4(\hat d_k+u_k+5550)+0.4,\\
+& u_{k+1}-u_k\le\Delta\mdot+s_k,\qquad u_k-u_{k+1}\le\Delta\mdot+s_k,\qquad \hat y_k-U_y\le r_k,\qquad s,r\ge0,\\
+& \mdot_{\rm min}\le u_k\le\mdot_{\rm max}.
+\end{align*}
+Tiene 519 variables libres (442 de estado, 26 de control y 51 holguras) y 442 igualdades no
+lineales, con estructura bloque-bidiagonal. El escalado es imprescindible, porque
+$N\sim10^{13}$ y $C_i\sim10^{16}$ conviven con temperaturas de $\sim10^3$~K. Se resuelve con
+Ipopt, usando la hessiana exacta del lagrangiano, que JuMP obtiene por diferenciación
+automática.
+
+\begin{proposicion}[Las holguras reproducen las bisagras exactamente]\label{prop:holguras}
+En todo óptimo de N3, $s_k=\big[|u_{k+1}-u_k|-\Delta\mdot\big]_+$ y $r_k=[\hat y_k-U_y]_+$. Por lo
+tanto, N3 tiene el mismo óptimo que P0 con las bisagras originales, pero es dos veces
+diferenciable.
+\end{proposicion}
+\begin{proof}
+Fijados $u$ y $z$, $s_k$ sólo aparece en el costo $\lambda_ms_k^2$, que crece con $s_k\ge0$, y
+en las restricciones $s_k\ge|u_{k+1}-u_k|-\Delta\mdot$. El menor $s_k$ factible es
+$\max(0,|u_{k+1}-u_k|-\Delta\mdot)$, y su costo es exactamente la bisagra al cuadrado. El
+argumento para $r_k$ es el mismo.
+\end{proof}
+
+\subsection{N3 reducida: el mismo problema sólo en los controles}
+Los estados se eliminan con la simulación, $x_k=\Phi(x_{k-1},\hat d_k,u_k)$, y queda
+\[
+\min_{\mdot_{\rm min}\le u\le\mdot_{\rm max}}\ J(u)=\sum_k\big(\hat y_k(u)-y_{\rm ref}\big)^2+\lambda_m\sum_k\big[|u_{k+1}-u_k|-\Delta\mdot\big]_+^2+\lambda_{\rm pct}\sum_k\big[\hat y_k(u)-U_y\big]_+^2 .
+\]
+Se usa con dos pasos de integración:
+\begin{itemize}
+  \item \textbf{BE convergido}: $\Phi$ resuelve $x_k=x_{k-1}+\Delta t\,f(x_k,\hat d_k,u_k)$
+        hasta la convergencia de Newton. Es el mismo modelo que N3 monolítica.
+  \item \textbf{\code{ode1be}}: una sola iteración de Newton desde $x_{k-1}$,
+        \[
+        x_k=x_{k-1}+\big(I-\Delta t\,A(x_{k-1})\big)^{-1}\Delta t\,f(x_{k-1},\hat d_k,u_k).
+        \]
+        Es exactamente lo que calcula Simulink.
+\end{itemize}
+Sólo tiene 26 variables, con cotas de caja. A cambio, cada evaluación exige una simulación.
+El gradiente se obtiene derivando a través de la simulación con ForwardDiff. Es la forma
+natural para la certificación de la sección~\ref{sec:certificacion}, porque sus condiciones
+de optimalidad se escriben sólo en $u$.
+
+\subsection{N1: una sola linealización (QP-LTI)}
+Se linealiza una vez en $(\bar x,\bar d,\bar u)=(x_0,\ d(t_q-\Delta t),\ \text{caudal medio})$.
+El modelo se escribe en \emph{desviaciones},
+$\delta_k=x_k-\bar x_k$, $\Delta u_k=u_k-\bar u_k$ y $\Delta d_k=d_k-\bar d_k$, para no restar
+números del orden de $10^{16}$. Con Euler implícito,
+\begin{gather*}
+M_k\,\delta_k=\delta_{k-1}+r_k+\Delta t\,B\,\Delta u_k+\Delta t\,E_k\,\Delta d_k,\qquad
+M_k=I-\Delta t\,A_k,\qquad r_k=\bar x_{k-1}-\bar x_k+\Delta t\,\bar f_k,\\
+\hat y_k=\bar y_k+\delta_k[T_w]+D_k\,(\Delta d_k+\Delta u_k),
+\end{gather*}
+con $A_k\equiv A$ y $\bar x_k\equiv\bar x$. Aquí $B=e_{\Delta M}$ es constante, porque el
+control sólo entra en el inventario, y $D_k=p_4'(\cdot)$. Hay dos formas equivalentes:
+\begin{itemize}
+  \item \textbf{Dispersa (monolítica)}: las desviaciones $\delta_{1..K}$ son variables y las
+        ecuaciones anteriores son restricciones lineales. Tiene 519 variables.
+  \item \textbf{Condensada}: los estados se eliminan recursivamente, y la salida queda afín en
+        el control, $\hat y=\hat y^0+G\,u$, con
+        \begin{gather*}
+        G_{kj}=e_{T_w}^\top M_k^{-1}M_{k-1}^{-1}\cdots M_j^{-1}\,\Delta t\,B\quad(j<k),\\
+        G_{kk}=e_{T_w}^\top M_k^{-1}\Delta t\,B+D_k,\qquad G_{kj}=0\quad(j>k).
+        \end{gather*}
+        $G$ es triangular inferior: $u_j$ sólo afecta a $\hat y_k$ con $k\ge j$. El problema
+        queda en 77 variables:
+        \[
+        \min_{u,s,r}\ \|\hat y^0+Gu-y_{\rm ref}\mathbf 1\|^2+\lambda_m\|s\|^2+\lambda_{\rm pct}\|r\|^2,
+        \]
+        sujeto a las restricciones lineales de rampa, de límite de PCT y de cotas.
+\end{itemize}
+Es un QP convexo, y Clarabel lo resuelve con certificado dual (proposición~\ref{prop:dual}).
+
+\subsection{N2: una linealización por paso, iterada (QP-LTV secuencial)}
+En N2 conviven dos índices: $k=1,\dots,26$ es el paso del horizonte e $i=1,2,\dots$ es la
+iteración. En la iteración $i$, los jacobianos del paso $k$ se evalúan en el estado del
+\emph{mismo} paso $k$ de la trayectoria no lineal producida por el control incumbente de
+la iteración anterior:
+\[
+A_k^{(i)}=\frac{\partial f}{\partial x}\Big(\bar x_k^{(i-1)},d_k,u_k^{(i-1)}\Big),\qquad
+\bar x^{(i-1)}=\mathcal S\big(x_0,u^{(i-1)},d\big),
+\]
+donde $\mathcal S$ es la simulación no lineal. Los 26 jacobianos se calculan juntos,
+\emph{antes} de resolver el QP, que tiene la misma forma condensada que N1 pero con
+matrices $M_k^{(i)}$ distintas en cada paso (figura~\ref{fig:sqp-loop}).
+
+\begin{figure}[H]\centering
+\resizebox{0.92\linewidth}{!}{%
+\begin{tikzpicture}[
+  st/.style={draw=accent, line width=0.6pt, rounded corners=2pt, fill=soft, align=center,
+             font=\small, minimum height=14mm, text width=40mm},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink},
+  lab/.style={font=\footnotesize, text=black!70, align=center}]
+\node[st] (a) at (0,0)    {\textbf{1. Simular} la réplica\\con el incumbente $u^{(i-1)}$:\\$\bar x^{(i-1)}_{1..K}$};
+\node[st] (b) at (5.2,0)  {\textbf{2. Linealizar} en cada\\paso $k$: $A_k^{(i)}, E_k^{(i)}, D_k^{(i)}$\\(ForwardDiff)};
+\node[st] (c) at (10.4,0) {\textbf{3. Resolver el QP}\\convexo (Clarabel):\\$u^{(i)}$};
+\node[st] (d) at (10.4,-2.5) {\textbf{4. ¿Convergió?}\\$\|u^{(i)}-u^{(i-1)}\|_\infty<\epsilon$};
+\node[st, fill=white] (e) at (5.2,-2.5) {\textbf{Fin:} $u^\star=u^{(i)}$\\(punto KKT de N3)};
+\draw[arr] (a) -- (b); \draw[arr] (b) -- (c); \draw[arr] (c) -- (d);
+\draw[arr] (d) -- node[lab, above]{sí} (e);
+\draw[arr] (d.south) -- ++(0,-0.55) -| node[lab, pos=0.25, below]{no: $i\leftarrow i+1$} (a.south);
+\end{tikzpicture}}
+\caption{Iteración de N2: programación cuadrática secuencial. El modelo exacto sólo se usa
+para simular y derivar; la optimización se hace siempre sobre un QP convexo.}
+\label{fig:sqp-loop}
+\end{figure}
+
+\begin{proposicion}[El punto fijo de N2 es un punto KKT de N3]\label{prop:sqp}
+Si la iteración converge a $u^\infty$ y la trayectoria nominal es la solución exacta de
+Euler implícito ($r_k=0$), entonces $u^\infty$ cumple las condiciones KKT de N3 reducida.
+\end{proposicion}
+\begin{proof}
+En el punto fijo, la trayectoria nominal es la del propio $u^\infty$. El modelo lineal
+reproduce entonces el valor exacto $\hat y(u^\infty)$ y, por construcción, su jacobiano
+respecto de $u$. Como el costo y las restricciones dependen de $u$ sólo a través de
+$\hat y(u)$ y de restricciones lineales, las KKT del QP en $u^\infty$ coinciden con las de N3
+reducida.
+\end{proof}
+
+\subsection{Formulaciones auxiliares}
+\paragraph{SAA de dos etapas (riesgo de pronóstico, F4).} Con $M$ trayectorias de fuga
+$\hat d^{(j)}$ del ensamble MC-dropout, la primera acción es común a todos los escenarios y
+las siguientes se adaptan a cada uno:
+\[
+\min_{u_1,\ u^{(j)}_{2..K}}\ \frac1M\sum_{j=1}^{M}J\big(u_1,u^{(j)}_{2..K};\hat d^{(j)}\big),
+\]
+con la dinámica de N3 en cada escenario. Con $M=59$ son unas 30\,000 variables, y aun así se
+resuelve en $\sim2$~s.
+
+\paragraph{QP con restricción probabilística (capa 1 de riesgo, propuesta).} Sobre N1, la
+restricción $\mathbb P(\hat y_k>U_y)\le\varepsilon$ se reemplaza por la restricción lineal
+equivalente $\hat y^0_k+(Gu)_k+z_{1-\varepsilon}\sigma_k\le U_y$
+(proposición~\ref{prop:cc}). El problema sigue siendo un QP.
+
+\paragraph{Relajación convexa para la cota inferior (F3c).} Para certificar N3 se resuelve
+el QP $\min_u L(u)$ de la proposición~\ref{prop:lb}. Su valor óptimo es una cota inferior del
+óptimo global de N3.
+

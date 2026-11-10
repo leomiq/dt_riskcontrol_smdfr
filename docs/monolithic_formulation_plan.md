@@ -645,7 +645,7 @@ repositorio fuera de OneDrive (ver `setup_entorno.md`).
 ### 8.5 F3c: certificación de optimalidad del NLP no lineal (9-11-2026)
 
 **Punto de partida.** `julia/f3_certificates_condensed.jl` (documentado en
-`docs/estado_mpc_monolitico.pdf`, §5–6.3) dio un certificado dual con brecha ≈ 10⁻¹² para
+`docs/reporte_estado_mpc_monolitico.pdf`, secciones de formulaciones y de resultados de F3) dio un certificado dual con brecha ≈ 10⁻¹² para
 el **QP linealizado** (N1, N2). Ese certificado no vale para P0 no lineal (N3). Una
 brecha de optimalidad para N3 necesita una **cota superior** (UB), que es cualquier
 solución factible y ya existe (el óptimo de Ipopt), y una **cota inferior** (LB), que hoy

@@ -149,7 +149,9 @@ constraints (N3). It then checks when the optimal-scenario result of Homem-de-Me
 uncertainty.
 
 Status (9 Nov 2026, plan §8.1–8.5; summary with figures in
-[docs/estado_mpc_monolitico.pdf](docs/estado_mpc_monolitico.pdf), Spanish):
+[docs/reporte_estado_mpc_monolitico.pdf](docs/reporte_estado_mpc_monolitico.pdf), a
+self-contained didactic report in Spanish, with the reference SMDFR model paper in
+[docs/references/](docs/references/)):
 
 - **F1–F3 closed.** The algebraic ROM replica in `julia/` reproduces Simulink to
   about 1e-6 K. The monolithic NLP solves P0 in about 0.05 s at t_q = 1161 and 1180 s.

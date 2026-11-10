@@ -1,0 +1,151 @@
+%======================================================================
+\section{El control predictivo (MPC)}\label{sec:mpc}
+%======================================================================
+
+\subsection{Controlar: lazo abierto y lazo cerrado}
+Controlar es elegir la entrada de un sistema, aquí el caudal del ACS, para que su salida, la
+PCT, se comporte como se desea. En \emph{lazo abierto} la entrada se fija de antemano. En
+\emph{lazo cerrado}, o con realimentación, la entrada se recalcula a partir de lo que se mide,
+y eso permite corregir perturbaciones y errores del modelo. El controlador PI de Liu et
+al.~\cite{liu2021}, por ejemplo, ajusta la reactividad en proporción al error de potencia y a
+su integral. Es simple y robusto, pero no anticipa: reacciona al error ya ocurrido y no tiene
+en cuenta las restricciones de forma explícita.
+
+\subsection{La idea del control predictivo}
+El \textbf{control predictivo basado en modelo} (MPC, \emph{model predictive
+control})~\cite{rawlings2017,camacho2007} resuelve, en cada instante de decisión, un problema
+de optimización:
+\begin{enumerate}
+  \item \textbf{medir} o estimar el estado actual del sistema, $x_0=\hat x(t_q)$;
+  \item \textbf{predecir}, con un modelo, cómo evolucionará la salida durante un horizonte
+        futuro, para cada secuencia candidata de entradas $u_1,\dots,u_K$;
+  \item \textbf{optimizar}: elegir la secuencia que minimiza un costo y cumple las
+        restricciones;
+  \item \textbf{aplicar sólo la primera acción} $u_1^\star$;
+  \item \textbf{repetir} en el instante siguiente, con una nueva medición.
+\end{enumerate}
+El horizonte se desplaza con el tiempo (figura~\ref{fig:mpc}), y por eso se habla de
+\emph{horizonte deslizante}. Aunque cada problema se resuelve en lazo abierto, re-optimizar con
+cada medición nueva cierra el lazo: los errores del modelo o del pronóstico se corrigen en la
+consulta siguiente.
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  lab/.style={font=\footnotesize, text=black!70, align=center},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink}]
+\draw[->, black!60] (0,0) -- (13.2,0) node[right, lab]{$t$};
+\draw[->, black!60] (0,0) -- (0,4.2);
+\draw[black!40, dashed] (5,0) -- (5,4.0);
+\node[lab] at (5,4.25) {$t_q$ (ahora)};
+\fill[soft] (5,0.02) rectangle (12.5,3.9);
+\node[lab] at (8.75,3.65) {horizonte de predicción: $K=26$ pasos (12.5~s)};
+% past output
+\draw[line width=1.1pt, draw=accent] plot[smooth] coordinates {(0.3,1.2) (1.5,1.55) (3,2.0) (4.2,2.45) (5,2.7)};
+\node[lab, text=accent] at (2.3,2.45) {PCT medida};
+% predicted output
+\draw[line width=1.1pt, draw=accent, dashed] plot[smooth] coordinates {(5,2.7) (6,2.55) (7,2.2) (8.5,1.85) (10.5,1.7) (12.5,1.65)};
+\node[lab, text=accent] at (10.7,2.15) {PCT predicha $\hat y_k$};
+\draw[black!55, dotted, line width=0.9pt] (0,1.65) -- (12.5,1.65) node[right, lab]{$y_{\rm ref}$};
+% control steps
+\foreach \x/\h in {5.0/0.9,5.5/0.9,6.0/0.9,6.5/0.75,7.0/0.6,7.5/0.5,8.0/0.45,8.5/0.45,9.0/0.42,9.5/0.42,10.0/0.4,10.5/0.4,11.0/0.4,11.5/0.4,12.0/0.4}
+  { \draw[orange!85!black, line width=0.9pt] (\x,\h) -- (\x+0.5,\h); }
+\fill[orange!85!black, opacity=0.35] (5,0) rectangle (5.5,0.9);
+\node[lab, text=orange!70!black] at (8.6,0.95) {caudales candidatos $u_1,\dots,u_K$};
+\draw[arr, draw=orange!70!black] (4.0,1.1) node[left, lab, text=orange!70!black]{se aplica\\sólo $u_1^\star$} -- (5.2,0.6);
+\end{tikzpicture}}
+\caption{El horizonte deslizante. En el instante $t_q$, el MPC predice la PCT durante 12.5~s
+para una secuencia de caudales y elige la mejor. Aplica sólo el primer caudal (barra
+sombreada) y, 0.5~s después, repite todo con el horizonte desplazado.}
+\label{fig:mpc}
+\end{figure}
+
+\begin{ejemplo}[Una analogía]
+Al conducir se mira cien metros adelante, se planifica cómo frenar y girar, se ejecuta sólo
+el movimiento inmediato y se vuelve a mirar. Nadie ejecuta a ciegas el plan de los cien
+metros: la carretera cambia y el plan se rehace continuamente. El MPC hace lo mismo, con un
+modelo matemático en lugar de la intuición.
+\end{ejemplo}
+
+\subsection{Los elementos de un MPC}
+\begin{itemize}
+  \item \textbf{Modelo de predicción}: el ROM de la sección~\ref{sec:reactor},
+        $\dot x=f(x,d,u)$, $\hat y=h(x,d,u)$.
+  \item \textbf{Discretización}: el horizonte se divide en $K=26$ pasos de $\Delta t=0.5$~s.
+        El caudal es constante dentro de cada paso.
+  \item \textbf{Perturbación pronosticada}: la fuga futura $\hat d_1,\dots,\hat d_K$, que no se
+        conoce y se pronostica con una red neuronal (sección~\ref{sec:actual}).
+  \item \textbf{Costo}: lo que se quiere minimizar.
+  \item \textbf{Restricciones}: lo que no se puede violar, como las cotas del actuador.
+\end{itemize}
+
+\subsection{El problema de control P0, término por término}\label{sec:modelo}
+Con el estado estimado $x_0=\hat x(t_q-\Delta t)$ y el pronóstico $\hat d_k$, el problema P0
+elige los caudales $u_1,\dots,u_K$:
+\begin{align*}
+\min_{u,\,x}\quad & J=\underbrace{\sum_{k=1}^{K}(\hat y_k-y_{\rm ref})^2}_{\text{(a) seguimiento}}
+  +\underbrace{\lambda_m\sum_{k=1}^{K-1}\big[|u_{k+1}-u_k|-\Delta\mdot\big]_+^2}_{\text{(b) suavidad}}
+  +\underbrace{\lambda_{\rm pct}\sum_{k=1}^{K}\big[\hat y_k-U_y\big]_+^2}_{\text{(c) seguridad}}\\
+\text{s.a.}\quad & x_k=x_{k-1}+\Delta t\,f(x_k,\hat d_k,u_k),\qquad k=1,\dots,K\qquad\text{(dinámica)},\\
+& \mdot_{\rm min}\le u_k\le\mdot_{\rm max}\qquad\text{(cotas del actuador)},
+\end{align*}
+donde $[z]_+=\max(z,0)$ es la \emph{bisagra}: vale cero si $z\le0$ y $z$ si $z>0$.
+\begin{enumerate}[label=(\alph*)]
+  \item \textbf{Seguimiento.} Penaliza el cuadrado de la distancia entre la PCT predicha y la
+        referencia. Un error de 0.1~K en los 26 pasos cuesta $26\times0.01=0.26$; uno de 1~K
+        cuesta 26. El cuadrado castiga más los errores grandes.
+  \item \textbf{Suavidad.} Penaliza los saltos de caudal mayores que $\Delta\mdot=5$~kg/s entre
+        pasos consecutivos. Como $\lambda_m=10^{-4}$, es una penalización muy suave: un salto de
+        10~kg/s cuesta $10^{-4}\times5^2=0.0025$.
+  \item \textbf{Seguridad.} Penaliza cualquier PCT por encima de $U_y=1244$~K, con un peso
+        grande ($\lambda_{\rm pct}=10$). Como la referencia está 64.7~K por debajo del límite,
+        en las consultas estudiadas este término vale cero.
+\end{enumerate}
+La restricción de dinámica usa Euler implícito, igual que el integrador de Simulink; la
+sección~\ref{sec:numerica} explica por qué.
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y l@{}}\toprule
+Parámetro & Valor & Origen\\\midrule
+Horizonte $K$, paso $\Delta t$ & 26 pasos de 0.5~s (12.5~s) & lazo archivado\\
+Referencia de PCT $y_{\rm ref}$ & 1179.271~K & lazo archivado\\
+Límite de PCT $U_y$ & 1244~K & \code{fitness\_cost.m}\\
+Pesos $\lambda_m$, $\lambda_{\rm pct}$; rampa $\Delta\mdot$ & $10^{-4}$ y 10; 5~kg/s por paso & \code{fitness\_cost.m}\\
+Cotas del actuador & $u\in[56.69,56.75]$~A, es decir, $\mdot\in[0.58,12.86]$~kg/s & lazo archivado (sec.~\ref{sec:actuador})\\\bottomrule
+\end{tabularx}
+\caption{Parámetros de P0 usados en todo el documento.}
+\end{table}
+
+\subsection{Las dos consultas de prueba}
+Todo el análisis de este documento se hace sobre dos consultas del lazo archivado, que
+representan dos situaciones distintas:
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y Y@{}}\toprule
+& $t_q=1161$~s (fase aguda) & $t_q=1180$~s\\\midrule
+PCT estimada al inicio & 1181.35~K (2.1~K sobre la referencia) & 1179.61~K (0.34~K sobre la referencia)\\
+Fuga & $-4.58$~kg/s & $-4.56$~kg/s\\
+Inventario perdido & 3337~kg (41\,\%) & 3230~kg (40\,\%)\\
+Caudal primario & 0.590 del nominal & 0.603 del nominal\\
+Potencia & 114~MW & 115~MW\\
+Pronóstico de fuga usado & fuga real del HRM (pronóstico perfecto) & una muestra de la BiLSTM (archivo)\\\bottomrule
+\end{tabularx}
+\caption{Estado del reactor en las dos consultas.}
+\end{table}
+\noindent En 1161~s la PCT está lejos de la referencia y el actuador no alcanza a corregirla:
+la decisión correcta es inyectar al máximo. En 1180~s está cerca, y la decisión es más fina:
+inyectar al máximo unos segundos y luego bajar el caudal para no sobrepasar la referencia.
+
+\subsection{Por qué este problema es difícil}
+\begin{itemize}
+  \item \textbf{No lineal}: el caudal primario multiplica temperaturas, $h_{wc}$ depende de
+        $\mdot_c^{0.8}$ y la cinética multiplica reactividad por población.
+  \item \textbf{Rígido}: los neutrones evolucionan en milisegundos y el inventario en minutos.
+  \item \textbf{Mal escalado}: las variables van de $10^3$ a $10^{16}$.
+  \item \textbf{Incierto}: la fuga futura se pronostica, y el ACS puede fallar.
+  \item \textbf{En tiempo real}: hay que decidir en una fracción del intervalo entre consultas.
+\end{itemize}
+
+\takeaway{\textbf{Para recordar.} En cada consulta, el MPC resuelve P0: elegir 26 caudales que
+mantengan la PCT predicha cerca de la referencia, sin saltos bruscos y sin superar el límite,
+respetando las ecuaciones del reactor. Sólo se aplica el primer caudal, y 0.5~s después se
+vuelve a resolver.}

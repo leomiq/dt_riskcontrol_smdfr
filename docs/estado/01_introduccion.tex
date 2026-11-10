@@ -1,0 +1,135 @@
+%======================================================================
+\section{Introducción}\label{sec:intro}
+%======================================================================
+
+\subsection{Para quién es este documento y cómo leerlo}
+Este documento está pensado para alguien que llega al proyecto sin conocerlo: un estudiante
+de ingeniería o de matemática aplicada que sabe cálculo, álgebra lineal y ecuaciones
+diferenciales ordinarias, pero que no necesariamente conoce la física de reactores, el
+control predictivo ni la optimización numérica. Por eso cada concepto se introduce antes de
+usarse, con un ejemplo cuando ayuda, y cada resultado se acompaña de la pregunta que
+responde.
+
+El texto tiene cuatro partes:
+\begin{enumerate}[label=\textbf{Parte \Roman*.}, leftmargin=*]
+  \item \textbf{El problema físico} (secciones~\ref{sec:reactor}--\ref{sec:accidente}): qué
+        es el reactor SMDFR, cómo se describe su dinámica (neutrones y calor) y qué ocurre en
+        el accidente que se quiere controlar.
+  \item \textbf{El controlador} (secciones~\ref{sec:mpc}--\ref{sec:actual}): qué es un
+        control predictivo, qué problema de optimización resuelve en cada instante y cómo lo
+        resuelve hoy el método del proyecto.
+  \item \textbf{Las herramientas} (secciones~\ref{sec:optimizacion}--\ref{sec:certteoria}):
+        los fundamentos de optimización, integración numérica, linealización, incertidumbre y
+        certificación de optimalidad, y las formulaciones que propone este trabajo.
+  \item \textbf{Los resultados} (secciones~\ref{sec:replica}--\ref{sec:conclusiones}):
+        qué se obtuvo con cada formulación, cuál es mejor, con qué garantía y qué falta.
+\end{enumerate}
+Quien ya conozca la física puede saltar a la parte~II; quien conozca el control predictivo,
+a la parte~III. Los recuadros sombreados resumen la idea principal de cada sección. Al final
+hay una tabla de notación, un glosario y las instrucciones para reproducir cada número.
+
+\subsection{La problemática en breve}
+El SMDFR (\emph{Small Modular Dual Fluid Reactor}) es un reactor de 100~MWt con combustible
+de sal fundida y refrigerante de plomo líquido. Durante un accidente con pérdida de
+refrigerante (LOCA), el inventario de plomo baja, el caudal del circuito primario cae y sube
+la temperatura pico de la vaina de los tubos de combustible (PCT, \emph{peak cladding
+temperature}). Un sistema auxiliar de enfriamiento (ACS) puede reponer refrigerante, pero
+hay que decidir \emph{cuánto} y \emph{cuándo}: con poco, la PCT se acerca al límite de
+seguridad; con mucho, se gasta un recurso limitado y se fuerza un componente que puede
+fallar.
+
+El proyecto aborda esa decisión con un \textbf{gemelo digital informado por riesgo}. Un
+control predictivo (MPC) elige, cada 0.5~s, el caudal del ACS para los próximos 12.5~s.
+Para predecir usa tres piezas: un modelo reducido del reactor, un pronóstico de la fuga
+hecho por una red neuronal, y un árbol de eventos con las fallas y reparaciones posibles del
+ACS. La seguridad se mide con un margen probabilístico (PSM).
+
+El problema de optimización del MPC se resolvía con \textbf{metaheurísticas}
+(Luus--Jaakola y algoritmo genético), porque cada evaluación del costo era una simulación de
+caja negra en Simulink. Eso tiene tres consecuencias:
+\begin{itemize}
+  \item cada consulta tarda unos 800~s, cuando la meta del lazo es menos de 120~s;
+  \item la acción aplicada depende de la semilla aleatoria del optimizador;
+  \item no se sabe cuán lejos está la solución de la mejor posible.
+\end{itemize}
+Además, sin un problema tratable no se puede incorporar el riesgo dentro de la decisión,
+porque eso multiplica el número de escenarios que hay que evaluar. Este documento propone
+\emph{formulaciones monolíticas} del mismo problema: el modelo deja de ser una caja negra y
+pasa a formar parte del problema de optimización como un conjunto de ecuaciones derivables.
+Luego evalúa esas formulaciones y certifica la calidad de sus soluciones.
+
+\subsection{Preguntas que responde este documento}
+\begin{enumerate}[label=\textbf{Q\arabic*.}]
+  \item ¿Se puede resolver el problema del MPC con exactitud y en tiempo real?
+  \item ¿La solución obtenida es el óptimo global? ¿Con qué garantía?
+  \item ¿Cuál método produce la mejor decisión, y por cuánto?
+  \item ¿La incertidumbre del pronóstico de fuga cambia la decisión?
+  \item ¿Las cotas del actuador tienen base física?
+\end{enumerate}
+Cada sección de resultados termina con un recuadro que responde una de ellas, y la
+sección~\ref{sec:conclusiones} las reúne.
+
+\subsection{Ruta de trabajo}
+La idea central es escribir las ecuaciones del modelo reducido \emph{una sola vez}, en
+forma algebraica y derivable. De esa fuente única salen el problema exacto, sus
+linealizaciones y las cotas que certifican la calidad de las soluciones. El trabajo se
+organizó en fases (tabla~\ref{tab:fases} y figura~\ref{fig:fases}).
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y Y l@{}}\toprule
+Fase & Objetivo & Criterio de cierre & Estado\\\midrule
+F0 Ecuaciones & Escribir el ROM término a término desde el archivo de Simulink & Cada término trazado a un bloque & Cerrada\\
+F1 Réplica & ROM algebraico en Julia, con diferenciación automática & Error $\ll1$~K frente a Simulink & Cerrada\\
+F2 NLP (N3) & P0 como programa no lineal monolítico & Comparado con LJ y GA en Simulink & 2 consultas\\
+F3 QP (N1, N2) & P0 linealizado como QP; función de transferencia; certificado dual & Brecha frente a N3 medida & 2 consultas\\
+F3c Certificación & Brecha de optimalidad global del P0 no lineal; comparación de decisiones & Brecha certificada pequeña & Pasos 1--4b\\
+F4 Riesgo & Restricción probabilística, SAA, cuantiles & Una decisión que cambie por riesgo & Abierta\\
+F5 Lazo cerrado & Las 61 consultas, multietapa & $<120$~s por consulta & Pendiente\\\bottomrule
+\end{tabularx}
+\caption{Fases del trabajo (detalle en \code{docs/monolithic\_formulation\_plan.md}).}
+\label{tab:fases}
+\end{table}
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={draw=accent, line width=0.6pt, rounded corners=2pt, fill=soft,
+              align=center, font=\small, minimum height=13mm, text width=24mm, inner sep=2pt},
+  ref/.style={draw=black!50, dashed, rounded corners=2pt, align=center, font=\small,
+              minimum height=10mm, text width=30mm},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink},
+  val/.style={-{Stealth[length=2mm]}, line width=0.5pt, draw=black!50, dashed},
+  lab/.style={font=\footnotesize, text=black!70, align=center, inner sep=1.5pt}]
+\node[box] (f0) at (0,0)      {\textbf{F0}\\Ecuaciones\\del \code{.slx}};
+\node[box] (f1) at (3.6,0)    {\textbf{F1}\\Réplica\\algebraica};
+\node[box] (f2) at (8.8,1.6)  {\textbf{F2}\\NLP no lineal\\(N3)};
+\node[box] (f3) at (8.8,-1.6) {\textbf{F3}\\Linealización\\(N1, N2)};
+\node[box] (f4) at (13.4,0)   {\textbf{F4}\\Riesgo\\(probab., SAA)};
+\node[box] (f5) at (17.0,0)   {\textbf{F5}\\Lazo cerrado\\(61 consultas)};
+\node[box] (f3c) at (13.4,-3.4) {\textbf{F3c}\\Certificación\\y comparación};
+\node[ref] (sim) at (3.6,-3.6) {Simulink (ROM)\\referencia exacta};
+\draw[arr] (f0) -- (f1);
+\draw[arr] (f1.east) -- (5.0,0) |- node[lab, pos=0.75, above]{restricciones} (f2.west);
+\draw[arr] (f1.east) -- (5.0,0) |- node[lab, pos=0.75, below]{jacobianos} (f3.west);
+\draw[arr] (f2) -- node[lab, right]{óptimo de\\referencia} (f3);
+\draw[arr] (f2.east) -- (11.2,1.6) |- (f4.west);
+\draw[arr] (f3.east) -- (11.2,-1.6) |- (f4.west);
+\draw[arr] (11.2,-1.6) |- (f3c.west);
+\draw[arr] (f3c) -- node[lab, right]{garantía} (f4);
+\draw[arr] (f4) -- (f5);
+\draw[val] (sim.north) -- node[lab, right]{valida} (f1.south);
+\draw[val] (sim.east) -| node[lab, pos=0.3, below]{re-simula cada acción} (f3.south);
+\end{tikzpicture}}
+\caption{Cómo se encadenan las fases. F0 y F1 producen un modelo derivable y validado. F2
+lo usa como restricción (el problema exacto) y F3 como fuente de derivadas (el problema
+lineal). F3c certifica la calidad de las soluciones. F4 y F5 construyen sobre un problema
+que ya es tratable y verificado. Las flechas discontinuas son validaciones contra
+Simulink.}
+\label{fig:fases}
+\end{figure}
+
+\takeaway{\textbf{Idea del documento.} El controlador del reactor necesita resolver, cada
+0.5~s, un problema de optimización sobre un modelo físico. Si el modelo se trata como caja
+negra, sólo se puede buscar a ciegas. Si se escribe como ecuaciones, se pueden usar
+derivadas: el problema se resuelve unas $10^4$ veces más rápido, de forma reproducible y con
+garantías sobre la calidad de la solución.}

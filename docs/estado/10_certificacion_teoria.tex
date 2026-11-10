@@ -1,0 +1,120 @@
+%======================================================================
+\section{¿Cómo se demuestra que una solución es buena? Teoría de la certificación}\label{sec:certteoria}
+%======================================================================
+Un método local entrega una solución y un certificado \emph{local} (las condiciones KKT). En un
+problema no convexo eso no basta: puede haber otro mínimo mejor en otra parte. Esta sección
+presenta las herramientas para obtener una garantía \emph{global}.
+
+\subsection{Cotas superior e inferior y brecha de optimalidad}
+\begin{definicion}[Brecha de optimalidad]
+Para $J^\star=\min_{u\in\mathcal U}J(u)$:
+\begin{itemize}
+  \item una \emph{cota superior} es $UB=J(\tilde u)$ para cualquier $\tilde u\in\mathcal U$: un
+        control concreto cuyo costo se conoce;
+  \item una \emph{cota inferior} es un número $LB$ \emph{demostrado} tal que $J(u)\ge LB$ para
+        todo $u\in\mathcal U$.
+\end{itemize}
+Entonces $LB\le J^\star\le UB$, y la \emph{brecha} $(UB-LB)/UB$ acota cuánto podría mejorarse
+$\tilde u$.
+\end{definicion}
+\noindent Encontrar una cota superior es fácil: cualquier solución factible sirve. Lo difícil es
+la cota inferior, porque es una afirmación sobre \emph{todos} los controles posibles, incluidos
+los que nunca se evaluaron.
+
+Hay que distinguir dos brechas que suelen confundirse:
+\begin{itemize}
+  \item la \textbf{brecha del solver} (residuos KKT, brecha dual de un QP) dice si un algoritmo
+        resolvió bien \emph{su propio} problema;
+  \item la \textbf{brecha de optimalidad} dice qué tan buena es una decisión frente a la mejor
+        posible en el problema que de verdad importa.
+\end{itemize}
+Sólo la segunda permite comparar métodos que resuelven modelos distintos.
+
+\begin{proposicion}[Intervalo de exceso garantizado]\label{prop:exceso}
+Si $LB\le J^\star\le UB$ con $LB>0$, el exceso relativo de cualquier decisión $u$ sobre el
+óptimo global cumple
+\[
+\frac{J(u)-UB}{UB}\ \le\ \frac{J(u)-J^\star}{J^\star}\ \le\ \frac{J(u)-LB}{LB}.
+\]
+\end{proposicion}
+\begin{proof}
+La función $s\mapsto(J(u)-s)/s=J(u)/s-1$ es decreciente en $s>0$. Basta evaluarla en $s=UB\ge
+J^\star$ y en $s=LB\le J^\star$.
+\end{proof}
+
+\subsection{Relajaciones convexas}
+La idea general para obtener una cota inferior es construir una función $L\le J$ en todo el
+conjunto factible que sea fácil de minimizar globalmente, típicamente convexa. Su mínimo es
+entonces una cota inferior de $J^\star$ (figura~\ref{fig:gap}). Las relajaciones clásicas
+reemplazan cada término no convexo por una envolvente convexa~\cite{mccormick1976}.
+
+\begin{ejemplo}[Envolvente de McCormick]
+Para el término bilineal $w=xy$ con $x\in[x^L,x^U]$ e $y\in[y^L,y^U]$, desarrollando
+$(x-x^L)(y-y^L)\ge0$ y $(x-x^U)(y-y^U)\ge0$ se obtiene
+\[
+w\ge x^Ly+y^Lx-x^Ly^L,\qquad w\ge x^Uy+y^Ux-x^Uy^U .
+\]
+Son dos desigualdades lineales válidas en toda la caja. Cuanto más pequeña la caja, más ajustada
+la envolvente.
+\end{ejemplo}
+\noindent Esa última observación es la base de la \textbf{ramificación y acotamiento}
+(\emph{branch and bound})~\cite{horst1996}: se divide la caja en subcajas, se calcula una cota
+inferior en cada una, se descartan las subcajas cuya cota supera la mejor solución conocida, y
+se subdividen las restantes hasta que la brecha es tan pequeña como se quiera. El costo es que,
+en muchas dimensiones, el número de subcajas puede crecer exponencialmente.
+
+\subsection{Aritmética de intervalos}
+Para construir cotas \emph{demostradas} sobre funciones complicadas, como la salida de una
+simulación, se usa la aritmética de intervalos~\cite{moore2009}. Un intervalo es
+$[a]=[\underline a,\overline a]$, y las operaciones se definen para que el resultado contenga
+todos los valores posibles:
+\[
+[a]+[b]=[\underline a+\underline b,\ \overline a+\overline b],\qquad
+[a]-[b]=[\underline a-\overline b,\ \overline a-\underline b],\qquad
+[a]\cdot[b]=[\min P,\ \max P],
+\]
+con $P=\{\underline a\underline b,\ \underline a\overline b,\ \overline a\underline b,\ \overline a\overline b\}$.
+
+\begin{proposicion}[Propiedad de inclusión]
+Si una función $F$ se evalúa con aritmética de intervalos sobre $[x]$, el intervalo resultante
+contiene $\{F(x):x\in[x]\}$.
+\end{proposicion}
+\noindent La demostración se hace operación por operación: cada operación contiene todos sus
+resultados posibles, y la composición conserva esa propiedad. Si además cada extremo se redondea
+\emph{hacia afuera}, el redondeo de la computadora también queda cubierto, y el resultado es una
+cota \emph{rigurosa}. El paquete \code{IntervalArithmetic.jl}~\cite{intervaljl} implementa todo
+esto en Julia.
+
+\begin{ejemplo}[El problema de dependencia]
+Con $[x]=[1,2]$, la expresión $x-x$ vale exactamente cero, pero la aritmética de intervalos da
+$[1,2]-[1,2]=[-1,1]$: no sabe que los dos $x$ son el mismo número. La cota es correcta, pero
+pesimista. En una simulación de 26 pasos y 17 estados, esa sobreestimación se acumula paso a
+paso y puede volver inútil la cota.
+\end{ejemplo}
+\noindent El remedio clásico es la \textbf{forma del valor medio}: en lugar de evaluar $F([x])$,
+se evalúa
+\[
+F([x])\subseteq F(\check x)+[F']\big([x]\big)\,\big([x]-\check x\big),
+\]
+con $\check x$ el centro del intervalo y $[F']$ la derivada evaluada con intervalos. Para $F(x)=x-x$,
+la derivada es cero y la forma da exactamente $[0,0]$. Más en general, los \textbf{modelos de
+Taylor} representan cada cantidad como un polinomio con coeficientes numéricos, que conserva la
+correlación entre variables, más un \emph{resto} encerrado en un intervalo~\cite{makino2003}.
+Ésa es la estrategia del paso 4b (sección~\ref{sec:certificacion}): la parte lineal de la
+respuesta del reactor se calcula exactamente, y sólo el resto no lineal se encierra con
+intervalos.
+
+\subsection{Verificar que una solución existe: punto fijo}
+Cuando una cantidad se define implícitamente, como el estado de un paso de Euler implícito, que
+aparece a ambos lados de su ecuación, hay que demostrar además que la solución existe dentro de
+la caja propuesta. La herramienta es el teorema de punto fijo de Brouwer: si una función
+continua lleva una caja dentro de sí misma, tiene un punto fijo en ella. El operador de
+Krawczyk~\cite{krawczyk1969} convierte esa idea en una prueba computable para sistemas de
+ecuaciones: si el operador, evaluado con intervalos sobre la caja, cae estrictamente dentro de
+ella, la caja contiene una solución y ésta es única.
+
+\takeaway{\textbf{Para recordar.} Una garantía global requiere una cota inferior demostrada. Se
+obtiene con una relajación convexa del problema. Cuando el problema contiene una simulación, la
+relajación necesita acotar con rigor cuánto se aparta el modelo no lineal de una aproximación
+simple, y eso se hace con aritmética de intervalos y modelos de Taylor, verificando por punto
+fijo que las cajas propuestas contienen la solución.}

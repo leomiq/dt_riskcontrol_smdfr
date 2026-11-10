@@ -153,9 +153,17 @@ sirve. En leo_acer se usa **Tectonic 0.15.0**: un ejecutable único basado en Xe
 figuras se regeneran desde los resultados guardados, sin MATLAB ni Julia:
 
 ```powershell
-.venv\Scripts\python python/make_status_figures.py     # -> docs/figures/*.pdf
-cd docs; tectonic -X compile estado_mpc_monolitico.tex
+julia --project=julia julia/didactic_analysis.jl       # -> results/didactic/*.csv
+.venv\Scripts\python python/make_status_figures.py     # -> docs/figures/fig_*.pdf (resultados)
+.venv\Scripts\python python/make_didactic_figures.py   # -> docs/figures/did_*.pdf (capítulos introductorios)
+cd docs; & "$env:USERPROFILE\bin\tectonic.exe" -X compile estado_mpc_monolitico.tex
+Move-Item -Force estado_mpc_monolitico.pdf reporte_estado_mpc_monolitico.pdf
 ```
+
+El documento principal sólo tiene el preámbulo, el resumen y la bibliografía. Los capítulos
+están en `docs/estado/*.tex`. Tectonic nombra el PDF como el `.tex`, y la versión publicada se
+llama `reporte_estado_mpc_monolitico.pdf`: de ahí el último paso. El artículo de referencia
+del modelo (Liu et al., 2021) está en `docs/references/liuetal_smdfr.pdf`.
 
 Detalle conocido: con Tectonic, `\setmainfont` no admite `UprightFont=` junto con `Path=`
 (no encuentra la fuente), y babel en español choca con `\max` y `\min` dentro de los pies

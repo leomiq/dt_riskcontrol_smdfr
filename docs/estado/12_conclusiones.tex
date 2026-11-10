@@ -1,0 +1,82 @@
+%======================================================================
+\section{Conclusiones}\label{sec:conclusiones}
+%======================================================================
+
+\subsection{Respuestas a las preguntas}
+\begin{enumerate}[label=\textbf{Q\arabic*.}]
+  \item \textbf{¿Se puede resolver P0 con exactitud y en tiempo real?} Sí. La formulación
+        monolítica resuelve P0 en $\sim0.05$~s (NLP) o $\sim10$~ms (QP condensado), unas
+        $10^4$ veces más rápido que LJ y de forma reproducible.
+  \item \textbf{¿Es el óptimo global?} La solución es un mínimo local estricto y el único
+        óptimo hallado, y está demostradamente a menos del 2.3\,\% (1180~s) y del 11.4\,\%
+        (1161~s) del óptimo global. La evidencia indica que la brecha real es $\approx0$.
+  \item \textbf{¿Cuál método es mejor?} N3 y N2, empatados; N1 queda a 0.0026\,\%. LJ y GA
+        cuestan al menos un 28\,\% y un 43\,\% más que el óptimo global.
+  \item \textbf{¿El riesgo de pronóstico cambia la decisión?} No: su efecto sobre la PCT es
+        unas 100 veces menor que la autoridad del actuador.
+  \item \textbf{¿Las cotas del actuador son físicas?} No. Deben fijarse en kg/s, junto con una
+        rampa admisible.
+\end{enumerate}
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l r r Y@{}}\toprule
+Método & Tiempo por consulta & Costo en 1180~s & Garantía\\\midrule
+LJ corregido (mejor semilla) & $\approx800$~s & 0.313 & ninguna; depende de la semilla\\
+GA (mejor semilla) & $\approx615$~s & 0.349 & ninguna; depende de la semilla\\
+N3, NLP monolítico & 0.05~s & 0.24403 & mínimo local estricto; a $\le2.3$\,\% del óptimo global\\
+N2, QP iterado & 4 QP de 10~ms & 0.24403 & converge a un punto KKT de N3\\
+N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brecha dual $10^{-12}$)\\\bottomrule
+\end{tabularx}
+\caption{Resumen de los métodos en la consulta de 1180~s.}
+\end{table}
+
+\subsection{Lo que enseña este caso}
+\begin{enumerate}
+  \item \textbf{Conocer la estructura del problema vale más que la fuerza bruta.} Las
+        metaheurísticas tratan el modelo como caja negra, y eso tiene sentido cuando el costo es
+        discontinuo o ruidoso. En el horizonte del MPC, sin embargo, el costo es una función
+        suave, y escribir el modelo como ecuaciones permite usar derivadas exactas.
+  \item \textbf{La física explica la solución.} La función de transferencia muestra que el ACS
+        actúa a través de un integrador. Eso explica por qué la decisión óptima es saturar al
+        principio y luego seguir la referencia, y por qué el actuador tiene tan poca autoridad
+        en 12.5~s.
+  \item \textbf{Un modelo más simple puede bastar.} El QP con una sola linealización da
+        prácticamente la misma decisión que el modelo no lineal completo, en una fracción del
+        tiempo y con un certificado de optimalidad global para su propio problema.
+  \item \textbf{Resolver bien un problema no es lo mismo que resolver el problema correcto.}
+        La brecha de un solver dice si cumplió con su modelo. Para comparar decisiones hace
+        falta una vara común, el costo no lineal, y una cota inferior demostrada.
+  \item \textbf{Las garantías se construyen por capas}: condiciones locales, evidencia global
+        y, por último, una cota inferior rigurosa con aritmética de intervalos.
+  \item \textbf{Los supuestos heredados deben revisarse.} La cota del actuador en amperios
+        parecía un dato, y resultó ser un artefacto del modelo de la bomba.
+\end{enumerate}
+
+\subsection{Limitaciones}
+\begin{itemize}
+  \item Todo se demostró en dos consultas. Las conclusiones deben extenderse a las 61.
+  \item La certificación vale para P0 sobre el ROM. No dice nada sobre el desajuste entre el
+        ROM y el HRM, ni sobre el reactor real.
+  \item Las cotas del actuador usadas son las archivadas, sin base física.
+  \item La brecha certificada es conservadora, sobre todo en 1161~s.
+  \item El riesgo por fallas del ACS, que es el que podría cambiar la decisión, todavía no se
+        incorporó.
+\end{itemize}
+
+\subsection{Próximos pasos, por prioridad}
+\begin{enumerate}
+  \item \textbf{Fijar el actuador con el equipo}: rampa admisible, caudal máximo y si el ACS
+        repone inventario o impulsa el caudal primario. Es lo que más cambia los resultados: el
+        costo óptimo en 1161~s va de 3.1 a 48.4 según la cota y la rampa.
+  \item \textbf{Riesgo por fallas del ACS} (leo\_acer): SAA o MPC multietapa con no
+        anticipación sobre los modos de falla y reparación del DET. Es la fuente de
+        incertidumbre que podría mover la primera acción.
+  \item \textbf{Desajuste ROM--HRM} (leo\_asus): re-simular en el HRM las acciones del NLP.
+        Si el error es del orden de 1~K, es la incertidumbre que debería alimentar la
+        restricción probabilística.
+  \item \textbf{Recalibrar el pronóstico} y usar \code{N\_par}~$>1$ en el lazo: un pronóstico
+        sobreconfiado invalida cualquier restricción probabilística basada en él.
+  \item \textbf{Más consultas} (leo\_asus) y \textbf{lazo cerrado} sobre las 61 (F5).
+  \item \textbf{Ajustar la cota certificada} (paso 4b.5): partición por masa inyectada o modelo
+        de Taylor de segundo orden.
+\end{enumerate}

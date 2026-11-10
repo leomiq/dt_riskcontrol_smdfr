@@ -1,0 +1,307 @@
+%======================================================================
+\section{El reactor SMDFR y su física}\label{sec:reactor}
+%======================================================================
+Esta sección explica, desde cero, lo necesario para entender el modelo que usa el
+controlador: qué produce el calor en un reactor, cómo cambia la potencia, cómo viaja el calor
+hasta el refrigerante y cómo se resume todo en un sistema de ecuaciones diferenciales.
+
+\subsection{Qué hace un reactor nuclear}
+En un reactor de fisión, un neutrón choca con un núcleo pesado (uranio o plutonio), lo parte
+en dos fragmentos y libera energía (unos 200~MeV por fisión) y entre dos y tres neutrones
+nuevos. Si en promedio exactamente uno de esos neutrones provoca otra fisión, la reacción en
+cadena se mantiene estable y el reactor es \emph{crítico}. El número medio de fisiones que
+produce cada fisión se llama factor de multiplicación $k$:
+\begin{itemize}
+  \item $k=1$: reactor crítico, potencia constante;
+  \item $k>1$: supercrítico, la potencia crece;
+  \item $k<1$: subcrítico, la potencia decae.
+\end{itemize}
+En lugar de $k$ se usa la \textbf{reactividad} $\rho=(k-1)/k$, que vale cero en el estado
+crítico y es pequeña, del orden de $10^{-3}$, en las situaciones de interés. La energía de
+fisión aparece como calor en el combustible, y un fluido refrigerante la extrae y la lleva a
+donde se aprovecha~\cite{duderstadt1976}.
+
+\subsection{El concepto Dual Fluid y el SMDFR}
+El \emph{Dual Fluid Reactor} (DFR) fue propuesto como un reactor rápido de alta
+eficiencia~\cite{huke2015}. Pertenece a la IV~generación y combina ideas del reactor de sales
+fundidas y del reactor rápido refrigerado por metal líquido. Su rasgo distintivo es que usa
+\textbf{dos fluidos con funciones separadas}: uno es el combustible y el otro, el
+refrigerante. Así, cada uno puede optimizarse para su función. El SMDFR es su versión modular
+pequeña, de $P_0=100$~MW térmicos, estudiada por Liu, Luo y Macián-Juan~\cite{liu2021}. Su
+comportamiento transitorio también fue analizado con modelos unidimensionales por Wang et
+al.~\cite{wang2021}. El reactor tiene \textbf{tres circuitos} (figura~\ref{fig:smdfr}):
+\begin{enumerate}
+  \item \textbf{Combustible}: una sal fundida de tetracloruro de uranio y de plutonio, que
+        circula por 1027 tubos de carburo de silicio. Su caudal es bajo (327.7~kg/s) y sirve
+        para reprocesar el combustible en línea, no para extraer calor.
+  \item \textbf{Refrigerante primario}: plomo líquido, con un caudal de 5550.5~kg/s. Rodea
+        los tubos de combustible y se lleva el calor de fisión. El plomo tiene una
+        temperatura de ebullición muy alta, unos 2000~K, y por eso el circuito puede operar a
+        presión casi atmosférica~\cite{oecd2015}.
+  \item \textbf{Refrigerante secundario}: un segundo circuito de plomo recibe el calor y lo
+        entrega a su uso final: electricidad, producción de hidrógeno o desalación.
+\end{enumerate}
+
+\begin{figure}[H]\centering
+\resizebox{0.95\linewidth}{!}{%
+\begin{tikzpicture}[
+  lbl/.style={font=\small, align=center, text=ink},
+  sm/.style={font=\footnotesize, align=center, text=black!70},
+  arr/.style={-{Stealth[length=2.2mm]}, line width=1.1pt}]
+% tank
+\draw[line width=1pt, draw=ink, fill=yellow!12, rounded corners=3pt] (0,0) rectangle (7.4,7.2);
+% core zones
+\fill[orange!25] (1.3,1.2) rectangle (3.9,1.6);
+\fill[orange!45] (1.3,1.6) rectangle (3.9,5.6);
+\fill[orange!25] (1.3,5.6) rectangle (3.9,6.0);
+\draw[ink, line width=0.6pt] (1.3,1.2) rectangle (3.9,6.0);
+\foreach \x in {1.55,1.85,...,3.7} \draw[red!60!black, line width=0.9pt] (\x,1.2) -- (\x,6.0);
+\node[sm, anchor=west] at (4.0,1.4) {zona de distribución};
+\node[sm, anchor=west] at (4.0,3.6) {zona activa\\(1027 tubos)};
+\node[sm, anchor=west] at (4.0,5.8) {zona de recolección};
+% fuel loop
+\draw[arr, red!60!black] (2.6,6.0) -- (2.6,6.8) -- (-1.6,6.8) -- (-1.6,0.6) -- (2.6,0.6) -- (2.6,1.2);
+\node[lbl, fill=white, draw=red!60!black, rounded corners=2pt] at (-1.6,3.6) {sal fundida\\(combustible)\\327.7 kg/s\\[2pt] reprocesamiento};
+% coolant
+\draw[arr, blue!70!black] (0.6,1.0) -- (0.6,6.5);
+\draw[arr, blue!70!black] (7.1,6.5) -- (7.1,1.0);
+\node[lbl] at (3.7,0.3) {\textbf{plomo primario} 5550.5 kg/s};
+% heat exchanger to secondary
+\draw[line width=0.8pt, draw=teal!70!black, fill=teal!10] (8.0,5.2) rectangle (9.9,6.6);
+\node[sm] at (8.95,5.9) {intercambiador\\(plomo\\secundario)};
+\draw[arr, teal!70!black] (7.4,5.9) -- (8.0,5.9);
+\draw[arr, teal!70!black] (9.9,5.9) -- (10.6,5.9) node[right, sm]{al uso\\final};
+% LOCA and ACS
+\draw[arr, black!70, dashed] (7.4,2.9) -- (8.3,2.9) node[right, sm, text=black]{\textbf{fuga} $\dot m_{\rm leak}<0$\\(LOCA)};
+\draw[line width=0.8pt, draw=ink, fill=soft] (8.0,0.8) rectangle (9.9,1.8);
+\node[sm, text=ink] at (8.95,1.3) {ACS: bomba\\MHD};
+\draw[arr, accent] (8.0,1.3) -- (7.4,1.3);
+\node[sm, anchor=west] at (10.0,1.3) {repone plomo:\\$\dot m_{\rm ACS}(u)$};
+\end{tikzpicture}}
+\caption{Esquema del SMDFR (adaptado de la descripción de Liu et al.~\cite{liu2021}). La sal
+fundida (rojo) circula por los tubos del núcleo con un caudal bajo, sólo para reprocesarse.
+El plomo primario (azul) rodea los tubos y extrae el calor, que entrega al circuito de plomo
+secundario. En el accidente que estudia este trabajo, el circuito primario pierde plomo por
+una fuga, y el sistema auxiliar (ACS) lo repone con una bomba magnetohidrodinámica.}
+\label{fig:smdfr}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}Y r@{}}\toprule
+Parámetro de diseño & Valor\\\midrule
+Potencia térmica nominal $P_0$ & 100~MW\\
+Zona activa, diámetro $\times$ altura & $0.95\times2.0$~m\\
+Zonas de distribución y de recolección & $0.95\times0.2$~m cada una\\
+Tanque, diámetro $\times$ altura & $1.65\times3.4$~m\\
+Tubos de combustible; paso & 1027; 0.025~m\\
+Densidad lineal de potencia media & 609~W/cm\\
+Combustible: temperatura de entrada / salida & 1300 / 1300~K\\
+Refrigerante (plomo): temperatura de entrada / salida & 973 / 1100~K\\
+Caudal de combustible / de refrigerante & 327.7 / 5550.5~kg/s\\
+Calor específico del plomo $c_{p,c}$ & 140.2~J/(kg\,K)\\\bottomrule
+\end{tabularx}
+\caption{Parámetros principales del SMDFR (Liu et al.~\cite{liu2021}, tablas 1 y 3).}
+\end{table}
+
+\begin{ejemplo}[¿Cuánto calor se lleva el plomo?]
+Con la potencia nominal y el salto de temperatura de diseño, el balance de energía del
+refrigerante es $P_0\approx\mdot_c\,c_{p,c}\,(T_{\rm sal}-T_{\rm ent})=5550.5\times140.2\times(1100-973)
+\approx98.8$~MW: el plomo primario se lleva prácticamente toda la potencia. Si el caudal se
+redujera a la mitad con la misma potencia, el salto de temperatura del plomo se duplicaría.
+Ése es, en esencia, el problema del accidente que se estudia (sección~\ref{sec:accidente}).
+\end{ejemplo}
+
+\subsection{Neutrones y potencia: la cinética puntual}
+\paragraph{Neutrones inmediatos y retardados.} Casi todos los neutrones de fisión nacen en el
+mismo instante de la fisión: son los neutrones \emph{inmediatos}. Una fracción pequeña,
+$\beta=3.02\cdot10^{-3}$ en el SMDFR, nace segundos después, cuando decaen ciertos fragmentos
+de fisión llamados \emph{precursores}. Esos son los neutrones \emph{retardados}. Los
+precursores se agrupan en seis familias según su vida media, con constantes de decaimiento
+$\lambda_i$ que van de $0.0127$ a $7.02$~s$^{-1}$.
+
+Aunque son pocos, los neutrones retardados hacen que un reactor sea controlable. El tiempo
+medio entre dos generaciones de neutrones inmediatos es $\Lambda=1.05\cdot10^{-6}$~s. Si sólo
+existieran ellos, una reactividad de $10^{-3}$ haría crecer la potencia con una constante de
+tiempo del orden de $\Lambda/\rho\approx1$~ms, demasiado rápido para cualquier sistema
+mecánico. Con los retardados, mientras $\rho<\beta$, la constante de tiempo pasa a ser del
+orden de segundos o más~\cite{hetrick1971}.
+
+\paragraph{Las ecuaciones de cinética puntual.} Si se supone que la forma espacial del flujo
+de neutrones no cambia, sólo su amplitud, la población de neutrones $N(t)$ y las
+concentraciones de precursores $C_i(t)$ cumplen
+\[
+\dot N=\frac{\rho-\beta}{\Lambda}N+\sum_{i=1}^{6}\lambda_iC_i,\qquad
+\dot C_i=\frac{\beta_i}{\Lambda}N-\lambda_iC_i,
+\]
+con $\beta=\sum_i\beta_i$. La primera ecuación dice que los neutrones aumentan por las
+fisiones netas (término $(\rho-\beta)N/\Lambda$) y por el decaimiento de los precursores. La
+segunda, que los precursores se crean en una fracción $\beta_i$ de las fisiones y
+desaparecen al decaer. La potencia es proporcional a la población, $P=P_0N/N_0$.
+
+\paragraph{La deriva de precursores, propia de los reactores de combustible líquido.} En el
+SMDFR el combustible circula, así que una parte de los precursores sale del núcleo antes de
+decaer y emite sus neutrones afuera, donde no contribuyen a la reacción en cadena. Se modela
+con dos depósitos (figura~4 de~\cite{liu2021}): $C_i$ dentro del núcleo y $C^e_i$ afuera. Los
+precursores salen con tasa $\lambda_c=1/\tau_c$ y vuelven con tasa $\lambda_e=1/\tau_e$, donde
+$\tau_c=5.43$~s y $\tau_e=10$~s son los tiempos de residencia dentro y fuera del núcleo:
+\begin{gather*}
+\dot N=\tfrac{\rho-\beta}{\Lambda}N+\textstyle\sum_i\lambda_iC_i,\qquad
+\dot C_i=\tfrac{\beta_i}{\Lambda}N-(\lambda_i+\lambda_c)C_i+\lambda_eC^e_i,\qquad
+\dot C^e_i=\lambda_cC_i-(\lambda_i+\lambda_e)C^e_i .
+\end{gather*}
+
+\begin{proposicion}[Reactividad estacionaria por la deriva de precursores]\label{prop:rho0}
+En estado estacionario ($\dot N=\dot C_i=\dot C^e_i=0$), la reactividad necesaria para
+mantener la criticidad es
+\[
+\rho_0=\beta-\sum_{i=1}^{6}\beta_i\,\frac{\lambda_i}{\lambda_i+\lambda_c-\dfrac{\lambda_c\lambda_e}{\lambda_i+\lambda_e}}>0 .
+\]
+\end{proposicion}
+\begin{proof}
+De $\dot C^e_i=0$ se obtiene $C^e_i=\lambda_cC_i/(\lambda_i+\lambda_e)$. Sustituyendo en
+$\dot C_i=0$: $\tfrac{\beta_i}{\Lambda}N=\big(\lambda_i+\lambda_c-\tfrac{\lambda_c\lambda_e}{\lambda_i+\lambda_e}\big)C_i$.
+Llevando $C_i$ a $\dot N=0$ resulta $(\beta-\rho_0)N/\Lambda=\sum_i\lambda_iC_i$, de donde sale
+la fórmula. Cada fracción es menor que uno, porque el denominador supera a $\lambda_i$, así que
+$\rho_0>0$. Simplificando el denominador,
+$\lambda_i/\big(\lambda_i+\lambda_c-\tfrac{\lambda_c\lambda_e}{\lambda_i+\lambda_e}\big)
+=(\lambda_i+\lambda_e)/(\lambda_i+\lambda_e+\lambda_c)$, que es la forma de la ecuación (5) de
+Liu et al.~\cite{liu2021}.
+\end{proof}
+\noindent Con los datos del SMDFR, la fórmula da $\rho_0=1.1105\cdot10^{-3}$, que coincide con
+el valor $1.11\cdot10^{-3}$ del modelo. Esto es aproximadamente el 37\,\% de $\beta$: el
+reactor debe tener una reactividad de reserva de ese tamaño sólo para compensar los
+precursores que decaen fuera del núcleo.
+
+\paragraph{Realimentación por temperatura.} La reactividad no es una constante: depende de las
+temperaturas, porque al calentarse el combustible y el refrigerante cambian su densidad y sus
+secciones eficaces~\cite{duderstadt1976}. El modelo usa una relación lineal:
+\[
+\rho=\rho_0+\alpha_f\big(T_f-\bar T_{f0}\big)+\alpha_c\big(T_c-\bar T_{c0}\big)+\rho_{\rm ext},
+\]
+con $\alpha_f=-2.08\cdot10^{-4}$~K$^{-1}$ para el combustible y
+$\alpha_c=-8.28\cdot10^{-6}$~K$^{-1}$ para el refrigerante. Los dos coeficientes son negativos:
+si el núcleo se calienta, la reactividad baja y la potencia también. Es una realimentación
+\emph{estabilizante}.
+
+\begin{ejemplo}[Peso de la realimentación del combustible]
+Un aumento de 1~K en el combustible aporta $\Delta\rho=-2.08\cdot10^{-4}$, que es el 7\,\% de
+$\beta$. Uno de 10~K aporta el 69\,\% de $\beta$. Por eso, en el SMDFR, la temperatura del
+combustible gobierna en buena medida la potencia. Liu et al.\ encontraron precisamente que
+$\alpha_f$ es el parámetro incierto más influyente sobre el comportamiento del
+reactor~\cite{liu2021}.
+\end{ejemplo}
+
+\subsection{Calor: del combustible al refrigerante}
+\paragraph{El camino del calor.} El calor nace en el combustible, atraviesa la pared del tubo y
+pasa al plomo, que lo transporta fuera del núcleo (figura~\ref{fig:calor}). En un modelo
+\emph{concentrado} (\emph{lumped}), cada material se representa por una temperatura media, y
+cada temperatura cambia según un balance de energía: masa $\times$ calor específico $\times$
+derivada de la temperatura $=$ calor que entra $-$ calor que sale~\cite{incropera2007,todreas2011}.
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  nd/.style={draw=ink, line width=0.7pt, rounded corners=2pt, minimum width=24mm, minimum height=12mm, align=center, font=\small},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.8pt, draw=ink},
+  lab/.style={font=\footnotesize, text=black!70, align=center}]
+\node[nd, fill=orange!30] (f) at (0,0) {combustible\\$T_f$, $M_f$};
+\node[nd, fill=black!10] (w) at (5.6,0) {pared\\$T_w$, $M_w$};
+\node[nd, fill=blue!15] (c) at (11.2,0) {plomo\\$T_c$, $M$};
+\draw[arr] (f) -- node[lab, above]{$h_{fw}A_{fw}(T_f-T_w)$} (w);
+\draw[arr] (w) -- node[lab, above]{$h_{wc}A_{wc}(T_w-T_c)$} (c);
+\draw[arr] (0,1.7) node[lab, above]{fisión: potencia $P$} -- (f.north);
+\draw[arr] (-0.6,-1.9) node[lab, below]{sal que entra y sale:\\$\dot m_fc_{p,f}(T_{in,f}-T_{e,f})$} -- ([xshift=-6mm]f.south);
+\draw[arr] ([xshift=6mm]c.south) -- (11.8,-1.9) node[lab, below]{el plomo se lleva calor:\\$\dot m_cc_{p,c}(T_{e,c}-T_{in,c})$};
+\end{tikzpicture}}
+\caption{El camino del calor en un nodo. Cada flecha es un flujo de calor. Entre dos
+materiales, el flujo es proporcional a la diferencia de temperaturas, con un coeficiente de
+transferencia $h$ por un área $A$. El plomo, además, transporta calor fuera del nodo con su
+caudal.}
+\label{fig:calor}
+\end{figure}
+
+\paragraph{Por qué importa el caudal.} El coeficiente de transferencia de calor entre la
+pared y un fluido que fluye por un conducto crece con el caudal. En flujo turbulento de
+fluidos ordinarios, la correlación de Dittus--Boelter da un número de Nusselt proporcional a
+$\mathrm{Re}^{0.8}$~\cite{incropera2007}. Para metales líquidos, cuyo número de Prandtl es muy
+bajo, se usan correlaciones del tipo $\mathrm{Nu}=7+0.025\,\mathrm{Pe}^{0.8}$, con el mismo
+exponente sobre el número de Péclet~\cite{todreas2011}. El modelo adopta la ley de potencia
+pura como aproximación:
+\[
+h_{wc}(\mdot_c)=h_{wc0}\Big(\frac{\mdot_c}{5550}\Big)^{0.8}.
+\]
+Si el caudal baja al 60\,\%, $h_{wc}$ baja al $0.6^{0.8}\approx66$\,\%: el plomo extrae peor el
+calor de la pared, y la pared se calienta.
+
+\subsection{El modelo de 12 nodos y su versión reducida}
+\paragraph{El modelo de alta resolución (HRM).} Liu et al.\ dividen el núcleo en 12 nodos de
+0.2~m: el nodo~1 es la zona de distribución, los nodos 2 a 11 la zona activa y el nodo~12 la
+de recolección. En cada nodo hay tres temperaturas, combustible, pared y refrigerante, con
+los balances de la figura~\ref{fig:calor}, y el plomo que sale de un nodo entra al siguiente.
+Los parámetros vienen de un modelo tridimensional acoplado: neutrónica con Serpent y la
+biblioteca ENDF/B-VII, y termohidráulica con COMSOL~\cite{liu2021}. En este proyecto, ese
+modelo de 12 nodos, implementado en Simulink, es la \textbf{planta}: hace las veces del
+reactor real.
+
+\paragraph{El modelo reducido (ROM).} Para predecir dentro del controlador se usa una versión
+más simple: \textbf{un solo nodo por material}. Las masas y las áreas son la suma de las de los
+12 nodos; por ejemplo, $M_c=10\times770.5+2\times219.9=8144.8$~kg y
+$A_{fw}=10\times9.0+2\times13.6=117.2$~m$^2$. Los coeficientes de transferencia son el
+promedio de los de las tres zonas. Su estado tiene 17 componentes (tabla~\ref{tab:estado}):
+\[
+x=(N,\ C_{1..6},\ C^e_{1..6},\ T_f,\ T_w,\ T_c,\ \Delta M).
+\]
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y r@{}}\toprule
+Estado & Significado & Valor en $t_q=1180$~s\\\midrule
+$N$ & Población de neutrones (proporcional a la potencia) & $1.73\cdot10^{13}$ ($P=115$~MW)\\
+$C_{1..6}$ & Precursores dentro del núcleo, 6 grupos & $10^{15}$--$10^{16}$\\
+$C^e_{1..6}$ & Precursores fuera del núcleo & $10^{15}$--$10^{16}$\\
+$T_f$ & Temperatura media del combustible & 1265.4~K\\
+$T_w$ & Temperatura media de la pared de los tubos & 1105.6~K\\
+$T_c$ & Temperatura media del plomo & 1049.0~K\\
+$\Delta M$ & Inventario de plomo ganado (negativo: perdido) & $-3230$~kg\\\bottomrule
+\end{tabularx}
+\caption{Las 17 variables de estado del ROM. Los órdenes de magnitud van de $10^3$ a
+$10^{16}$, y eso obliga a escalar las variables en la optimización
+(sección~\ref{sec:niveles}).}
+\label{tab:estado}
+\end{table}
+
+\paragraph{Ecuaciones completas del ROM.} La cinética es la de deriva de precursores. La
+termohidráulica, con un nodo promedio cuya temperatura de salida es $T_e=2T-T_{in}$, es
+\begin{gather*}
+M_fc_{pf}\dot T_f=P+\mdot_fc_{pf}(T_{in,f}-T_{e,f})-h_{fw}A_{fw}(T_f-T_w),\\
+M_wc_{pw}\dot T_w=h_{fw}A_{fw}(T_f-T_w)-h_{wc}(\mdot_c)A_{wc}(T_w-T_c),\\
+(M_c+\Delta M)\,c_{pc}\dot T_c=\mdot_cc_{pc}(T_{in,c}-T_{e,c})+h_{wc}(\mdot_c)A_{wc}(T_w-T_c).
+\end{gather*}
+El inventario y el caudal primario cumplen
+\[
+\dot{\Delta M}=\mdot_{\rm leak}(t)+\mdot_{\rm ACS},\qquad
+\mdot_c=\mdot_{\rm nom}\frac{M_c+\Delta M}{M_c}.
+\]
+La segunda relación dice que el caudal del circuito es proporcional al inventario de plomo:
+si queda el 60\,\% del plomo, circula el 60\,\% del caudal nominal.
+
+\paragraph{La salida: la PCT estimada.} El ROM da la temperatura \emph{media} de la pared,
+pero la seguridad depende de la temperatura \emph{máxima}, que está en el nodo más caliente
+del HRM. La diferencia se corrige con un polinomio de grado 4 ajustado por regresión a los
+datos del HRM:
+\[
+\hat y=T_w+p_4(\mdot_{\rm leak}+\mdot_{\rm ACS}+5550)+0.4 .
+\]
+En las consultas, $T_w\approx1106$~K y $p_4\approx73.6$~K, así que $\hat y\approx1180$~K.
+
+\paragraph{Forma compacta.} Todo lo anterior se escribe como un sistema
+\[
+\dot x=f(x,d,u),\qquad \hat y=h(x,d,u),
+\]
+donde $d=\mdot_{\rm leak}$ es la perturbación (la fuga) y $u=\mdot_{\rm ACS}$ es la decisión del
+controlador. Toda la sección~\ref{sec:niveles} trabaja con esta forma.
+
+\takeaway{\textbf{Para recordar.} El ROM es un sistema de 17 ecuaciones diferenciales
+ordinarias no lineales. Los neutrones responden en milisegundos y las temperaturas, en
+segundos. El caudal del ACS entra \emph{sólo} en el inventario $\Delta M$: no enfría
+directamente, sino que aumenta la cantidad de plomo, eso aumenta el caudal primario y eso
+mejora la extracción de calor.}

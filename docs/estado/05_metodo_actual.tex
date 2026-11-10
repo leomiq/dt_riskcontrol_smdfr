@@ -1,0 +1,275 @@
+%======================================================================
+\section{El método actual: gemelo digital con árbol de eventos y metaheurística}\label{sec:actual}
+%======================================================================
+Esta sección describe lo que el método del proyecto hace hoy, antes de los cambios que
+propone este documento. Un \emph{gemelo digital} es un modelo que corre en paralelo con la
+planta, alimentado por sus mediciones, y que se usa para predecir y decidir. Aquí tiene
+cuatro piezas: un pronóstico de la fuga, un predictor con fallas del ACS, un optimizador y una
+evaluación de riesgo (figura~\ref{fig:arquitectura}).
+
+\subsection{Arquitectura del gemelo digital}
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={draw=accent, line width=0.6pt, rounded corners=2pt, fill=soft, align=center,
+              font=\small, minimum height=13mm, text width=30mm, inner sep=2pt},
+  plant/.style={draw=ink, line width=0.8pt, rounded corners=2pt, fill=white, align=center,
+              font=\small, minimum height=13mm, text width=30mm},
+  post/.style={draw=black!50, dashed, rounded corners=2pt, align=center, font=\small,
+              minimum height=11mm, text width=34mm},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink},
+  lab/.style={font=\footnotesize, text=black!70, align=center, inner sep=1.5pt}]
+\node[plant] (hrm) at (0,0) {\textbf{Planta}\\HRM de 12 nodos\\(LOCA en curso)};
+\node[box] (lstm) at (4.8,1.9) {\textbf{Pronóstico}\\BiLSTM con\\MC-dropout};
+\node[box, text width=34mm] (det) at (9.6,0) {\textbf{Predictor (DET)}\\ROM + fallas\\del ACS};
+\node[box] (opt) at (15.0,0) {\textbf{Optimizador}\\LJ o GA:\\minimiza P0};
+\node[plant] (pump) at (4.8,-2.6) {\textbf{Actuador}\\bomba MHD del ACS};
+\node[post] (psm) at (9.6,-4.4) {\textbf{Posprocesamiento}\\IS-MCDET $\Rightarrow$ PSM};
+\draw[arr] (hrm.north) |- node[lab, pos=0.75, above]{fuga y $T_{e,c}$ medidas} (lstm.west);
+\draw[arr] (lstm.east) -| node[lab, pos=0.3, above]{pronóstico $\hat d_{1..K}$} (det.north);
+\draw[arr] (hrm.east) -- node[lab, above]{estado $\hat x(t_q)$} (det.west);
+\draw[arr] (opt.north) |- ++(0,1.0) -| node[lab, pos=0.25, above]{candidato $u_{1..K}$} ([xshift=8mm]det.north);
+\draw[arr] (det.east) -- node[lab, above]{costo $J(u)$} (opt.west);
+\draw[arr] (opt.south) |- node[lab, pos=0.25, right]{$u_1^\star$} (pump.east);
+\draw[arr] (pump.west) -| node[lab, pos=0.25, below]{$\mdot_{\rm ACS}$} (hrm.south);
+\draw[arr, dashed, draw=black!55] (det.south) -- node[lab, right, pos=0.75]{árboles de las 61 consultas} (psm.north);
+\end{tikzpicture}}
+\caption{El lazo del gemelo digital. En cada consulta $t_q$ (cada 0.5~s entre 1160 y 1190~s),
+el optimizador propone secuencias de caudal, el predictor las evalúa simulando el árbol de
+eventos y se aplica la primera acción de la mejor. El riesgo (PSM) se calcula después, en
+el posprocesamiento.}
+\label{fig:arquitectura}
+\end{figure}
+
+\subsection{El pronóstico de la fuga: una red BiLSTM con MC-dropout}
+\paragraph{El problema.} El controlador necesita la fuga futura $\hat d_1,\dots,\hat d_K$, que no
+se conoce. Se pronostica a partir de su historia reciente.
+
+\paragraph{La red.} Una red neuronal recurrente procesa una serie de tiempo paso a paso,
+manteniendo una memoria interna. Las redes LSTM (\emph{long short-term memory}) añaden
+compuertas que deciden qué recordar y qué olvidar, lo que les permite capturar dependencias
+largas~\cite{hochreiter1997}. Una red \emph{bidireccional} (BiLSTM) recorre la ventana en los
+dos sentidos. La red del proyecto tiene 2 capas de 32 unidades en cada sentido y una capa de
+salida de 64 a 10 a 2 neuronas. Recibe las últimas 200 muestras de la fuga medida y de la
+temperatura de salida del refrigerante, normalizadas, y devuelve la fuga pronosticada.
+
+\paragraph{La incertidumbre: MC-dropout.} El \emph{dropout} apaga al azar una fracción de las
+neuronas durante el entrenamiento. Si se mantiene activo también al predecir, cada
+inferencia da un resultado distinto. Gal y Ghahramani mostraron que el conjunto de esas
+predicciones aproxima la distribución predictiva de una red bayesiana~\cite{gal2016}. Repitiendo
+la inferencia $N_{\rm par}$ veces se obtiene un \emph{ensamble} de trayectorias de fuga.
+
+\paragraph{¿Por qué 59 trayectorias?} El diseño del proyecto usa $N_{\rm par}=59$, la misma
+cantidad de corridas que Liu et al.\ para cuantificar incertidumbre~\cite{liu2021}. El número
+viene de la regla de Wilks para límites de tolerancia~\cite{wilks1941,glaeser2008}.
+
+\begin{proposicion}[Regla de Wilks de primer orden, unilateral]\label{prop:wilks}
+Sea $Y_1,\dots,Y_N$ una muestra independiente de una variable continua $Y$ y $q_{0.95}$ su
+cuantil 95\,\%. El máximo de la muestra supera a $q_{0.95}$ con probabilidad
+$1-0.95^N$. Esa probabilidad es al menos 0.95 si y sólo si $N\ge59$.
+\end{proposicion}
+\begin{proof}
+Cada $Y_i$ queda por debajo de $q_{0.95}$ con probabilidad 0.95, y por independencia todos
+quedan por debajo con probabilidad $0.95^N$. El máximo supera el cuantil en el caso
+complementario. La condición $1-0.95^N\ge0.95$ equivale a $N\ge\ln0.05/\ln0.95=58.4$; el
+primer entero es 59, con $0.95^{59}=0.0485$.
+\end{proof}
+\noindent Con 59 trayectorias, el valor más alto del ensamble es entonces una cota superior del
+95\,\% de los casos con un 95\,\% de confianza (criterio 95/95). En P0 se usa la mediana del
+ensamble. El lazo archivado, sin embargo, corría con $N_{\rm par}=1$: decidía con una sola
+realización aleatoria (sección~\ref{sec:riesgo}).
+
+\subsection{El predictor: árbol dinámico de eventos (DET)}
+\paragraph{Idea.} Un árbol de eventos clásico enumera de antemano las secuencias de fallas
+posibles. Un \emph{árbol dinámico de eventos} las genera durante la simulación: cuando el
+sistema llega a un punto en el que un componente puede fallar o repararse, la simulación se
+ramifica, y cada rama continúa con su propia física~\cite{hakobyan2008}. MCDET combina esa idea
+con muestreo de Monte Carlo de las tasas y de los instantes de transición~\cite{kloos2006}.
+
+\paragraph{En este proyecto.} El ACS tiene 5 componentes. Cada componente $j$ puede fallar con
+tasa $\lambda^{\rm A}_j$ y repararse con tasa $\mu^{\rm A}_j$. El estado del ACS es un par
+(demanda, disponibilidad), que da tres modos: sin demanda; demandado y disponible; demandado y
+fallado. Cuando la PCT supera 1180~K el ACS se demanda, y a partir de ahí las transiciones de
+falla y reparación ramifican la trayectoria (figura~\ref{fig:det}):
+\begin{itemize}
+  \item el nodo raíz simula el ROM desde la consulta;
+  \item en cada instante de transición nace un nodo hijo, que continúa la simulación con el
+        nuevo modo del ACS (si falla, deja de inyectar);
+  \item cada juego de tasas remuestreadas produce un árbol, y los árboles de una consulta
+        forman su \emph{bosque}.
+\end{itemize}
+Cada nodo es una simulación del ROM en Simulink, que arranca del estado final de su nodo padre.
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  nd/.style={draw=ink, line width=0.6pt, rounded corners=2pt, fill=white, align=center, font=\footnotesize, minimum height=9mm, text width=26mm},
+  ok/.style={nd, fill=soft, draw=accent},
+  bad/.style={nd, fill=orange!15},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink},
+  lab/.style={font=\scriptsize, text=black!70, align=center}]
+\node[nd] (r) at (0,0) {raíz: ROM desde $t_q$\\(ACS sin demanda)};
+\node[ok] (a) at (5.6,1.5) {ACS demandado\\y disponible};
+\node[bad] (b) at (5.6,-1.5) {ACS demandado\\y fallado};
+\node[ok] (c) at (11.0,-0.8) {reparado:\\vuelve a inyectar};
+\node[bad] (d) at (11.0,-2.4) {sigue fallado};
+\node[bad] (e) at (11.0,2.4) {falla después};
+\node[ok] (f) at (11.0,0.8) {sigue disponible};
+\draw[arr] (r.east) -- node[lab, above, sloped, pos=0.62]{demanda: éxito} (a.west);
+\draw[arr] (r.east) -- node[lab, below, sloped, pos=0.62]{demanda: falla} (b.west);
+\draw[arr] (a.east) -- node[lab, above, sloped, pos=0.45]{falla ($\lambda^{\rm A}$)} (e.west);
+\draw[arr] (a.east) -- (f.west);
+\draw[arr] (b.east) -- node[lab, above, sloped, pos=0.45]{reparación ($\mu^{\rm A}$)} (c.west);
+\draw[arr] (b.east) -- (d.west);
+\draw[black!40, dashed] (-1.3,-3.4) -- (12.3,-3.4);
+\node[lab] at (5.5,-3.7) {cada caja es una simulación del ROM que arranca del estado final de su padre};
+\end{tikzpicture}}
+\caption{Esquema de un árbol dinámico de eventos para el ACS. Las ramas nacen cuando el ACS se
+demanda y cuando sus componentes fallan o se reparan; las probabilidades de cada rama
+dependen de las tasas $\lambda^{\rm A}$ y $\mu^{\rm A}$. En las consultas estudiadas, ninguna
+transición cae dentro del horizonte de 12.5~s y el árbol se reduce a la raíz.}
+\label{fig:det}
+\end{figure}
+
+\subsection{El problema de optimización del MPC actual (P0-DET)}
+Para un candidato $u=(u_1,\dots,u_K)$, expresado en corrientes y convertido en caudal con el
+mapa de la bomba, $\mdot_k=f_{\rm ACS}(u_k)$, la función \code{fitness\_cost.m} reconstruye la
+PCT de \emph{todos} los nodos del árbol y calcula
+\[
+J_{\rm DET}(u)=\sum_{j\in\mathcal I(u)}\big(\hat y_j-y_{\rm ref}\big)^2
++\lambda_m\sum_{k=1}^{K-1}\big[|\mdot_{k+1}-\mdot_k|-\Delta\mdot\big]_+^2
++\lambda_{\rm pct}\sum_{j\in\mathcal I(u)}\big[\hat y_j-U_y\big]_+^2,
+\]
+sujeto a $u_{\rm min}\le u_k\le u_{\rm max}$. Aquí $\mathcal I(u)$ es el conjunto de muestras de
+PCT de todos los nodos del árbol, concatenadas. Ese conjunto depende de $u$, porque las ramas
+dependen de cuándo la PCT cruza el umbral. Hay una variante opcional que penaliza el margen
+determinista $\mathrm{DSM}_j=(\hat y_j-y_{\rm ref})/(U_y-y_{\rm ref})$ por encima de un umbral.
+El MPC aplica sólo $u_1^\star$ y repite en la consulta siguiente. Cuando el árbol queda en la
+raíz, $J_{\rm DET}$ coincide con el costo de P0 de la sección~\ref{sec:modelo}.
+
+\subsection{Por qué se usaba una metaheurística}
+Una \emph{metaheurística} es un método de búsqueda general que sólo necesita poder
+\emph{evaluar} el costo, sin derivadas ni fórmulas. Era la opción natural por cuatro razones:
+\begin{enumerate}
+  \item \textbf{Caja negra sin derivadas.} Evaluar $J_{\rm DET}$ exige simular el árbol en
+        Simulink, con funciones S compiladas, y no hay gradientes disponibles.
+  \item \textbf{Costo discontinuo.} El número de nodos y sus instantes de ramificación cambian
+        con $u$. $J_{\rm DET}$ es continuo sólo por tramos, y un método de gradiente podría
+        fallar en los saltos.
+  \item \textbf{Ruido.} El remuestreo de tasas y el MC-dropout hacen que dos evaluaciones del
+        mismo $u$ puedan diferir.
+  \item \textbf{Paralelismo.} Los candidatos se evalúan de forma independiente
+        (\code{parfor}).
+\end{enumerate}
+
+\paragraph{Luus--Jaakola (LJ).} Es una búsqueda aleatoria con región de búsqueda que se
+contrae~\cite{luus1973}:
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small
+\textbf{Algoritmo LJ} (\code{luus\_jaakola\_det.m}; configuración: $R=24$ candidatos por
+iteración, $M=5$ iteraciones por pasada, $\gamma=0.9$).
+\begin{enumerate}
+  \item Partir de un candidato $u^{\rm mejor}$ y de un radio inicial $r_0$ por variable.
+  \item En cada pasada $p=1,2,\dots$:
+    \begin{enumerate}
+      \item fijar el radio: $r=\min\big(|u^{\rm mejor}-u^{\rm mejor}_{\rm anterior}|,\ r_0\gamma^{p-1}\big)$, es
+            decir, seguir el movimiento del óptimo, pero con un techo que decrece
+            geométricamente;
+      \item repetir $M$ veces: sortear $R$ candidatos $u=u^{\rm mejor}+r\odot\xi$, con $\xi$
+            uniforme en $[-1,1]^{26}$, recortados a las cotas; evaluar $J_{\rm DET}$ de cada
+            uno, en paralelo y con una simulación del árbol por candidato; si el mejor mejora,
+            reemplazar $u^{\rm mejor}$, y si no, contraer el radio, $r\leftarrow\gamma\,r$.
+    \end{enumerate}
+  \item Detenerse cuando 5 pasadas seguidas mejoran el costo menos del 0.1\,\%.
+\end{enumerate}
+Cada iteración cuesta $R=24$ simulaciones y cada pasada, $M\times R=120$. En la consulta de
+1180~s, la búsqueda se detuvo tras 6 pasadas: $1+6\times120=721$ evaluaciones, unos
+800~s.}}
+
+\paragraph{Algoritmo genético (GA).} Imita la selección natural~\cite{goldberg1989}:
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small
+\textbf{Algoritmo GA} (\code{ga\_det.m}; población 20, 20 generaciones).
+\begin{enumerate}
+  \item Crear 20 secuencias de corriente perturbando al azar el candidato inicial, y evaluar
+        su costo.
+  \item En cada generación, crear 20 hijos:
+    \begin{enumerate}
+      \item elegir dos padres por \emph{ruleta}, con probabilidad proporcional a $1/(1+J)$;
+      \item con probabilidad 0.8, cruzarlos: cada uno de los 26 genes viene de uno u otro padre
+            al azar;
+      \item mutar cada gen con probabilidad 0.3, reemplazándolo por un valor uniforme entre
+            las cotas;
+      \item conservar sin cambios al mejor individuo (elitismo) y evaluar la nueva población.
+    \end{enumerate}
+  \item Devolver el mejor individuo encontrado.
+\end{enumerate}
+Cada consulta exige $20+20\times20=420$ evaluaciones, unos 615~s.}}
+
+\medskip
+\noindent Los dos métodos son robustos y fáciles de paralelizar, pero no garantizan encontrar el
+óptimo. Su resultado cambia con la semilla aleatoria, y cuestan cientos de simulaciones por
+consulta.
+
+\subsection{La métrica de riesgo}
+El riesgo se resume con dos márgenes:
+\begin{itemize}
+  \item el \textbf{margen determinista} de cada muestra,
+        $\mathrm{DSM}_j=(\hat y_j-y_{\rm ref})/(U_y-y_{\rm ref})$, que es la fracción del margen
+        disponible ya consumida;
+  \item el \textbf{margen probabilístico de seguridad},
+        \[
+        \mathrm{PSM}=\frac{U_y-q_{0.95}\big(\max_k\hat y_k\big)}{U_y-y_{\rm nom}},
+        \]
+        donde $q_{0.95}$ es el cuantil 95\,\% de la PCT máxima sobre las ramas del árbol. Un PSM
+        cercano a 1 indica mucho margen; uno negativo, que el 5\,\% peor de los casos supera el
+        límite.
+\end{itemize}
+
+\paragraph{Muestreo por importancia.} Las fallas del ACS son poco probables. Si se
+simularan con sus tasas reales, casi todas las ramas serían ``sin falla'' y el cuantil de la
+cola quedaría mal estimado. El \emph{muestreo por importancia} sortea las tasas de una
+distribución de propuesta $q$, que exagera las fallas, y corrige con pesos~\cite{owen2013}:
+\[
+\mathbb E_p[g]=\mathbb E_q\Big[g\,\frac{p}{q}\Big]\approx\frac{\sum_iw_i\,g(\omega_i)}{\sum_iw_i},
+\qquad w_i=\frac{p(\omega_i)}{q(\omega_i)},
+\]
+donde $p$ es la distribución real y $\omega_i$ cada camino del árbol. En el proyecto,
+$w=\prod p_{\rm objetivo}/\prod q_{\rm muestra}$ a lo largo de cada camino. Esto es
+IS-MCDET. El PSM se calcula en el \emph{posprocesamiento}, con los árboles de las 61
+consultas, y no interviene en la decisión.
+
+\subsection{Brechas del método actual}
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y Y@{}}\toprule
+Brecha & Evidencia & Consecuencia\\\midrule
+El costo no es una esperanza & $J_{\rm DET}$ suma las muestras de todos los nodos sin su probabilidad & Candidatos con distinto árbol se comparan sobre bases distintas\\
+El riesgo llega tarde & El PSM se calcula en el posprocesamiento & El riesgo no influye en la acción\\
+Horizonte corto & En 12.5~s el árbol casi siempre queda en la raíz & La falla del ACS es invisible para el optimizador\\
+Margen de una trayectoria & La penalización usa el DSM, no la probabilidad & No mide probabilidad ni severidad de exceder $U_y$\\
+Optimizador lento y aleatorio & 721 simulaciones por consulta; acción según la semilla & $\sim800$~s por consulta y sin garantía de optimalidad\\\bottomrule
+\end{tabularx}
+\caption{Brechas identificadas en el método actual (detalle en
+\code{docs/implementation\_route.md}).}
+\end{table}
+
+\subsection{Qué cambia este trabajo}
+La observación clave es la tercera brecha. En las consultas estudiadas, ninguna transición del
+ACS cae dentro del horizonte de 12.5~s, así que el árbol se reduce a la raíz. Entonces
+$J_{\rm DET}$ es una función \emph{determinista y suave} de $u$ a través del ROM, y los motivos
+para usar una metaheurística desaparecen. Este documento:
+\begin{enumerate}
+  \item escribe el ROM como ecuaciones algebraicas derivables (sección~\ref{sec:reactor});
+  \item formula P0 de forma monolítica y con derivadas exactas, en varias versiones
+        (sección~\ref{sec:niveles});
+  \item certifica la calidad de las soluciones y compara todos los métodos con la misma vara
+        (secciones~\ref{sec:certificacion} y~\ref{sec:comparacion});
+  \item reintroduce el riesgo como capas estructuradas sobre ese problema tratable: primero el
+        pronóstico de fuga (sección~\ref{sec:riesgo}) y después, como trabajo pendiente, las
+        fallas del ACS.
+\end{enumerate}
+
+\takeaway{\textbf{Para recordar.} El método actual evalúa cada candidato simulando un árbol de
+eventos en Simulink y busca el mejor con una metaheurística. Eso es razonable cuando el costo
+es una caja negra discontinua y ruidosa. En el horizonte del MPC, sin embargo, el árbol se
+reduce a la raíz y el costo es una función suave: se puede optimizar con derivadas.}
