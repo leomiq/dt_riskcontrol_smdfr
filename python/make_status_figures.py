@@ -221,3 +221,71 @@ ax[1].grid(False)
 cb = fig.colorbar(im, ax=ax[1], fraction=0.046, pad=0.04)
 cb.set_label("log$_{10}|G_{kj}|$ [K/(kg/s)]")
 save(fig, "fig_structure.pdf")
+
+F3C = os.path.join(ROOT, "results", "f3c_optimality")
+
+
+def read_mixed_csv(path):
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+# --- F3c: decisions of every method on the same yardstick (guaranteed excess interval)
+rows = read_mixed_csv(os.path.join(F3C, "decisions_compared.csv"))
+GRAD = ("N3", "N2", "N1")                     # derivative-based monolithic family
+fig, ax = plt.subplots(1, 2, figsize=(W, 3.0), gridspec_kw={"width_ratios": [2.3, 1]})
+for j, tq in enumerate(("1180", "1161")):
+    rr = [r for r in rows if r["t_q"] == tq and "archivad" not in r["method"]]
+    if tq == "1161":
+        rr = [r for r in rows if r["t_q"] == tq]
+    rr.sort(key=lambda r: float(r["J_BE"]), reverse=True)
+    Js = [float(r["J_BE"]) for r in rows if r["t_q"] == tq]
+    ub = min(Js); lb = float(rr[0]["lb_certified"])
+    for i, r in enumerate(rr):
+        J = float(r["J_BE"])
+        lo_, hi_ = 100 * (J - ub) / ub, 100 * (J - lb) / lb
+        col = BLUE if r["method"].startswith(GRAD) else ORANGE
+        ax[j].plot([lo_, hi_], [i, i], color=col, lw=5, solid_capstyle="butt")
+        ax[j].plot([lo_], [i], marker="|", color=INK, ms=9)
+    ax[j].set_yticks(range(len(rr)), [r["method"].replace(" (lazo original)", "") for r in rr],
+                     fontsize=7 if j == 0 else 7)
+    ax[j].set(title=f"$t_q$ = {tq} s", xlabel="exceso sobre el óptimo global [%]")
+    ax[j].grid(axis="y", visible=False)
+    ax[j].set_xlim(left=-2)
+    if j == 1:
+        ax[j].yaxis.tick_right()
+from matplotlib.lines import Line2D
+fig.legend([Line2D([], [], color=BLUE, lw=5), Line2D([], [], color=ORANGE, lw=5),
+            Line2D([], [], color=INK, marker="|", ls="none", ms=9)],
+           ["monolítico con derivadas (N1–N3)", "sin derivadas (DE, LJ, GA) / lazo archivado",
+            "exceso sobre el mejor encontrado (cota inferior del intervalo)"],
+           loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.12), fontsize=7.5)
+save(fig, "fig_decisions.pdf")
+
+# --- F3c: optimality evidence, Hessian eigenvalues over the control box
+fig, ax = plt.subplots(1, 2, figsize=(W, 2.3), sharey=False)
+for j, (tq, col) in enumerate((("1180", BLUE), ("1161", ORANGE))):
+    d = read_csv(os.path.join(F3C, f"hessian_samples_{tq}.csv"))
+    lam = num(d["lambda_min"]); dist = num(d["dist_to_NLP_maxnorm"])
+    ax[j].scatter(dist, lam * 1e6, s=6, color=col, lw=0)
+    ax[j].axhline(0, color=MUTED, lw=1, ls=(0, (4, 3)))
+    neg = int((lam < 0).sum())
+    ax[j].set(title=f"$t_q$ = {tq} s: {neg} de {len(lam)} con $\\lambda_{{\\min}}<0$",
+              xlabel=r"$\max_k|u_k-u^\star_k|$ [kg/s]", ylabel=r"$\lambda_{\min}(\nabla^2 J)\ \times 10^{6}$" if j == 0 else None)
+save(fig, "fig_hessian.pdf")
+
+# --- F3c: residual bounds per step and gap vs sub-box size
+fig, ax = plt.subplots(1, 2, figsize=(W, 2.5))
+for tq, col in (("1180", BLUE), ("1161", ORANGE)):
+    d = read_csv(os.path.join(F3C, f"rigorous_eps_{tq}_mid.csv"))
+    k = num(d["k"])
+    ax[0].semilogy(k, num(d["eps_rigorous"]), color=col, label=f"riguroso (4b), {tq} s")
+    ax[0].semilogy(k, num(d["eps_sampled"]), color=col, ls=(0, (2, 2)), label=f"muestreado, {tq} s")
+    s = read_csv(os.path.join(F3C, f"lower_bound_subbox_{tq}.csv"))
+    ax[1].loglog(num(s["rho"]), 100 * num(s["gap_rel"]), color=col, marker="o", ms=3.5, label=f"{tq} s")
+ax[0].set(xlabel="paso del horizonte $k$", ylabel=r"$\varepsilon_k$ [K]", title="Cota del residuo no lineal")
+ax[0].legend(fontsize=6.8, loc="lower right")
+ax[1].set(xlabel=r"semiancho de la caja $\rho$ (fracción del rango)", ylabel="brecha semi-rigurosa [%]",
+          title="Brecha en sub-cajas (4a.5)")
+ax[1].legend(loc="lower right")
+save(fig, "fig_bounds.pdf")

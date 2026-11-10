@@ -148,12 +148,22 @@ constraints (N3). It then checks when the optimal-scenario result of Homem-de-Me
 (2026, *Math. Program.*, doi:10.1007/s10107-026-02359-9) applies to the forecast
 uncertainty.
 
-Status (6 Nov 2026, plan §8.1–8.4):
+Status (9 Nov 2026, plan §8.1–8.5; summary with figures in
+[docs/estado_mpc_monolitico.pdf](docs/estado_mpc_monolitico.pdf), Spanish):
 
 - **F1–F3 closed.** The algebraic ROM replica in `julia/` reproduces Simulink to
-  about 1e-6 K. The monolithic NLP and the linearized QP solve P0 in about 0.1 s and
-  are solved at t_q = 1161 and 1180 s. At 1180 s they beat the corrected Luus–Jaakola
-  and GA by 28–56 % in cost; at 1161 s the LJ/GA runs did not finish.
+  about 1e-6 K. The monolithic NLP solves P0 in about 0.05 s at t_q = 1161 and 1180 s.
+  The linearized QP is written in sparse and condensed form (77 variables, ~10 ms);
+  Clarabel certifies the QP optimum with a dual gap of ~1e-12.
+- **F3c, optimality of the nonlinear P0.** The NLP solution is a strict local minimum
+  (KKT and second-order conditions). It is the only optimum found in ~590 multistarts
+  and in a 90k-evaluation differential evolution. A certified lower bound (Taylor model
+  with an interval remainder) puts the global optimum within 2.3 % (1180 s) and 11.4 %
+  (1161 s) of the NLP solution; the sampled, semi-rigorous gap is 0.3 % and 1.2 %.
+  With every decision evaluated on the same nonlinear cost, the NLP and the iterated
+  QP (N2) tie as best, the one-point QP (N1) is 0.0026 % behind, and the corrected
+  Luus–Jaakola and GA are at least 28 % and 43 % above the global optimum
+  (`julia/f3c_*.jl`, `results/f3c_optimality/`).
 - **F4, first result.** The BiLSTM MC-dropout ensemble was regenerated without MATLAB
   (`python/f4_leak_ensemble.py`). The forecast is biased and overconfident: 90 % band
   coverage is 0.44. Its effect on the PCT is still only about 0.025 K, so neither
@@ -161,7 +171,8 @@ Status (6 Nov 2026, plan §8.1–8.4):
   actuator saturation (`julia/f4_risk_decisions.jl`, `julia/f4_actuator_sweep.jl`).
 - **Next steps.** Set the injection ramp and flow limits from the ACS specification.
   Run ACS-failure scenarios and the ROM–HRM mismatch as the risk sources that can move
-  the decision. Then run the closed loop on the 61 queries.
+  the decision. Then run the closed loop on the 61 queries. Tightening the certified
+  gap (plan §8.5, step 4b.5) is scheduled for the next round.
 
 - [Monolithic formulation plan](docs/monolithic_formulation_plan.md) and
   [its presentation](presentations/monolithic_formulation.pdf) (Spanish)

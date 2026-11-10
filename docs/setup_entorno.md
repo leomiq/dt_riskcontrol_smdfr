@@ -12,9 +12,10 @@ noviembre de 2026 (F1–F3, E2).
 | Parallel Computing Toolbox | misma versión | `parfor` de LJ y GA (sin ella corren en serie, ~8× más lento) | recomendado |
 | Statistics and Machine Learning Toolbox | misma versión | `prctile` en el lazo completo | sólo `run_phase2c_full_loop` |
 | MinGW-w64 (add-on de MATLAB) | — | recompilar las S-functions | no: los `.mexw64` están en el repo |
-| Julia | **1.10.4** (fijado en `julia/Manifest.toml`) | réplica del ROM, NLP (JuMP + Ipopt), QP | sí, para F1–F3 |
+| Julia | **1.10.4** (fijado en `julia/Manifest.toml`) | réplica del ROM, NLP (JuMP + Ipopt), QP (Clarabel), cotas por intervalos (IntervalArithmetic) | sí, para F1–F4 |
 | Python | **3.11** (MATLAB R2024b admite 3.9–3.12; **no 3.13**) | figuras, KPI, inferencia BiLSTM | sí |
-| PyTorch con CUDA 12.1 | ≥ 2.2 | MC-dropout de la BiLSTM | sólo lazo completo |
+| PyTorch con CUDA 12.1 | ≥ 2.2 | MC-dropout de la BiLSTM (en CPU basta para F4) | sólo lazo completo y F4 |
+| Tectonic (o XeLaTeX) | 0.15.0 | compilar `docs/estado_mpc_monolitico.tex` con la fuente Inter (`fontspec`) | sólo para regenerar el PDF |
 
 Ya **no** hace falta la Curve Fitting Toolbox (ver `docs/pilot_reproducibility.md`).
 
@@ -142,6 +143,23 @@ ensamble contiene la muestra archivada en 1180 s (ver §8.2 de
 `monolithic_formulation_plan.md`). Los scripts F4 (`python/f4_*.py`) lo cargan con ruta
 absoluta. En leo_acer (sin GPU) basta torch en CPU:
 `.venv\Scripts\python -m pip install "torch>=2.2" --index-url https://download.pytorch.org/whl/cpu`.
+
+### 4.2 Documento de estado (LaTeX)
+
+`docs/estado_mpc_monolitico.tex` usa `fontspec` con la fuente Inter
+(`assets/fonts/InterVariable.ttf`), así que necesita XeLaTeX o LuaLaTeX; `pdflatex` no
+sirve. En leo_acer se usa **Tectonic 0.15.0**: un ejecutable único basado en XeTeX, en
+`C:\Users\leona\bin\tectonic.exe`, que descarga los paquetes de LaTeX la primera vez. Las
+figuras se regeneran desde los resultados guardados, sin MATLAB ni Julia:
+
+```powershell
+.venv\Scripts\python python/make_status_figures.py     # -> docs/figures/*.pdf
+cd docs; tectonic -X compile estado_mpc_monolitico.tex
+```
+
+Detalle conocido: con Tectonic, `\setmainfont` no admite `UprightFont=` junto con `Path=`
+(no encuentra la fuente), y babel en español choca con `\max` y `\min` dentro de los pies
+de figura: hay que usar `\rm max` y `\rm min`.
 
 ## 5. Claude Code
 

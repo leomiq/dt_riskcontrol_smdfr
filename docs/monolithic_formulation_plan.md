@@ -588,7 +588,8 @@ el ROM no sale de su rango.
 | F0 Ecuaciones | Cerrada | §3.1 |
 | F1 Réplica algebraica | Cerrada (error ≈ 10⁻⁶ K frente a Simulink en 1161 s y 1180 s) | `julia/SMDFRROM.jl`, §8.1 |
 | F2 NLP monolítico | Resuelto en 1161 s y 1180 s. En 1180 s es 28–56 % mejor que LJ y GA corregidos; en 1161 s LJ y GA no terminaron (falta de memoria) | `julia/f2_monolithic_nlp.jl`, §8.1 |
-| F3 QP linealizado | Cerrada en dos consultas; brecha frente al NLP ≤ 0.003 % | `julia/f3_linearized_qp.jl`, §8.1 |
+| F3 QP linealizado | Cerrada en dos consultas; brecha frente al NLP ≤ 0.003 %. QP disperso y condensado, con certificado dual (9-11) | `julia/f3_certificates_condensed.jl`, §8.1 |
+| F3c Certificación de N3 | Pasos 1–4b hechos (9-11): mínimo local estricto, óptimo único en ≈ 590 arranques, brecha certificada de 2.3 % (1180 s) y 11.4 % (1161 s); comparación de decisiones de todos los métodos. Pendiente: 4b.5 | `julia/f3c_*.jl`, §8.5 |
 | F4 Riesgo | Abierta. Ensamble regenerado y calibración medida; el riesgo de pronóstico no cambia la decisión | `python/f4_*.py`, `julia/f4_*.jl`, §8.2–8.3 |
 | F5 Lazo cerrado | Sin empezar | — |
 
@@ -630,6 +631,11 @@ el ROM no sale de su rango.
 6. **F5, lazo cerrado** (leo_asus). Las 61 consultas con el NLP o el QP y las cotas del
    paso 1, frente al lazo LJ archivado, con menos de 120 s por consulta. El NLP tarda
    ≈ 0.1 s y el SAA ≈ 2 s, así que el tiempo no es un obstáculo.
+7. **F3c, paso 4b.5** (leo_acer, próxima ronda; agregado el 9-11-2026). Ajustar la cota
+   inferior certificada con una partición por masa inyectada o un modelo de Taylor de
+   segundo orden (§8.5). El objetivo es cerrar el intervalo de exceso garantizado de N1–N3
+   (hoy 0–2.4 % en 1180 s y 0–12.9 % en 1161 s) hacia los valores semi-rigurosos
+   (0.3 % y 1.2 %).
 
 Pendientes menores: decidir la corrección $p_4$ (§9.4), que se evalúa en
 $\dot m_{\rm net}+5550$ y no en $\dot m_c$; actualizar `mc_inference.py` para que cargue
@@ -691,6 +697,95 @@ reducido común en `julia/ReducedP0.jl`. Resultados en `results/f3c_optimality/`
   brecha por debajo de ~0.1 %.
 - Queda pendiente el paso 4b: reemplazar la estimación por muestreo de $\varepsilon_k$ por
   una cota con aritmética de intervalos. Con eso la brecha pasa a ser un certificado.
+
+**Paso 4b, primer resultado certificado (9-11-2026)** (`julia/f3c_rigorous.jl`).
+
+*Método.* Modelo de Taylor de primer orden con resto por intervalos,
+$\delta_k(u)=T_k\Delta u+r_k$:
+
+- La parte lineal $T_k$ es un número por entrada (coincide con la diferenciación
+  automática a 2·10⁻¹⁷).
+- El resto $r_k$ se propaga con la forma de valor medio de Euler implícito:
+  $M^\star_k r_k = r_{k-1} + h([A](Z_k)-A^\star_k)[\delta_k] - \text{res}_k - D_k\Delta u$.
+- $[A]$ es el jacobiano por intervalos de $f$ sobre la caja alcanzable. $B=e_{\Delta M}$ es
+  constante, porque el control sólo entra en el inventario.
+- Los defectos de punto flotante de la trayectoria nominal y de la parte lineal se acotan
+  con intervalos.
+- El resto se acepta cuando el operador lleva una caja de prueba dentro de sí misma
+  (Brouwer).
+- El término $p_4$ se acota exactamente: $\tfrac12[p_4'']\Delta u_k^2$.
+- Supuesto: la solución de cada paso implícito es única, lo que respalda la convergencia de
+  Newton en todos los casos.
+
+*Verificaciones.* El jacobiano por intervalos contiene los 1300 jacobianos muestreados por
+consulta (0 violaciones). La propagación cierra en los 26 pasos en las dos consultas. El
+$\varepsilon_k$ riguroso queda por encima del residuo muestreado **del mismo modelo afín**
+en todos los pasos.
+
+| Centro del modelo de Taylor | $\varepsilon_{26}$ riguroso / muestreado | Brecha certificada 1180 s | Brecha certificada 1161 s |
+|---|---|---:|---:|
+| $u^\star$ (solución del NLP) | 0.50 / 0.010 K (1180 s); 1.32 / 0.038 K (1161 s) | 4.86 % | 20.85 % |
+| Punto medio de la caja | 0.47 / 0.0093 K (1180 s); 0.48 / 0.0096 K (1161 s) | **2.34 %** | **11.44 %** |
+
+*Lectura.*
+
+- Es la **primera cota inferior certificada** del P0 no lineal (antes sólo había
+  $J\ge0$): el óptimo de Ipopt está a ≤ 2.3 % (1180 s) y ≤ 11.4 % (1161 s) del óptimo
+  global sobre toda la caja de control.
+- El $\varepsilon$ riguroso sobreestima el muestreado entre 16 y 50 veces. Hay dos causas.
+  (i) El término de segundo orden se acota como el producto de dos cajas,
+  $\lvert[A]-A^\star\rvert\cdot\lvert[\delta]\rvert$, que ignora que las 26 direcciones
+  de control mueven el estado casi en una sola dirección (la del inventario).
+  (ii) El resto se acumula a través del integrador.
+
+*Próximo ajuste (4b.5), por prioridad:*
+
+1. **Partición por la masa inyectada.** Cortar la caja en franjas
+   $w^\top\Delta u\in[\alpha_i,\beta_i]$ según la dirección dominante, $w$ = masa
+   acumulada. En cada franja, el rango de $T_k\Delta u$ se calcula con programación lineal
+   sobre caja ∩ franja, en lugar del producto de cajas. La cota inferior global es el
+   mínimo entre franjas, que cubren toda la caja. Como el resto es ~cuadrático en el ancho,
+   unas 10 franjas deberían reducir $\varepsilon$ en un orden de magnitud o más.
+2. **Modelo de Taylor de segundo orden**: un término cuadrático con un número por entrada y
+   el resto de tercer orden por intervalos. Conserva la correlación entre direcciones, pero
+   su implementación es más pesada.
+
+**Estado de 4b.5: pendiente para la próxima ronda** (paso 7 de §8.4).
+
+**Comparación de las decisiones de todos los métodos (9-11-2026)**
+(`julia/f3c_compare_decisions.jl`, `results/f3c_optimality/decisions_compared.csv`).
+
+Que cada solver resuelva bien **su propio** problema (brecha dual del QP, residuos KKT del
+NLP) no dice cuál decisión es mejor. Por eso, el control que entrega cada método se evalúa
+con una **misma vara**: el costo P0 sobre el ROM no lineal. Se usan las dos discretizaciones
+(Euler implícito convergido y `ode1be`), que dan el mismo ordenamiento. Cada costo se ubica
+frente a la cota inferior certificada del paso 4b. Como $LB\le J^\star\le UB$, el exceso
+real de un método sobre el óptimo global queda en el intervalo
+$[(J-UB)/UB,\ (J-LB)/LB]$.
+
+| Método | 1180 s: costo | Exceso sobre el mejor | Exceso garantizado sobre el óptimo global | 1161 s: costo | Exceso sobre el mejor |
+|---|---:|---:|---:|---:|---:|
+| N3, NLP monolítico (Ipopt, Euler implícito) | 0.244034 | 0 | 0 – 2.4 % | 48.028 | 0 |
+| N3 sobre `ode1be` (espacio reducido) | 0.244034 | 0 | 0 – 2.4 % | 48.028 | 0 |
+| N2, QP-LTV iterado (SQP) | 0.244034 | 0 | 0 – 2.4 % | 48.028 | 0 |
+| N1, QP-LTI (una linealización) | 0.244040 | +0.0026 % | 0.0026 – 2.4 % | 48.028 | 0 |
+| Evolución diferencial (90 000 evaluaciones) | 0.244034 | +0.0001 % | 0.0001 – 2.4 % | 48.028 | 0 |
+| LJ corregido, 3 semillas | 0.313 – 0.381 | +28 a +56 % | 28 – 60 % | — | — |
+| GA, 2 semillas | 0.349 – 0.353 | +43 a +45 % | 43 – 48 % | — | — |
+| LJ archivado / acción archivada del lazo | 4.081 | +1572 % | 1572 – 1612 % | 94.45 | +97 % |
+
+*Lectura.*
+
+- **N3 y N2 son los mejores y empatan:** son la misma decisión, a 6·10⁻⁶ kg/s. **N1** cuesta
+  un 0.0026 % más en 1180 s y lo mismo en 1161 s. Es el más rápido (~10 ms) y el único con
+  estructura de QP convexo, así que es el candidato natural para tiempo real.
+- La primera acción aplicada (56.75 A) coincide en N1, N2, N3 y la evolución diferencial.
+- LJ y GA quedan **dominados con garantía**: su exceso sobre el óptimo global es de al menos
+  28 % y 43 %, y son unas 10⁴ veces más lentos.
+- El límite superior del intervalo de N1–N3 (2.4 %) es la brecha de la cota inferior, que es
+  conservadora. Los pasos 1–3 indican que el exceso real es ≈ 0. Cerrarlo es el paso 4b.5.
+- Alcance: la comparación vale para P0 sobre el ROM. No dice nada sobre el desajuste
+  ROM–HRM (paso 3 de §8.4).
 
 ---
 

@@ -35,7 +35,7 @@
 \title{\color{accent}\bfseries MPC monolítico del SMDFR\\[2pt]
 \large\mdseries Contexto, formulación, resultados y próximos pasos}
 \author{Proyecto DT--SMDFR Risk Control}
-\date{6 de noviembre de 2026 \quad·\quad commit \code{3b59043}}
+\date{9 de noviembre de 2026}
 
 \begin{document}
 \maketitle
@@ -57,7 +57,12 @@ y los resultados obtenidos hasta ahora:
   \item el primer análisis de riesgo (F4) con el ensamble MC-dropout de la BiLSTM
         regenerado: está mal calibrado, pero aun así no cambia la decisión;
   \item una revisión física de las cotas del actuador: la cota en amperios no tiene
-        significado físico y la autoridad la fija la rampa del actuador.
+        significado físico y la autoridad la fija la rampa del actuador;
+  \item la certificación del P0 no lineal (F3c). La solución es un mínimo local estricto y
+        el único óptimo en $\approx590$ arranques. La primera brecha certificada es de
+        2.3\,\% (1180~s) y 11.4\,\% (1161~s). Comparadas con la misma vara, N3 y N2 son las
+        mejores decisiones, N1 queda a 0.0026\,\%, y LJ y GA quedan al menos un 28\,\% y un
+        43\,\% por encima del óptimo global.
 \end{itemize}
 \end{abstract}
 
@@ -110,6 +115,7 @@ F0 Ecuaciones & ROM escrito término a término desde el \code{.slx} & Cada tér
 F1 Réplica & ROM algebraico con diferenciación automática (Julia) & Error $\ll1$~K frente a Simulink & Cerrada\\
 F2 NLP (N3) & P0 como NLP con JuMP + Ipopt & Comparado con LJ y GA re-simulando en Simulink & 2 consultas\\
 F3 QP (N1, N2) & MPC lineal (disperso y condensado), $G(s)$, certificado dual & Brecha frente a N3 medida & 2 consultas\\
+F3c Certificación & Brecha de optimalidad del P0 no lineal y comparación de decisiones & Brecha certificada pequeña & 1--4b; 4b.5 pendiente\\
 F4 Riesgo & Capas probabilística, SAA y cuantiles & Una decisión que cambie por riesgo & Abierta\\
 F5 Lazo cerrado & 61 consultas, multietapa & $<120$~s por consulta; frontera costo--riesgo & Pendiente\\\bottomrule
 \end{tabularx}
@@ -480,8 +486,8 @@ condiciones de Slater hay dualidad fuerte, $g^\star=p^\star$. Un solver primal-d
 Clarabel entrega un par $(z,\lambda,\nu)$, y la \textbf{brecha dual}
 $p(z)-g(\lambda,\nu)\ge0$ acota cuánto puede mejorarse la solución: es un
 \emph{certificado de optimalidad global}. Hay que entender bien qué certifica: el óptimo
-del \emph{modelo lineal} (N1 o N2), no el del P0 no lineal. Para certificar N3 haría falta
-acotar el error de linealización. Es la vía V10, todavía abierta.
+del \emph{modelo lineal} (N1 o N2), no el del P0 no lineal. Para certificar N3 hace falta
+acotar el error de linealización: eso se hizo en F3c (sección~\ref{sec:f3c}).
 
 \paragraph{Para qué sirven N1 y N2.} No buscan reemplazar al NLP, que ya es rápido. Buscan
 abrir lo que el modelo no lineal no permite:
@@ -603,8 +609,8 @@ inferior por causalidad, con columnas casi constantes por el integrador del inve
 
 \takeaway{\textbf{Lectura.} (i) \textbf{Hay certificado para el modelo lineal:} Clarabel
 cierra la brecha dual a $\sim10^{-12}$, lo que demuestra que la solución de N1 y de N2 es
-el óptimo global de su QP. No hay certificado para el P0 no lineal: hace falta acotar el
-error de linealización (V10). (ii) El punto fijo de N2 es un punto factible de N3 con el
+el óptimo global de su QP. El certificado del P0 no lineal requiere acotar además el error
+de linealización (sección~\ref{sec:f3c}). (ii) El punto fijo de N2 es un punto factible de N3 con el
 mismo costo que el óptimo de Ipopt (diferencia de $4\cdot10^{-8}$). Es una verificación
 independiente del óptimo local del NLP. (iii) La forma condensada reduce el problema de
 519 a 77 variables y el tiempo a $\sim10$~ms. (iv) El óptimo es \emph{plano}: N1 se aleja
@@ -697,6 +703,276 @@ $\mdot_0$ como mucho 0.5~kg/s, y fuera de muestra cuesta un 5--6\,\% más que el
 cambia la decisión de forma relevante. El polinomio $p_4$ se extrapola en estos casos,
 pero su aporte es de 0.017~K como máximo.}
 
+\section{Certificación de optimalidad del P0 no lineal (F3c)}\label{sec:f3c}
+
+\subsection{Qué se quiere certificar}
+El problema de referencia es P0 sobre el ROM \textbf{no lineal} (N3), con las cotas
+archivadas del actuador:
+\[
+J^\star=\min_{u\in\mathcal U}J(u),\qquad \mathcal U=[\mdot_{\rm min},\mdot_{\rm max}]^{26}.
+\]
+$J^\star$ es el óptimo \emph{global}, y no se conoce. Una \textbf{brecha de optimalidad}
+necesita dos números: una cota superior $UB$, el costo de cualquier control admisible (aquí,
+la solución de Ipopt), y una cota inferior $LB$, demostrada, tal que $LB\le J^\star\le UB$.
+Hay que distinguirla de la \emph{brecha del solver}: la brecha dual del QP (F3b) o los
+residuos KKT del NLP sólo dicen que cada solver resolvió bien \emph{su propio} problema, no
+qué tan buena es la decisión para P0. Antes de F3c, la única cota inferior de P0 era $J\ge0$.
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y l@{}}\toprule
+Paso & Pregunta que responde & Tipo de resultado\\\midrule
+1 & ¿La solución de Ipopt es un mínimo, y no un punto de silla? & Prueba local\\
+2 & ¿Cambia el óptimo si se usa exactamente la discretización de Simulink? & Consistencia del modelo\\
+3 & ¿Hay otro óptimo mejor en la caja de control? & Evidencia global (no es prueba)\\
+4a & ¿Cuánto podría mejorarse como máximo, si el residuo no lineal está bien estimado? & Brecha semi-rigurosa\\
+4b & ¿Cuánto podría mejorarse como máximo, con demostración? & \textbf{Brecha certificada}\\\bottomrule
+\end{tabularx}
+\caption{Las pruebas de F3c y lo que garantiza cada una.}
+\end{table}
+
+\subsection{Formulación en espacio reducido}
+Los estados se eliminan con la simulación, $x_k=\Phi(x_{k-1},u_k)$, y el costo queda como
+función sólo del control:
+\[
+J(u)=\sum_{k=1}^{K}\big(\hat y_k(u)-y_{\rm ref}\big)^2+\lambda_m\sum_{k=1}^{K-1}\big[|u_{k+1}-u_k|-\Delta\mdot\big]_+^2
++\lambda_{\rm pct}\sum_{k=1}^{K}\big[\hat y_k(u)-U_y\big]_+^2 .
+\]
+$\Phi$ es el paso de Euler implícito \emph{convergido} (el modelo del NLP) o el paso
+\code{ode1be} (una iteración de Newton: lo que calcula Simulink). $J$ está escrita de forma
+genérica, así que ForwardDiff la deriva \emph{a través de la simulación}. En el paso
+implícito, primero se resuelve Newton sobre valores y luego se hacen tres refinamientos con
+números duales, lo que da primeras y segundas derivadas exactas. La consistencia se
+verificó: $J(u^\star)$ en espacio reducido coincide con el objetivo del NLP monolítico a
+$4\cdot10^{-8}$.
+
+\subsection{Paso 1: certificado de mínimo local}
+Para un problema con cotas de caja, $u^\star$ es un \textbf{mínimo local estricto} si se
+cumplen tres condiciones:
+\begin{enumerate}
+  \item $\partial J/\partial u_k=0$ en las variables libres (estacionariedad);
+  \item el multiplicador de cada cota activa es estrictamente positivo: $\mu_k=-\partial
+        J/\partial u_k>0$ en la cota superior y $\mu_k=\partial J/\partial u_k>0$ en la
+        inferior (complementariedad estricta);
+  \item la hessiana restringida a las variables libres es definida positiva (condición
+        suficiente de segundo orden).
+\end{enumerate}
+La hessiana se calcula por diferencias centrales del gradiente exacto, con paso $10^{-4}$. Es
+mucho más liviano que la hessiana exacta anidada, que agotó la memoria. Su error es muy
+inferior a los valores propios medidos.
+
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}lll@{}}\toprule
+& $t_q=1180$~s & $t_q=1161$~s\\\midrule
+Cotas activas / variables libres & 6 superiores / 20 & 26 superiores / 0\\
+$\max|\partial J/\partial u|$ en las libres & $8.7\cdot10^{-10}$ & ---\\
+Menor multiplicador de cota activa & $3.2\cdot10^{-4}$ & $4.2\cdot10^{-3}$\\
+$\lambda_{\rm min}$ de la hessiana reducida (condición) & $4.3\cdot10^{-6}$ ($4.6\cdot10^{3}$) & --- (vértice)\\
+Conclusión & \textbf{mínimo local estricto} & \textbf{mínimo local estricto (vértice)}\\\bottomrule
+\end{tabular}
+\caption{Paso 1, con el modelo de Euler implícito. Con \code{ode1be} los valores son
+prácticamente los mismos.}
+\end{table}
+
+\subsection{Paso 2: P0 sobre la discretización de Simulink}
+Se resolvió P0 en espacio reducido con \code{ode1be}: Ipopt con gradiente exacto a través
+de la simulación y hessiana aproximada con L-BFGS, desde dos arranques. Su óptimo está
+$4.5\cdot10^{-9}$ (1180~s) y $6.8\cdot10^{-7}$ (1161~s) por debajo del costo \code{ode1be}
+de la solución de Euler implícito. Tiene la misma primera acción, y las trayectorias
+difieren $\le6\cdot10^{-4}$~kg/s. Las dos definiciones de P0 son equivalentes a efectos
+prácticos, y todo lo que sigue vale para ambas.
+
+\subsection{Paso 3: evidencia global}
+\begin{itemize}
+  \item \textbf{Multistart} del NLP monolítico desde 500 arranques aleatorios uniformes,
+        50 caminatas aleatorias, 11 constantes, 25 bang-bang, uno alternado y (en 1180~s)
+        las soluciones de LJ y GA. Convergen 593/593 (1180~s) y 587/587 (1161~s), todos al
+        \emph{mismo} óptimo, a $\le5\cdot10^{-6}$~kg/s.
+  \item \textbf{Evolución diferencial} (DE/rand/1/bin, población 60, $F=0.7$, $CR=0.9$,
+        1500 generaciones, 90\,060 evaluaciones, sin derivadas). Llega a
+        $+2.4\cdot10^{-7}$ del NLP (1180~s) y lo iguala (1161~s). Pulida con el NLP, cae en
+        el mismo óptimo.
+  \item \textbf{Convexidad}: valores propios de $\nabla^2J(u)$ en 300 puntos de la caja
+        (figura~\ref{fig:hess}).
+\end{itemize}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_hessian.pdf}
+\caption{Menor valor propio de la hessiana del costo en 300 puntos de la caja de control,
+según la distancia a $u^\star$. En 1180~s es positivo en todos: hay señal de convexidad. En
+1161~s es levemente negativo en 255 de 300 puntos (hasta $-2\cdot10^{-6}$, un 0.006\,\% de
+$\lambda_{\rm max}$), también cerca del óptimo. Eso no contradice el paso 1: en 1161~s las 26
+variables están en su cota con multiplicadores positivos, y la dirección de curvatura
+negativa queda bloqueada por las cotas.}
+\label{fig:hess}
+\end{figure}
+
+\noindent La evidencia es fuerte: un solo óptimo en $\approx590$ arranques y ninguna
+búsqueda global lo mejora. Pero no es una prueba, y la no convexidad de 1161~s muestra que no
+se puede suponer convexidad. Por eso hace falta el paso 4.
+
+\subsection{Paso 4a: cota inferior semi-rigurosa}
+\begin{enumerate}
+  \item \textbf{Modelo afín de referencia:} $a(u)=\hat y(u_c)+G\,(u-u_c)$, con
+        $G=\partial\hat y/\partial u$ exacta en un punto $u_c$. Es sólo una herramienta:
+        cualquier modelo afín sirve.
+  \item \textbf{Residuo no lineal:} $e_k(u)=\hat y_k(u)-a_k(u)$, con
+        $\varepsilon_k\ge\max_{u\in\mathcal U}|e_k(u)|$ estimado por muestreo (3000
+        puntos y 63 patrones extremos) y maximización adversaria con Ipopt.
+  \item \textbf{Relajación convexa:} si $|e_k|\le\varepsilon_k$, entonces
+        $(\hat y_k-y_{\rm ref})^2\ge\big(|a_k(u)-y_{\rm ref}|-\varepsilon_k\big)_+^2$ y
+        $[\hat y_k-U_y]_+^2\ge[a_k-\varepsilon_k-U_y]_+^2$. La penalización de la rampa es
+        exacta. La función resultante $L(u)$ cumple $L\le J$ en toda la caja y es
+        convexa, así que $LB=\min L$ es un QP (Clarabel, cota dual).
+\end{enumerate}
+Con $u_c=u^\star$, la búsqueda adversaria no supera al muestreo en ningún paso, y la brecha
+$(UB-LB)/UB$ es de \textbf{0.30\,\% (1180~s) y 1.2\,\% (1161~s)}. Con un factor de
+seguridad de 2 sobre $\varepsilon$ sube a 0.59\,\% y 2.4\,\%. Es \emph{semi}-rigurosa
+porque el muestreo podría no encontrar el peor residuo. En sub-cajas de semiancho $\rho$ la
+brecha baja como $\rho^2$, igual que el resto de Taylor (figura~\ref{fig:bounds}, derecha).
+
+\subsection{Paso 4b: cota inferior certificada}
+Se reemplaza el $\varepsilon$ muestreado por uno \textbf{demostrado}. Para eso se usa un
+modelo de Taylor de primer orden con resto por intervalos, en variables escaladas:
+\[
+\delta_k(u)=x_k(u)-x^c_k=T_k\,\Delta u+r_k,\qquad \Delta u=u-u_c,
+\]
+donde $r_k$ es una caja de intervalos.
+\begin{itemize}
+  \item Restando el paso implícito real y el nominal, y aplicando el teorema del valor medio
+        a $f$:
+        \[
+        M_k^c\,r_k=r_{k-1}+h\big([A](Z_k)-A^c_k\big)[\delta_k]-\mathrm{res}_k-D_k\,\Delta u,
+        \]
+        con $M_k^c=I-hA^c_k$.
+        $[A](Z_k)$ es el jacobiano de $f$ evaluado con aritmética de intervalos
+        (\code{IntervalArithmetic.jl}) sobre la caja alcanzable $Z_k$. $B=e_{\Delta M}$ es
+        constante, porque el control sólo entra en el inventario.
+  \item $\mathrm{res}_k$ y $D_k$ son los defectos de punto flotante de la trayectoria
+        nominal y de la parte lineal, encerrados con intervalos: el redondeo queda
+        controlado.
+  \item Como $r_k$ aparece a ambos lados, se acepta una caja $R$ cuando el operador la
+        manda dentro de sí misma (teorema de Brouwer). Se supone que cada paso implícito
+        tiene solución única, lo que respalda la convergencia de Newton.
+  \item El término directo de la salida se acota exactamente:
+        $\tfrac12[p_4''](\cdot)\,\Delta u_k^2$.
+\end{itemize}
+
+\noindent\emph{Verificaciones.} El jacobiano por intervalos contiene los 1300 jacobianos
+muestreados por consulta, sin ninguna violación. La propagación cierra en los 26 pasos (dos
+iteraciones de punto fijo por paso, unos 4~s). El $\varepsilon$ riguroso queda por encima del
+residuo muestreado del \emph{mismo} modelo afín en todos los pasos.
+
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}lccc@{}}\toprule
+Centro $u_c$ del modelo de Taylor & $\varepsilon_{26}$ riguroso / muestreado & Brecha 1180~s & Brecha 1161~s\\\midrule
+$u^\star$ (solución del NLP) & 0.50 / 0.010~K; 1.32 / 0.038~K & 4.86\,\% & 20.85\,\%\\
+Punto medio de la caja & 0.47 / 0.009~K; 0.48 / 0.010~K & \textbf{2.34\,\%} & \textbf{11.44\,\%}\\\bottomrule
+\end{tabular}
+\caption{Brecha certificada $(UB-LB)/UB$ del P0 no lineal sobre toda la caja de control.
+Con el centro en el punto medio, $LB=0.23834$ (1180~s) y $42.533$ (1161~s).}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_bounds.pdf}
+\caption{Izquierda: cota del residuo no lineal por paso del horizonte, rigurosa (4b) frente a
+muestreada, con el modelo centrado en el punto medio. Derecha: brecha semi-rigurosa en
+sub-cajas de semiancho $\rho$ alrededor de $u^\star$ (4a.5), que baja como $\rho^2$.}
+\label{fig:bounds}
+\end{figure}
+
+\takeaway{\textbf{Lectura.} Es la \textbf{primera cota inferior certificada} del P0 no
+lineal: el óptimo global está en $[0.23834,\ 0.24403]$ (1180~s) y en $[42.53,\ 48.03]$
+(1161~s). El $\varepsilon$ riguroso sobreestima el real entre 16 y 50 veces, por dos
+razones. (i) El término de segundo orden se acota como el producto de dos cajas, lo que
+ignora que las 26 direcciones de control mueven el estado casi en una sola dirección, la del
+inventario. (ii) El resto se acumula a través del integrador. El ajuste (paso 4b.5: partición
+por masa inyectada o modelo de Taylor de segundo orden) queda para la próxima ronda.}
+
+\section{Comparación de las decisiones de todos los métodos}\label{sec:comparacion}
+
+\subsection{Modelos y métodos comparados}
+Cada método entrega una secuencia de 26 caudales del ACS para la misma consulta. Lo que
+cambia es el modelo con que decide, la formulación y el algoritmo:
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{24mm} Y Y Y r@{}}\toprule
+Método & Modelo con el que decide & Formulación & Algoritmo y derivadas & Tiempo\\\midrule
+N3, NLP (BE) & ROM no lineal, Euler implícito convergido & Monolítica dispersa: 519 variables, 442 igualdades & Ipopt (punto interior), hessiana exacta por diferenciación automática & 0.05~s\\
+N3 sobre \code{ode1be} & ROM no lineal, \code{ode1be} (= Simulink) & Espacio reducido: 26 variables & Ipopt, gradiente exacto a través de la simulación, hessiana L-BFGS & 2.5--10~s\\
+N2, QP-LTV iterado & ROM linealizado en cada paso de la trayectoria del incumbente & QP condensado (77 variables) por iteración & SQP: simular, linealizar (ForwardDiff), QP (Clarabel); 4 iteraciones en 1180~s, 1 en 1161~s & $\sim$10~ms por QP\\
+N1, QP-LTI & ROM linealizado en el punto de consulta & QP condensado, 77 variables & Clarabel, con certificado dual & 0.01~s\\
+Evolución diferencial & ROM no lineal, Euler implícito & 26 variables & Sin derivadas: DE/rand/1/bin, 90\,060 evaluaciones & 90~s\\
+LJ corregido & ROM en Simulink (\code{DET\_2} + \code{fitness\_cost}) & 26 corrientes & Sin derivadas: Luus--Jaakola ($R=24$, $\gamma=0.9$, $M=5$), 721 evaluaciones & $\approx800$~s\\
+GA & Igual que LJ & 26 corrientes & Sin derivadas: genético $20\times20$, cruce 0.8, mutación 0.3, 420 evaluaciones & $\approx615$~s\\
+Lazo archivado & Lazo original, anterior a la corrección de LJ & --- & --- & ---\\\bottomrule
+\end{tabularx}
+\caption{Métodos comparados. Los tiempos de LJ y GA se midieron en MATLAB/Simulink (E2); los
+demás, en Julia sobre leo\_acer.}
+\end{table}
+
+\subsection{Consideraciones para que la comparación sea justa}
+\begin{enumerate}
+  \item \textbf{Misma vara.} Cada control se evalúa con el costo P0 sobre el ROM \emph{no
+        lineal}, en las dos discretizaciones (Euler implícito y \code{ode1be}). Las dos dan
+        el mismo ordenamiento, y difieren en un desplazamiento casi constante de
+        $3.6\cdot10^{-5}$ (1180~s). Las corrientes de LJ y GA se convierten a caudal con el
+        mapa de la bomba. Su costo recalculado coincide con el que E2 midió en Simulink
+        (por ejemplo, 4.081 para el LJ archivado).
+  \item \textbf{Mismas condiciones.} Todos parten del mismo estado $x(t_q-\Delta t)$ y usan
+        el mismo pronóstico de fuga (el de F2), la misma referencia, las mismas cotas
+        archivadas del actuador (0.58--12.86~kg/s) y la rampa blanda de P0.
+  \item \textbf{Cómo se mide la calidad.} Se usa el costo no lineal de cada decisión, nunca el
+        objetivo interno de su solver. Por ejemplo, el QP N1 predice 47.81 en 1161~s, pero su
+        control cuesta 48.03 en el modelo no lineal: el 47.81 no es una cota de nada.
+  \item \textbf{Exceso garantizado.} Como $LB\le J^\star\le UB$, el exceso real de una
+        decisión $u$ sobre el óptimo global queda en el intervalo
+        $\big[(J(u)-UB)/UB,\ (J(u)-LB)/LB\big]$. El extremo inferior es el exceso sobre el
+        mejor encontrado; el superior, la peor posibilidad compatible con la cota certificada.
+  \item \textbf{Alcance.} La comparación vale para P0 sobre el ROM, en dos consultas y con las
+        cotas archivadas del actuador, que no tienen base física
+        (sección~\ref{sec:f3c}). No dice nada sobre el desajuste ROM--HRM. En 1161~s, LJ y GA
+        no tienen corridas completas.
+\end{enumerate}
+
+\subsection{Resultados}
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrr@{}}\toprule
+& \multicolumn{3}{c}{$t_q=1180$~s} & \multicolumn{2}{c}{$t_q=1161$~s}\\
+\cmidrule(lr){2-4}\cmidrule(l){5-6}
+Método & Costo & Exceso/mejor & Exceso garantizado & Costo & Exceso/mejor\\\midrule
+N3, NLP (Ipopt, BE) & 0.244034 & 0 & 0 -- 2.4\,\% & 48.028 & 0\\
+N3 sobre \code{ode1be} & 0.244034 & 0 & 0 -- 2.4\,\% & 48.028 & 0\\
+N2, QP-LTV iterado & 0.244034 & 0 & 0 -- 2.4\,\% & 48.028 & 0\\
+N1, QP-LTI & 0.244040 & +0.0026\,\% & 0.0026 -- 2.4\,\% & 48.028 & 0\\
+Evolución diferencial & 0.244034 & +0.0001\,\% & 0.0001 -- 2.4\,\% & 48.028 & 0\\
+LJ corregido (3 semillas) & 0.313 -- 0.381 & +28 a +56\,\% & 28 -- 60\,\% & --- & ---\\
+GA (2 semillas) & 0.349 -- 0.353 & +43 a +45\,\% & 43 -- 48\,\% & --- & ---\\
+Lazo archivado & 4.081 & +1572\,\% & 1572 -- 1612\,\% & 94.45 & +97\,\%\\\bottomrule
+\end{tabular}
+\caption{Costo P0 sobre el ROM no lineal (Euler implícito) de la decisión de cada método. En
+1161~s el exceso garantizado de N1--N3 y DE es 0--12.9\,\%, y el del lazo archivado,
+97--122\,\%.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_decisions.pdf}
+\caption{Intervalo de exceso garantizado sobre el óptimo global de cada decisión. La marca
+negra es el exceso sobre el mejor encontrado (extremo inferior) y la barra llega hasta el
+extremo superior, que fija la cota certificada. En 1180~s se omite el lazo archivado (1572--1612\,\%).}
+\end{figure}
+
+\takeaway{\textbf{Conclusiones.} (i) \textbf{N3 y N2 son los mejores y empatan}: son la
+misma decisión, a $6\cdot10^{-6}$~kg/s. (ii) \textbf{N1} cuesta un 0.0026\,\% más en 1180~s
+y lo mismo en 1161~s. Es el más rápido ($\sim$10~ms) y el único que es un QP convexo
+certificable, así que es el candidato natural para tiempo real. (iii) La primera acción
+aplicada (56.75~A) coincide en N1, N2, N3 y DE. LJ con la semilla 3 y las dos semillas de GA
+aplican otra. (iv) \textbf{LJ y GA quedan dominados con garantía}: su exceso sobre el óptimo
+global es de al menos 28\,\% y 43\,\%, y son unas $10^4$ veces más lentos. (v) El límite
+superior del intervalo de N1--N3 (2.4\,\%) es la brecha de la cota certificada, no una
+pérdida observada: los pasos 1--3 indican que el exceso real es $\approx0$. Cerrarlo es el
+paso 4b.5.}
+
 \section{Estado actual}
 
 \begin{itemize}
@@ -709,9 +985,16 @@ pero su aporte es de 0.017~K como máximo.}
         dual de optimalidad global para su modelo lineal, y N2 converge al NLP: son dos
         verificaciones independientes del óptimo local. El SAA con 59 escenarios toma unos
         2~s, así que la capa 2 de riesgo es viable en tiempo real.
-  \item \textbf{Abierto.} No hay certificado para el P0 no lineal: falta acotar el error
-        de linealización (V10). F4 todavía no tiene ``una decisión que cambie por riesgo''.
-        Las conclusiones se apoyan en dos consultas, y la cota del actuador no está fijada.
+  \item \textbf{Certificación del P0 no lineal (F3c).} La solución de Ipopt es un mínimo
+        local estricto y el único óptimo encontrado en $\approx590$ arranques y en una
+        búsqueda global sin derivadas. La primera brecha \emph{certificada} es de 2.3\,\%
+        (1180~s) y 11.4\,\% (1161~s); la semi-rigurosa, de 0.3\,\% y 1.2\,\%. En la
+        comparación con la misma vara, N3 y N2 empatan como los mejores, N1 queda a
+        0.0026\,\%, y LJ y GA quedan al menos un 28\,\% y un 43\,\% por encima del óptimo
+        global.
+  \item \textbf{Abierto.} La brecha certificada es conservadora (paso 4b.5). F4 todavía no
+        tiene ``una decisión que cambie por riesgo''. Las conclusiones se apoyan en dos
+        consultas, y la cota del actuador no está fijada.
 \end{itemize}
 
 \section{Próximos pasos}
@@ -733,18 +1016,21 @@ pero su aporte es de 0.017~K como máximo.}
         \code{build\_query\_from\_archive.m}.
   \item \textbf{F5, lazo cerrado} (leo\_asus): las 61 consultas con el NLP o el QP frente
         al lazo LJ archivado, con menos de 120~s por consulta.
-  \item \textbf{Certificado para el modelo no lineal} (leo\_acer, de investigación): acotar
-        el residuo de segundo orden de la linealización sobre la región de control. Así la
-        cota dual del QP se convertiría en una cota inferior del P0 no lineal (vía V10).
+  \item \textbf{F3c, paso 4b.5} (leo\_acer, próxima ronda): ajustar la cota certificada con
+        una partición por masa inyectada o un modelo de Taylor de segundo orden. El objetivo
+        es cerrar el exceso garantizado de N1--N3 (hoy 0--2.4\,\% y 0--12.9\,\%) hacia los
+        valores semi-rigurosos (0.3\,\% y 1.2\,\%).
 \end{enumerate}
 
 \paragraph{Reproducibilidad.}
-\begin{itemize}
-  \item Resultados: \code{results/f1\_rom\_replica/}, \code{results/f3\_certificates/} y
-        \code{results/f4\_risk/}.
+\begin{itemize}\sloppy
+  \item Resultados: \code{results/f1\_rom\_replica/}, \code{results/f3\_certificates/},
+        \code{results/f3c\_optimality/} y \code{results/f4\_risk/}.
   \item Julia: \code{julia/f2\_monolithic\_nlp.jl}, \code{f3\_certificates\_condensed.jl}
-        (sustituye a \code{f3\_linearized\_qp.jl}), \code{f4\_risk\_decisions.jl} y
-        \code{f4\_actuator\_sweep.jl}.
+        (sustituye a \code{f3\_linearized\_qp.jl}), \code{f3c\_optimality.jl} (pasos 1--3),
+        \code{f3c\_lower\_bound.jl} (4a), \code{f3c\_rigorous.jl} (4b; centro con
+        \code{F3C\_CENTER=mid}), \code{f3c\_compare\_decisions.jl}, \code{ReducedP0.jl},
+        \code{f4\_risk\_decisions.jl} y \code{f4\_actuator\_sweep.jl}.
   \item Python: \code{python/f4\_leak\_ensemble.py}, \code{f4\_forecast\_calibration.py}
         y \code{make\_status\_figures.py} (figuras).
 \end{itemize}

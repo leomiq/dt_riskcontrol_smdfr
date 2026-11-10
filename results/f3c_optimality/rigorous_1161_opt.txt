@@ -1,0 +1,23 @@
+=== F3c step 4b (rigorous residual bound), t_q = 1161 s, parts 1..3
+UB = J(u*) = 48.0283928981; Taylor-model center: u* (NLP solution)
+
+4b.1 interval Jacobian [A](Z) over sampled reach boxes; it must contain every sampled A(x)
+  26 steps, 50 sampled Jacobians each: 0 entries outside the interval Jacobian (must be 0); 2.0 s
+  relative half-width of [A] (scaled, ∞-norm): step 1 5.259e-04, step 26 2.447e-02, max 2.447e-02
+  max sampled state deviation over the box at step 26, scaled: 4.786e-02
+
+4b.2 propagation of the Taylor model with interval remainder (whole control box)
+  all 26 steps verified in 3.6 s; fixed-point iterations per step: 2–2
+  consistency: max |G_rec − G_AD| = 2.255e-17, max |ŷ*_rec − ŷ*_AD| = 0.000e+00
+  k    ε_rigorous [K]   ε_sampled [K]   ratio   (sampled = 302 points, same center)
+   1   4.422e-04        4.424e-05            10.00
+   2   2.018e-03        7.470e-05            27.01
+   5   2.010e-02        1.088e-03            18.48
+  10   1.133e-01        5.126e-03            22.10
+  15   3.113e-01        1.211e-02            25.70
+  20   6.504e-01        2.200e-02            29.56
+  26   1.319e+00        3.767e-02            35.01
+  ε_rigorous ≥ ε_sampled in all steps: yes (it must be, if both are right)
+
+4b.3 certified lower bound: convex relaxation with the rigorous ε (Clarabel dual bound)
+  OPTIMAL: LB = 38.0133482642, UB = 48.0283928981, certified gap = 1.0015e+01 (20.852 % of UB)
