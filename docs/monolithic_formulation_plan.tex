@@ -836,6 +836,66 @@ El criterio de F1b.3 ($\le$ 0.01 K en las ventanas de consulta y $\le$ 0.1 K en 
 
 \textbf{Estado.} F1b.1–F1b.3 cerrados. F1b.4 (todos los estados y una falla del ACS) queda para leo\_asus. El siguiente paso es F4.5: construir consultas desde la réplica del HRM con la inicialización del ROM de \code{DET\_2}, verificarlas contra las consultas de F1 y medir el desajuste ROM–HRM.
 
+\subsection*{8.8 F4.5: consultas desde la réplica y desajuste ROM–HRM (11-11-2026, leo\_acer)}
+\addcontentsline{toc}{subsection}{8.8 F4.5: consultas desde la réplica y desajuste ROM–HRM (11-11-2026, leo\_acer)}
+\textbf{Consultas sin Simulink} (\code{julia/HRMQueries.jl}). Una consulta en $t_q$ se construye como lo hace el lazo:
+
+\begin{enumerate}
+\item se corre el HRM réplica hasta $t_q-10$ s con la serie de control conocida;
+\item se proyecta su estado sobre el ROM como en \code{DET\_2.m}: $N$, $C_i$, $C^e_i$ y $\Delta M$ se copian, y $T_f$, $T_w$ y $T_c$ son los promedios de los 12 nodos;
+\item se calienta el ROM 10 s con la fuga del HRM y las corrientes aplicadas.
+\end{enumerate}
+
+\code{julia/f45\_query\_check.jl} compara el resultado con las consultas de F1 exportadas desde Simulink:
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YRR@{}}
+\toprule
+\textbf{} & \textbf{1161 s} & \textbf{1180 s} \\
+\midrule
+\endhead
+Estado proyectado en $t_q-10$ s: $N$, $C_i$, $C^e_i$ (diferencia relativa) & $\le$ 9·10$^{-8}$ & $\le$ 1.2·10$^{-7}$ \\
+Estado proyectado: promedios de $T_f$, $T_w$, $T_c$ & $\le$ 4·10$^{-6}$ K & $\le$ 6·10$^{-6}$ K \\
+$\Delta M$ & exacto & exacto \\
+Integrador del PI en $t_q-10$ s & 2.90711040 frente a 2.90711043 & 9.89659789 frente a 9.89659786 \\
+Estado inicial del NLP en $t_q-\Delta t$ (temperaturas) & $\le$ 6·10$^{-7}$ K & $\le$ 1.6·10$^{-6}$ K \\
+$\hat y$ del ROM en $t_q-\Delta t$ & 6·10$^{-7}$ K & 7·10$^{-7}$ K \\
+\bottomrule
+\end{xltabular}}
+
+Esto valida también \textbf{estados internos} del HRM réplica: la cinética, los promedios nodales y el PI. Es parte de lo que F1b.4 pedía a leo\_asus; queda pendiente sólo la comparación nodo a nodo.
+
+\textbf{Desajuste ROM–HRM en las 41 consultas 1160–1180 s} (\code{julia/f45\_rom\_hrm\_mismatch.jl}, \code{results/f45\_robustness/rom\_hrm\_mismatch*.csv}). En cada consulta se resuelve N3 sobre el ROM con un pronóstico de fuga perfecto, para aislar el error de modelo. La acción óptima se aplica al HRM réplica desde su estado en $t_q-\Delta t$, y se compara la PCT del HRM con la predicción $\hat y$ del ROM. Se usan dos configuraciones del actuador:
+
+\begin{itemize}
+\item \textbf{archivada}: corriente en [56.69, 56.75] A (0–12.9 kg/s) y rampa blanda de P0;
+\item \textbf{física}: $0\le\dot m\le5543$ kg/s y rampa dura de 5 kg/s por paso (\S{}8.3).
+\end{itemize}
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YY@{}}
+\toprule
+\textbf{Medida} & \textbf{Valor} \\
+\midrule
+\endhead
+Error del ROM al decidir, $d=\mathrm{PCT}_{\rm HRM}(t_q-\Delta t)-\hat y(t_q-\Delta t)$ & $-$0.24 a $-$0.06 K: \textbf{el ROM sobrestima la PCT}; el sesgo baja a lo largo del transitorio \\
+Error máximo en el horizonte, $\max_k\lvert\mathrm{PCT}_{\rm HRM}-\hat y_k\rvert$ & 0.15–0.25 K (las dos configuraciones) \\
+Ese error menos el sesgo inicial $d$ & $\le$ 0.09 K (archivada), $\le$ 0.12 K (física) \\
+Autoridad: PCT con 12.9 kg/s menos PCT sin ACS, al final del horizonte & ROM 2.58 K, HRM 2.33 K: \textbf{el ROM sobrestima el efecto del actuador en $\approx$ 10 \%} \\
+Costo P0 que realiza el HRM / costo que predice el ROM & mediana 0.71 (archivada), 0.88 (física) \\
+Tiempo del NLP & mediana 0.19 s (archivada), 0.24 s (física); todas \code{LOCALLY\_SOLVED} \\
+Primera acción & archivada: $\dot m_0=\dot m_{\max}$ en las 41; física: $\dot m_0=\dot m_{\rm prev}+5$ (la rampa) en las 41 \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Lectura.}
+
+\begin{itemize}
+\item El desajuste ROM–HRM ($\approx$ 0.2 K) es \textbf{diez veces mayor} que el error del pronóstico de fuga ($\approx$ 0.025 K, \S{}8.2) y \textbf{diez veces menor} que la autoridad del actuador ($\approx$ 2.4 K). No es el escenario de 1 K que habría justificado usar el HRM como modelo de predicción.
+\item La mayor parte del desajuste es un \textbf{sesgo} que ya se conoce al decidir. Una corrección \emph{offset-free} (sumar $d$ constante a $\hat y$) deja $\le$ 0.1 K. Para F5b, la $\sigma_k$ de la restricción probabilística debe salir del error corregido, no del bruto.
+\item En las dos configuraciones, la primera acción queda en una cota (caudal máximo o rampa) en todas las consultas. Mientras sea así, ni el desajuste ni el pronóstico pueden cambiar $u_0$. Sólo cambian el recurso del horizonte y el costo realizado.
+\end{itemize}
+
 \medskip
 \section*{9. Decisiones abiertas}
 \addcontentsline{toc}{section}{9. Decisiones abiertas}

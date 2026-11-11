@@ -945,6 +945,63 @@ leo_asus. El siguiente paso es F4.5: construir consultas desde la réplica del H
 inicialización del ROM de `DET_2`, verificarlas contra las consultas de F1 y medir el
 desajuste ROM–HRM.
 
+### 8.8 F4.5: consultas desde la réplica y desajuste ROM–HRM (11-11-2026, leo_acer)
+
+**Consultas sin Simulink** (`julia/HRMQueries.jl`). Una consulta en $t_q$ se construye como
+lo hace el lazo:
+
+1. se corre el HRM réplica hasta $t_q-10$ s con la serie de control conocida;
+2. se proyecta su estado sobre el ROM como en `DET_2.m`: $N$, $C_i$, $C^e_i$ y $\Delta M$ se
+   copian, y $T_f$, $T_w$ y $T_c$ son los promedios de los 12 nodos;
+3. se calienta el ROM 10 s con la fuga del HRM y las corrientes aplicadas.
+
+`julia/f45_query_check.jl` compara el resultado con las consultas de F1 exportadas desde
+Simulink:
+
+| | 1161 s | 1180 s |
+|---|---:|---:|
+| Estado proyectado en $t_q-10$ s: $N$, $C_i$, $C^e_i$ (diferencia relativa) | ≤ 9·10⁻⁸ | ≤ 1.2·10⁻⁷ |
+| Estado proyectado: promedios de $T_f$, $T_w$, $T_c$ | ≤ 4·10⁻⁶ K | ≤ 6·10⁻⁶ K |
+| $\Delta M$ | exacto | exacto |
+| Integrador del PI en $t_q-10$ s | 2.90711040 frente a 2.90711043 | 9.89659789 frente a 9.89659786 |
+| Estado inicial del NLP en $t_q-\Delta t$ (temperaturas) | ≤ 6·10⁻⁷ K | ≤ 1.6·10⁻⁶ K |
+| $\hat y$ del ROM en $t_q-\Delta t$ | 6·10⁻⁷ K | 7·10⁻⁷ K |
+
+Esto valida también **estados internos** del HRM réplica: la cinética, los promedios nodales
+y el PI. Es parte de lo que F1b.4 pedía a leo_asus; queda pendiente sólo la comparación nodo
+a nodo.
+
+**Desajuste ROM–HRM en las 41 consultas 1160–1180 s** (`julia/f45_rom_hrm_mismatch.jl`,
+`results/f45_robustness/rom_hrm_mismatch*.csv`). En cada consulta se resuelve N3 sobre el ROM
+con un pronóstico de fuga perfecto, para aislar el error de modelo. La acción óptima se
+aplica al HRM réplica desde su estado en $t_q-\Delta t$, y se compara la PCT del HRM con la
+predicción $\hat y$ del ROM. Se usan dos configuraciones del actuador:
+
+- **archivada**: corriente en [56.69, 56.75] A (0–12.9 kg/s) y rampa blanda de P0;
+- **física**: $0\le\dot m\le5543$ kg/s y rampa dura de 5 kg/s por paso (§8.3).
+
+| Medida | Valor |
+|---|---|
+| Error del ROM al decidir, $d=\mathrm{PCT}_{\rm HRM}(t_q-\Delta t)-\hat y(t_q-\Delta t)$ | −0.24 a −0.06 K: **el ROM sobrestima la PCT**; el sesgo baja a lo largo del transitorio |
+| Error máximo en el horizonte, $\max_k\lvert\mathrm{PCT}_{\rm HRM}-\hat y_k\rvert$ | 0.15–0.25 K (las dos configuraciones) |
+| Ese error menos el sesgo inicial $d$ | ≤ 0.09 K (archivada), ≤ 0.12 K (física) |
+| Autoridad: PCT con 12.9 kg/s menos PCT sin ACS, al final del horizonte | ROM 2.58 K, HRM 2.33 K: **el ROM sobrestima el efecto del actuador en ≈ 10 %** |
+| Costo P0 que realiza el HRM / costo que predice el ROM | mediana 0.71 (archivada), 0.88 (física) |
+| Tiempo del NLP | mediana 0.19 s (archivada), 0.24 s (física); todas `LOCALLY_SOLVED` |
+| Primera acción | archivada: $\dot m_0=\dot m_{\max}$ en las 41; física: $\dot m_0=\dot m_{\rm prev}+5$ (la rampa) en las 41 |
+
+**Lectura.**
+
+- El desajuste ROM–HRM (≈ 0.2 K) es **diez veces mayor** que el error del pronóstico de
+  fuga (≈ 0.025 K, §8.2) y **diez veces menor** que la autoridad del actuador (≈ 2.4 K).
+  No es el escenario de 1 K que habría justificado usar el HRM como modelo de predicción.
+- La mayor parte del desajuste es un **sesgo** que ya se conoce al decidir. Una corrección
+  *offset-free* (sumar $d$ constante a $\hat y$) deja ≤ 0.1 K. Para F5b, la $\sigma_k$ de la
+  restricción probabilística debe salir del error corregido, no del bruto.
+- En las dos configuraciones, la primera acción queda en una cota (caudal máximo o rampa)
+  en todas las consultas. Mientras sea así, ni el desajuste ni el pronóstico pueden cambiar
+  $u_0$. Sólo cambian el recurso del horizonte y el costo realizado.
+
 ---
 
 ## 9. Decisiones abiertas

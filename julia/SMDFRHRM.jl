@@ -290,13 +290,16 @@ Simulink run (`julia/f1b_validate_hrm.jl`):
     for the ROM in F1, and confirmed here by the extrapolation spike at 1160.5 s;
   * the leak, produced by Clock-driven MATLAB Function blocks, at t_n (with t_{n+1} the
     replica drifts by ½·ṁ_leak·Δt of inventory, ≈ 0.03 K of PCT);
-  * discrete outputs (PI, activation logic) held from the major step at t_n. Returns a NamedTuple of logs on
-the grid 0:h:t_end (`pct`, `leak`, `Te_c12`, `acs`, `current`, `act`) and the final state.
+  * discrete outputs (PI, activation logic) held from the major step at t_n.
+Returns a NamedTuple of logs on the grid t0:h:t_end (`pct`, `leak`, `Te_c12`, `acs`,
+`current`, `act`), the final state `x` and the final activation/PI state `logic`.
+To continue a run, pass its `x` and `logic` with `t0` (the logic is copied, not mutated).
 """
-function simulate(p::HRMParams, ext::ExtInput, t_end; h = 0.5, x0 = initial_state(p))
-    K = round(Int, t_end / h)
-    x = copy(x0); L = DETLogic()
-    t = h .* (0:K)
+function simulate(p::HRMParams, ext::ExtInput, t_end; h = 0.5, t0 = 0.0,
+                  x0 = initial_state(p), logic::DETLogic = DETLogic())
+    K = round(Int, (t_end - t0) / h)
+    x = copy(x0); L = deepcopy(logic)
+    t = t0 .+ h .* (0:K)
     pctv = zeros(K + 1); leak = zeros(K + 1); Tec12 = zeros(K + 1)
     acs = zeros(K + 1); cur = zeros(K + 1); actv = zeros(K + 1)
     for n in 0:K
@@ -313,7 +316,8 @@ function simulate(p::HRMParams, ext::ExtInput, t_end; h = 0.5, x0 = initial_stat
         # leak (Clock-driven MATLAB Functions) at t_n; root inports at t_{n+1} (see docstring)
         x = step_ode1be(x, leak_flow(tn, p), m_acs, h, p)
     end
-    (; t = collect(t), pct = pctv, leak, Te_c12 = Tec12, acs, current = cur, act = actv, x)
+    (; t = collect(t), pct = pctv, leak, Te_c12 = Tec12, acs, current = cur, act = actv, x,
+       logic = L)
 end
 
 end # module
