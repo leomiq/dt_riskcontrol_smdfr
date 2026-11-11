@@ -176,10 +176,11 @@ Plant perturbations the MPC does not know about (F5a.2):
   `eta`   ACS efficiency: the plant receives η·ṁ for a commanded ṁ (degraded ACS);
   `fail`  (t_a, t_b): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
   `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
+  `audit(c, L, act, prev, dec)` optional callback after each MPC decision (same query data).
 The ROM warm-up uses the COMMANDED currents (what the twin knows), the plant the real ones.
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
-                  fail = nothing, fbias = 0.0)
+                  fail = nothing, fbias = 0.0, audit = nothing)
     pH = B.pH; hist = copy(B.hist)
     last = findfirst(==(B.t_start - h), B.cs[:, 1])
     T = B.cs[2:last, 1]; U = B.cs[2:last, 2:3]          # commanded inport series (grows)
@@ -201,6 +202,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
              leak0 = w.leak_warm[end], y_ref = bias ? B.y_ref - d : B.y_ref, m_prev = m_applied)
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)
+            audit === nothing || audit(c, L, act, prev, dec)
             m1 = dec.m[1]; prev = dec.m
         else
             m1 = ctrl == :zero ? 0.0 : ctrl == :max ? act.m_hi :

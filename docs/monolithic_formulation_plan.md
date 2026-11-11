@@ -1157,6 +1157,34 @@ sesgo constante: falta el ensamble BiLSTM en el lazo (`python/f4_leak_ensemble.p
 consulta, o un modelo de error calibrado). La campaña grande (≥ 100 realizaciones, con
 `W > 0` procesos) es la candidata para Olab.
 
+**Auditoría de optimalidad (11-11-2026)** (`julia/f5a_optimality_audit.jl`,
+`results/f5a_closed_loop/optimality_audit.csv`). A lo largo de un lazo N3+sesgo de 121
+consultas (realización archivada y semillas 1 y 2, ambos actuadores, 726 consultas), cada
+consulta se resolvió con N3 como en el lazo, N3 "pulido" (sin la salida *acceptable* de
+Ipopt), N3 desde arranque en frío, N1 y N2. Todas las soluciones se evaluaron con el mismo
+costo P0 sobre el ROM `ode1be`.
+
+| Solver | Estado | Brecha absoluta de costo frente al mejor N3 [K²] (mediana / máx.) | Máx. $\lvert\Delta\dot m_0\rvert$ frente a N3 [kg/s] |
+|---|---|---|---|
+| N1 (QP, Clarabel) | `OPTIMAL` en 726/726 | 3·10⁻⁷–2·10⁻⁶ / 9.7·10⁻³ | 3·10⁻³ (arch.), 0.11 (física) |
+| N2 (QP, Clarabel) | `OPTIMAL` en 726/726 | 5·10⁻¹² / 2.2·10⁻³ | 10⁻³ (arch.), 10⁻² (física) |
+| N3 en el lazo (Ipopt) | `LOCALLY_SOLVED` 160, `ALMOST_LOCALLY_SOLVED` 566 | 2·10⁻¹⁴ / 3·10⁻⁸ | — |
+| N3 pulido | igual, más 7 `ITERATION_LIMIT` | idéntico a N3 | 2·10⁻⁷ |
+| N3 en frío | igual | 0 / 4·10⁻⁸ | 1.5·10⁻³ |
+
+- Los QP de N1 y N2 se resuelven a su **óptimo global**, porque son convexos. Ese óptimo
+  es el del modelo linealizado, no el de P0. Medido sobre P0, N2 pierde ≤ 0.002 K² y N1
+  ≤ 0.01 K². Esas pérdidas ocurren sólo en las primeras consultas, donde el costo vale
+  15–46 K².
+- N3 termina en "aceptable" en el 78 % de las consultas porque, en régimen, el costo óptimo
+  es ≈ 3·10⁻¹² K²: el seguimiento es perfecto y la tolerancia 10⁻¹⁰ queda bajo el ruido
+  numérico. Desactivar la salida aceptable o partir en frío lleva al mismo punto, con
+  $\lvert\Delta\dot m_0\rvert$ ≤ 1.5·10⁻³ kg/s. Las soluciones son **óptimos locales
+  reproducibles**. La optimalidad global de N3 sólo está certificada en las dos consultas
+  de F3c (§8.5).
+- El conteo `fails` de F5a.1/F5a.2 trata `ALMOST_*` como éxito. La auditoría confirma que
+  esa elección no cambia ninguna decisión.
+
 ---
 
 ## 9. Decisiones abiertas

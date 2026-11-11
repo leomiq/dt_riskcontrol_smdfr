@@ -1034,6 +1034,28 @@ estresada & N2 nominal (física) & 31.75 & +4.9 $\pm$ 6.5 (+19 \%) & 39.7 & 0.04
 
 \textbf{Límites y siguientes tandas.} Seis realizaciones bastan para las comparaciones pareadas con IC estrechos (N1/N2/N3 y corrección de sesgo). No bastan para las de alta varianza (N2 nominal en la familia estresada) ni para estimar colas. El pronóstico es perfecto o con sesgo constante: falta el ensamble BiLSTM en el lazo (\code{python/f4\_leak\_ensemble.py} por consulta, o un modelo de error calibrado). La campaña grande ($\ge$ 100 realizaciones, con \code{W > 0} procesos) es la candidata para Olab.
 
+\textbf{Auditoría de optimalidad (11-11-2026)} (\code{julia/f5a\_optimality\_audit.jl}, \code{results/f5a\_closed\_loop/optimality\_audit.csv}). A lo largo de un lazo N3+sesgo de 121 consultas (realización archivada y semillas 1 y 2, ambos actuadores, 726 consultas), cada consulta se resolvió con N3 como en el lazo, N3 "pulido" (sin la salida \emph{acceptable} de Ipopt), N3 desde arranque en frío, N1 y N2. Todas las soluciones se evaluaron con el mismo costo P0 sobre el ROM \code{ode1be}.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Solver} & \textbf{Estado} & \textbf{Brecha absoluta de costo frente al mejor N3 [K$^{2}$] (mediana / máx.)} & \textbf{Máx. $\lvert\Delta\dot m_0\rvert$ frente a N3 [kg/s]} \\
+\midrule
+\endhead
+N1 (QP, Clarabel) & \code{OPTIMAL} en 726/726 & 3·10$^{-7}$–2·10$^{-6}$ / 9.7·10$^{-3}$ & 3·10$^{-3}$ (arch.), 0.11 (física) \\
+N2 (QP, Clarabel) & \code{OPTIMAL} en 726/726 & 5·10$^{-12}$ / 2.2·10$^{-3}$ & 10$^{-3}$ (arch.), 10$^{-2}$ (física) \\
+N3 en el lazo (Ipopt) & \code{LOCALLY\_SOLVED} 160, \code{ALMOST\_LOCALLY\_SOLVED} 566 & 2·10$^{-14}$ / 3·10$^{-8}$ & — \\
+N3 pulido & igual, más 7 \code{ITERATION\_LIMIT} & idéntico a N3 & 2·10$^{-7}$ \\
+N3 en frío & igual & 0 / 4·10$^{-8}$ & 1.5·10$^{-3}$ \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item Los QP de N1 y N2 se resuelven a su \textbf{óptimo global}, porque son convexos. Ese óptimo es el del modelo linealizado, no el de P0. Medido sobre P0, N2 pierde $\le$ 0.002 K$^{2}$ y N1 $\le$ 0.01 K$^{2}$. Esas pérdidas ocurren sólo en las primeras consultas, donde el costo vale 15–46 K$^{2}$.
+\item N3 termina en "aceptable" en el 78 \% de las consultas porque, en régimen, el costo óptimo es $\approx$ 3·10$^{-12}$ K$^{2}$: el seguimiento es perfecto y la tolerancia 10$^{-10}$ queda bajo el ruido numérico. Desactivar la salida aceptable o partir en frío lleva al mismo punto, con $\lvert\Delta\dot m_0\rvert$ $\le$ 1.5·10$^{-3}$ kg/s. Las soluciones son \textbf{óptimos locales reproducibles}. La optimalidad global de N3 sólo está certificada en las dos consultas de F3c (\S{}8.5).
+\item El conteo \code{fails} de F5a.1/F5a.2 trata \code{ALMOST\_*} como éxito. La auditoría confirma que esa elección no cambia ninguna decisión.
+\end{itemize}
+
 \medskip
 \section*{9. Decisiones abiertas}
 \addcontentsline{toc}{section}{9. Decisiones abiertas}
