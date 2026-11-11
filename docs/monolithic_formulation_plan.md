@@ -1002,6 +1002,95 @@ predicción $\hat y$ del ROM. Se usan dos configuraciones del actuador:
   en todas las consultas. Mientras sea así, ni el desajuste ni el pronóstico pueden cambiar
   $u_0$. Sólo cambian el recurso del horizonte y el costo realizado.
 
+**¿Cambia el desajuste la decisión? Oráculo N3-HRM** (`julia/f45_decision_mismatch.jl`,
+`results/f45_robustness/decision_mismatch.csv`). En 9 consultas (1160–1180 s, cada 2.5 s)
+se comparan tres decisiones, evaluadas sobre el HRM:
+
+- **ROM**: N3 sobre el ROM;
+- **ROM+sesgo**: el mismo N3 con $\hat y+d$;
+- **HRM (oráculo)**: el P0 resuelto directamente sobre el HRM como NLP de espacio completo
+  (50 estados por paso, Euler implícito como restricciones y hessianas exactas). Tarda 0.5–4 s
+  por consulta, así que **"N3-HRM" también es viable en tiempo real**.
+
+| | Configuración archivada | Configuración física |
+|---|---|---|
+| $\dot m_0$ de ROM, ROM+sesgo y HRM | idénticos en las 9 consultas | idénticos en las 9 consultas |
+| Exceso de costo del ROM sobre el oráculo (medido en el HRM) | mediana +6 %, máximo +253 % (1180 s) | mediana +20 %, máximo +362 % |
+| Exceso de ROM+sesgo sobre el oráculo | mediana **+0.3 %**, máximo +69 % | mediana **+0.5 %**, máximo +94 % |
+
+Los excesos grandes aparecen cerca de la convergencia, donde el costo es pequeño (0.1–0.4)
+y en valor absoluto equivalen a centésimas de kelvin. La corrección de sesgo elimina casi
+todo el exceso. Lo que queda se explica por la autoridad del actuador, que el ROM sobrestima
+en ≈ 10 %, y afecta al recurso, no a la primera acción.
+
+### 8.9 F5a.1: lazo cerrado determinista sobre el HRM réplica (11-11-2026, leo_acer)
+
+`julia/ClosedLoop.jl` y `julia/f5a_closed_loop.jl`; resultados en
+`results/f5a_closed_loop/{summary,trajectories}.csv`.
+
+**Montaje**:
+
+- La planta es el HRM réplica.
+- Hay 61 consultas, de 1160 a 1190 s, con un pronóstico de fuga perfecto.
+- Cada consulta se construye como en el lazo original: proyección del HRM en $t_q-10$ s y
+  calentamiento del ROM.
+- La primera acción se aplica durante $(t_q-\Delta t,\,t_q]$.
+- La planta se simula una sola vez hacia adelante, así que no aparece el artefacto de §8.7.
+
+**Validación del banco (F5a.0)**:
+
+- repitiendo las corrientes LJ archivadas, reproduce la PCT reconstruida en F1b con un error
+  de 5·10⁻¹⁰ K;
+- en la primera consulta, N3 da el óptimo de lazo abierto de §8.8.
+
+**Resultados en la ventana 1160–1179.5 s** (41 consultas, comparable con el lazo LJ):
+
+| Actuador | Controlador | ISE [K²] | IAE [K·s] | Tiempo sobre $y_{\rm ref}$ [s] | Masa [kg] | Resolución p50 / p99 [s] |
+|---|---|---:|---:|---:|---:|---|
+| — | Sin ACS | 274.2 | 51.8 | 20.0 | 0 | — |
+| archivado | LJ archivado (repetición) | 46.70 | 18.59 | 20.0 | 206 | ≈ 800 en el lazo original |
+| archivado | Caudal máximo constante | 42.02 | 16.72 | 16.0 | 257 | — |
+| archivado | N1 = N2 = N3 | **41.54** | 16.05 | 16.0 | 227 | 0.026 / 0.046 (QP); 0.145 / 0.20 (NLP) |
+| archivado | N1 = N2 = N3 + sesgo | 41.52 | 15.92 | 16.5 | 225 | igual |
+| física | N1 ≈ N2 ≈ N3 | **24.12** | 8.81 | 6.5 | 227 | 0.03 / 0.06 (QP); 0.18 / 0.24 (NLP) |
+| física | N1 ≈ N2 ≈ N3 + sesgo | 23.97 | 8.16 | 6.5 | 225 | igual |
+
+**Ventana completa 1160–1190 s** (61 consultas):
+
+| Controlador | ISE (arch.) | ISE (física) | $\lvert e\rvert$ medio en los últimos 10 s |
+|---|---:|---:|---:|
+| Caudal máximo constante (arch.) | 68.56 | — | 1.10 K: sobrepasa la referencia |
+| N1/N2/N3 nominal | 41.57 | 24.16 | 0.040 K |
+| N1/N2/N3 + sesgo | 41.52 | 23.97 | **0.0105 K** |
+
+Ningún solver falló en ninguna de las 16 corridas. La PCT máxima de todas las variantes
+(1181.17 K archivada, 1181.20 K física) está en 1160 s: la fija el estado al entrar al lazo,
+y ningún controlador puede cambiarla.
+
+**Lectura.**
+
+1. **N1, N2 y N3 son indistinguibles en lazo cerrado**: en la configuración archivada,
+   iguales hasta la cuarta cifra; en la física, con diferencias de 10⁻³ en el ISE. El QP es
+   5–6 veces más rápido (≈ 30 ms frente a ≈ 160 ms). Para cargar las capas de riesgo (F5b),
+   el candidato es **N2 en iteración de tiempo real** o N1, por su estructura de QP convexo.
+2. **Frente al lazo LJ archivado**, el MPC monolítico reduce el ISE en 11 % con el mismo
+   actuador, decide en milisegundos en lugar de minutos y es reproducible.
+3. **Lo que más mueve el desempeño es el actuador, no el optimizador.** Con la configuración
+   física (rampa dura, sin tope de 12.9 kg/s), el ISE baja 42 % y el tiempo sobre la
+   referencia de 16 a 6.5 s. Esto refuerza la prioridad de fijar la rampa y el caudal del
+   sistema de inyección (§9.6).
+4. **En la fase aguda el MPC equivale a saturar**: con la cota archivada, el caudal máximo
+   constante está a 1 % del MPC hasta 1180 s. El MPC aporta en la convergencia: el caudal
+   constante sobrepasa la referencia en 1.1 K hacia 1190 s, y el MPC la sigue a 0.04 K.
+5. **La corrección de sesgo (offset-free) reduce el error estacionario 4 veces**, de 0.040 a
+   0.0105 K, sin costo de cómputo. Debe quedar como opción por defecto del lazo.
+6. **Cómputo**: p99 ≤ 0.07 s con QP y ≤ 0.7 s con NLP, frente a 120 s disponibles. Sobra
+   presupuesto para SAA (~2 s con 59 escenarios, §8.2) y para N3-HRM (0.5–4 s).
+
+**Límites.** El pronóstico de fuga es perfecto y la realización es una sola (la archivada).
+Tampoco hay fallas del ACS. Esos son los ejes de F5a.2 (Monte Carlo: realizaciones de fuga,
+pronóstico BiLSTM, ACS degradado y falla forzada) y de F5b (riesgo).
+
 ---
 
 ## 9. Decisiones abiertas
