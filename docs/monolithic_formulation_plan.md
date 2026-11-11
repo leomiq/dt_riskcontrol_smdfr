@@ -309,7 +309,7 @@ lo que corresponde al pronóstico orientado a la decisión del artículo.
 | **F3** Linealizado (N1, N2) | QP y funciones de transferencia | $A,B,E,C,D$ en cada consulta; $G(s)$ de $\dot m_{\rm ACS}$ a PCT; MPC lineal | Error de N1/N2 frente a N3 ≪ 1 K; brecha de costo medida |
 | **F3c** Certificación de N3 | Brecha de optimalidad del NLP **no lineal**, no del QP (§8.5) | Certificado local (KKT y segundo orden), NLP sobre `ode1be`, evidencia global y cota inferior rigurosa | "La solución está a menos de X % del óptimo global de P0" en cada consulta |
 | **F4** Riesgo | Las capas de §7 | Restricción probabilística, SAA y experimento de cuantiles | Una decisión que cambia por riesgo, con intervalos de confianza |
-| **F1b** HRM programable (11-11-2026, §8.6) | Planta de 12 nodos sin Simulink | `julia/SMDFRHRM.jl` y su validación contra la corrida archivada de 0 a 1180 s | PCT máxima y $T_{e,c}$ del nodo 12 reproducidas en toda la corrida (§8.6) |
+| **F1b** HRM programable (11-11-2026, §8.6–8.7) | Planta de 12 nodos sin Simulink | `julia/SMDFRHRM.jl` y su validación contra la corrida archivada de 0 a 1180 s | PCT máxima y $T_{e,c}$ del nodo 12 reproducidas en toda la corrida. **F1b.1–3 cerrados**: error de PCT de 3·10⁻⁶ K en la ventana del MPC (§8.7) |
 | **F4.5** Robustez en lazo abierto (§8.6) | Extender F2–F4 más allá de dos consultas | 10–15 consultas, tres configuraciones del actuador y desajuste ROM–HRM | N1/N2/N3 comparados donde el óptimo es interior; error ROM–HRM medido |
 | **F5a** Lazo cerrado determinista (§8.6) | N1/N2/N3 en lazo cerrado **sin** capas de riesgo | Banco de lazo cerrado con planta intercambiable (réplica ROM → HRM en Julia → Simulink); campaña Monte Carlo en Olab | Métricas de §8.6 con intervalos de confianza; menos de 120 s por consulta |
 | **F5b** Lazo cerrado con riesgo (§8.6) | Las capas de §7 sobre la mejor variante de F5a | Restricción probabilística con el error ROM–HRM, SAA con fallas del ACS, escenario óptimo y escenario aprendido (V6) | Frontera costo–riesgo fuera de muestra |
@@ -868,6 +868,82 @@ sin falla del ACS en la ventana) y sólo dos salidas del HRM. F1b.3 valida las s
 usa el lazo, pero no cada estado nodal ni la lógica de fallas. Eso queda para F1b.4.
 Mientras tanto, los resultados del lazo cerrado con falla del ACS se informan como
 provisionales.
+
+### 8.7 F1b: réplica del HRM, resultados (11-11-2026, leo_acer)
+
+**F1b.1, ecuaciones.** `tools/slx_dump.py` lee el `.slx` (XML comprimido) sin MATLAB y lista
+bloques, parámetros, conexiones y el código de cada función MATLAB. Las ecuaciones de
+§8.6 se confirmaron bloque a bloque, incluido el orden de los puertos frente a los
+parámetros. Los detalles que difieren del ROM o que no eran evidentes son los siguientes:
+
+- El inventario $\Delta M$ es un solo integrador. Se reparte entre los nodos en proporción
+  a $M_{c,i}$ (`scalar to vector3`), así que el caudal de todos los nodos es
+  $\dot m_{c,i}=\dot m_{c0}(1+\Delta M/\sum_iM_{c,i})$, con $\sum_iM_{c,i}=8144.8$ kg, igual
+  que en el ROM.
+- La temperatura de entrada del refrigerante usa $T_{e,c0}$ del nodo 12 del estacionario y
+  $c_p(T_{c,1})$. Las de salida se encadenan, $T_{e,i}=2T_i-T_{e,i-1}$. La reactividad usa
+  la salida del nodo 12.
+- La fuga es $\dot m_{\rm leak}=\min\{-d+A\,d\,(t-t_f)^{1/B},\,0\}$ con $d=10$ kg/s,
+  $t_f=500$ s, $B=10$ y $A=0.2834$ (archivado). A 1180 s da −4.559 kg/s.
+- **Cadena del actuador** (`SMDFR Units/Subsystem`). El monitor de umbral (`msfcn_limintm_hrm_c`)
+  pasa a demanda cuando la PCT supera 1180 K después de $t=200$ s, y se reinicia bajo
+  1144 K. El planificador (`msfcn_schedule_hrm_c`) activa el ACS con dos pasos de retardo.
+  Mientras `active_mpc` = 0, la corriente la fija un **PI discreto**: $P=-0.05$, $I=-0.01$,
+  Euler explícito, salida saturada en [0, 60] A, error $1144-\mathrm{PCT}$ y reinicio en el
+  flanco de bajada de la activación. Con `active_mpc` = 1 se aplica la corriente del MPC.
+  Las fallas de componentes (`msfcn_indirectps_hrm_c`) tienen tasas de ~10⁻⁸ s⁻¹ y no se
+  modelan: disponibilidad = 1.
+
+**F1b.2, réplica.** `julia/SMDFRHRM.jl`: 50 estados, `ode1be` con una iteración de Newton y
+jacobiano por diferenciación automática, más la cadena del actuador. La convención de
+tiempos, identificada contra el archivo, es:
+
+- los Inports de la raíz (corriente y `active_mpc`) se evalúan en $t_{n+1}$, interpolados o
+  extrapolados linealmente, como en F1;
+- la fuga, generada por funciones MATLAB alimentadas por el `Clock`, se evalúa en $t_n$
+  (con $t_{n+1}$ queda un desfase de $\tfrac12\dot m_{\rm leak}\Delta t$ de inventario, unos
+  0.03 K);
+- las salidas discretas (PI y lógica de activación) se mantienen desde el paso mayor $t_n$.
+
+Una corrida de 0 a 1160 s tarda unos 5 s, la primera vez con compilación incluida.
+
+**F1b.3, validación** (`python/f1b_extract_archive.py` y `julia/f1b_validate_hrm.jl`;
+resultados en `results/f1b_hrm_replica/`). Se repitió el procedimiento del lazo: una corrida
+de 0 a 1160 s y, para cada una de las 40 consultas siguientes, una re-simulación desde
+$t=0$ con la serie de control conocida hasta $t_{k-1}$.
+
+| Señal | Error máximo |
+|---|---:|
+| Fuga | 1.8·10⁻¹⁵ kg/s |
+| PCT, corrida 0–1160 s | 0.016 K, sólo en $t=500.5$ s (el paso de inicio del LOCA); ≤ 8·10⁻⁶ K desde 510 s; **3.2·10⁻⁶ K** en 1100–1160 s |
+| $T_{e,c}$ del nodo 12, corrida 0–1160 s | 6.4·10⁻³ K en 500.5 s; ≈ 10⁻⁶ K en el resto |
+| PCT al final de las consultas 1160–1180 s | ≤ 5·10⁻⁶ K en 40 de 41; 1.1·10⁻³ K en 1160.5 s (salto de 35 K, ver abajo) |
+| Activación del ACS | 1143.0 s; la PCT supera 1180 K en 1142.0 s; antes de 1160 s el PI no llega al umbral de la bomba (caudal 0) |
+
+El criterio de F1b.3 (≤ 0.01 K en las ventanas de consulta y ≤ 0.1 K en toda la corrida)
+se cumple con varios órdenes de margen. El pico de un paso en 500.5 s es un transitorio en
+la discontinuidad de la fuga: no es un desfase de inventario, porque cualquier otra fuga en
+ese paso deja un error permanente. Su causa exacta queda abierta para F1b.4 y no afecta a
+la ventana del MPC.
+
+**Hallazgo: la PCT archivada del lazo LJ contiene un artefacto de extrapolación.** Cada
+consulta re-simula el HRM hasta $t_k$ con la corriente conocida sólo hasta $t_{k-1}$, y el
+Inport extrapola linealmente el último paso: $u(t_k)=2u_{k-1}-u_{k-2}$.
+
+- En 1160.5 s eso da 113.5 A, y la PCT archivada cae 34.6 K (1146.5 K, cuando con las
+  entradas conocidas sería 1181.1 K).
+- En las demás consultas, el sesgo es de ±0.01 a ±0.04 K (mediana 0.012 K), y algunas
+  corrientes extrapoladas salen de la caja [56.69, 56.75] A.
+- La réplica reproduce el artefacto (1146.508 K frente a 1146.507 K archivado), lo que
+  confirma la convención de Inports.
+- **Consecuencia para F5a**: la línea base del lazo LJ no debe tomarse de
+  `tw_max_V2P_trajectory`. Debe reconstruirse con la réplica a partir de la serie de control
+  aplicada (columna `pct_all_inputs_known` de `validation_1180_queries.csv`).
+
+**Estado.** F1b.1–F1b.3 cerrados. F1b.4 (todos los estados y una falla del ACS) queda para
+leo_asus. El siguiente paso es F4.5: construir consultas desde la réplica del HRM con la
+inicialización del ROM de `DET_2`, verificarlas contra las consultas de F1 y medir el
+desajuste ROM–HRM.
 
 ---
 
