@@ -1,0 +1,802 @@
+% Generado desde docs/monolithic_formulation_plan.md con tools/md2tex_plan.py (no editar a mano).
+% Regenerar: python tools/md2tex_plan.py docs/monolithic_formulation_plan.md docs/monolithic_formulation_plan.tex
+% Compilar desde docs/ con Tectonic:  tectonic -X compile monolithic_formulation_plan.tex
+\documentclass[11pt,a4paper]{article}
+\usepackage[spanish,es-noquoting,es-nodecimaldot]{babel}
+\usepackage{fontspec}
+\setmainfont[Path=../assets/fonts/,BoldFont=InterVariable.ttf,
+  BoldFeatures={FakeBold=2.2},ItalicFont=InterVariable.ttf,ItalicFeatures={FakeSlant=0.15},
+  BoldItalicFont=InterVariable.ttf,BoldItalicFeatures={FakeBold=2.2,FakeSlant=0.15}]{InterVariable.ttf}
+\usepackage[margin=22mm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,tabularx,xltabular,array}
+\usepackage{xcolor,enumitem,titlesec}
+\usepackage[skip=4pt plus 1pt]{parskip}
+\usepackage{hyperref}
+\definecolor{ink}{HTML}{12233B}
+\definecolor{accent}{HTML}{003876}
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent}
+\setlist{itemsep=2pt,topsep=3pt}
+\renewcommand{\arraystretch}{1.2}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+\newcommand{\codeus}{\textunderscore\allowbreak}
+\newcommand{\code}[1]{{\small\ttfamily\let\_\codeus #1}}
+\setlength{\emergencystretch}{3em}
+\titleformat{\section}{\large\bfseries\color{accent}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\color{ink}}{\thesubsubsection}{0.6em}{}
+\title{\color{accent}\bfseries Hacia una formulación monolítica del MPC del SMDFR}
+\author{Proyecto DT--SMDFR Risk Control}
+\date{Versión con la reorientación del 11 de noviembre de 2026}
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+Versión: 22 de octubre de 2026. Documento compañero de \href{../presentations/monolithic_formulation.pdf}{\code{presentations/monolithic\_formulation.pdf}}. Desarrolla las vías V1 (formulación monolítica), V2 (modelo lineal) y V3 (referencia exacta) de \href{implementation_route.md}{\code{implementation\_route.md}}, y conecta la vía V6 con el artículo que propuso H. Rozas.
+
+\medskip
+\section*{1. Para qué sirve este documento}
+\addcontentsline{toc}{section}{1. Para qué sirve este documento}
+La reunión del 22-10-2026 concluyó que, antes de volver estocástico el MPC, hay que volverlo tratable. Después aparecieron cuatro caminos posibles:
+
+\begin{enumerate}
+\item linealizar por pequeña perturbación y obtener funciones de transferencia, como en el HPR1000;
+\item usar una respuesta estacionaria, como la de \code{SA\_DualFluid.m};
+\item escribir las ecuaciones de cinética puntual (PKE) y termohidráulica (TH) del SMDFR como restricciones, fusionando el simulador con el problema de control;
+\item reutilizar los modelos en Julia del secundamiento en ARAMIS.
+\end{enumerate}
+
+Este documento ordena esos caminos. La tesis central es que \textbf{no son alternativas, sino niveles de un mismo modelo}. Si las ecuaciones del ROM se escriben una sola vez en forma algebraica, de ellas salen el modelo estacionario, el linealizado en un punto, el linealizado a lo largo de la trayectoria y el modelo no lineal completo. El problema monolítico se construye sobre esa única fuente.
+
+\medskip
+\section*{2. Inventario del material}
+\addcontentsline{toc}{section}{2. Inventario del material}
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Material} & \textbf{Qué aporta} & \textbf{Cómo se usa aquí} & \textbf{Límite} \\
+\midrule
+\endhead
+Homem-de-Mello, Valencia, F. Lagos y G. Lagos (2026), \emph{Forecasting outside the Box}, Math. Program., doi:10.1007/s10107-026-02359-9 (propuesto por H. Rozas) & En programas estocásticos de dos etapas con recurso fijo, costos fijos y segunda etapa lineal (FRFC), existe un \textbf{escenario óptimo único}: resolver el problema con ese escenario da la solución estocástica. Con información contextual, se aprende un pronóstico puntual por optimización binivel. & Base teórica de V6 (escenario orientado a la decisión), \S{}7 & Requiere segunda etapa \textbf{lineal} con recurso fijo; nuestro MPC es no lineal, multietapa y con costo cuadrático \\
+Zhang, Sun, Qiu, Pu y Wei (2022), \emph{Transfer function modeling and simulation of HPR1000}, Ann. Nucl. Energy 166:108689 & Procedimiento: modelo no lineal por conservación $\to$ estado estacionario $\to$ linealización por pequeña perturbación $\to$ espacio de estados $\dot x=Ax+Bu$ $\to$ $G(s)=C(sI-A)^{-1}B+D$. Validado contra el no lineal con perturbaciones típicas & Nivel N1 (\S{}4) & Un punto de operación; las perturbaciones de validación son pequeñas (50 pcm, 5 \% de válvula) \\
+Wang, He, Macián-Juan y Wang (2021), \emph{One-dimensional transient analysis of the dual-fluid reactor system}, Ann. Nucl. Energy 162:108481 & PKE con \textbf{precursores circulantes} (pérdida en el núcleo y reingreso tras el lazo) acoplada a balances de calor nodalizados; datos del DFR-250M ($\Lambda$, $\beta _{i}$, $\lambda _{i}$, $\alpha _{f}$, $\alpha _{l}$, tiempos de tránsito) & Referencia de las ecuaciones de N3 y de su validación física & Analiza transitorios abiertos, no control \\
+\code{SA\_DualFluid.m} y \emph{Presentazione AI} (G. Masotti y R. Mauri) & Modelo TH \textbf{estacionario} del núcleo en 12 nodos: un sistema lineal 5$\times$5 por nodo. Su resultado (\code{models/SA\_DualFluid.mat}) \textbf{inicializa el HRM y el ROM}. Su análisis de sensibilidad muestra que $h_{fw}$ domina la incertidumbre de $T_f$ ($\eta$$^{2}$ $\approx$ 0.86) & Nivel N0 (\S{}4) y estado inicial de N1–N3 & Sin dinámica ni cinética \\
+HRM y ROM del repositorio (\code{models/*.slx}) & Ecuaciones PKE + TH ya implementadas: 12 nodos (HRM) y 0-D (ROM) & \textbf{Fuente de las restricciones} (\S{}3) & Están en bloques Simulink; hay que extraerlas y validarlas \\
+Modelos Julia del secundamiento ARAMIS (\code{leomiq/smdfr\_control}) & Mismo reactor y parámetros (PKE de 6 grupos + TH de 3 nodos, como DAE) y \textbf{un MPC monolítico no lineal ya escrito} en JuMP + Ipopt con Euler implícito & Plantilla de N3 (\S{}6) & El control es la reactividad externa, no el caudal del ACS; no hay salida de PCT ni escalado \\
+\bottomrule
+\end{xltabular}}
+
+\medskip
+\section*{3. El modelo de predicción, escrito completo}
+\addcontentsline{toc}{section}{3. El modelo de predicción, escrito completo}
+Las ecuaciones se extrajeron del archivo \code{models/rom\_MCDET\_v2\_2022b\_control\_CMEX.slx} (bloques MATLAB Function y cableado) con los parámetros de \code{matlab/parameters\_dualfluid\_rom\_v2.m}. El ROM es \textbf{de dimensión cero}: un nodo de combustible, uno de pared y uno de refrigerante, más la cinética.
+
+\textbf{Cinética puntual con precursores circulantes} (6 grupos):
+
+\[
+\dot N=\frac{\rho-\beta}{\Lambda}N+\sum_i\lambda_iC_i,\qquad
+\dot C_i=\frac{\beta_i}{\Lambda}N-(\lambda_i+\lambda_c)C_i+\lambda_eC^e_i,\qquad
+\dot C^e_i=\lambda_cC_i-(\lambda_i+\lambda_e)C^e_i,
+\]
+
+\[
+\rho=\rho_0+\alpha_f(T_f-\bar T_{f0})+\alpha_c(T_c-\bar T_{c0}),\qquad P=\tfrac{P_0}{N_0}N .
+\]
+
+$\lambda_c=1/\tau_c$ y $\lambda_e=1/\tau_e$ representan la salida de precursores del núcleo y su reingreso desde el lazo externo. \textbf{Comprobación}: con estos parámetros, la reactividad estacionaria que exige la pérdida de precursores es $\beta-\sum_i\beta_i\lambda_i/(\lambda_i+\lambda_c-\lambda_c\lambda_e/(\lambda_i+\lambda_e)) =1.1105\cdot10^{-3}$, que coincide con $\rho_0=1.11\cdot10^{-3}$ del modelo.
+
+\textbf{Termohidráulica} (nodo promedio, $T_e=2T-T_{in}$; en el combustible $T_{in,f}=T_{e,f0}$, de modo que $T_{in,f}-T_{e,f}=2(T_{e,f0}-T_f)$; en la reactividad $\tfrac12(T_e+T_{in})=T$ y $\bar T_0=T_{e,0}$):
+
+\[
+M_fc_{pf}\dot T_f=P+\dot m_fc_{pf}(T_{in,f}-T_{e,f})-h_{fw}A_{fw}(T_f-T_w)
+\]
+
+\[
+M_wc_{pw}\dot T_w=h_{fw}A_{fw}(T_f-T_w)-h_{wc}(\dot m_c)A_{wc}(T_w-T_c)
+\]
+
+\[
+M\,c_{pc}\dot T_c=\dot m_cc_{pc}(T_{in,c}-T_{e,c})+h_{wc}(\dot m_c)A_{wc}(T_w-T_c)
+\]
+
+(la capacidad térmica del refrigerante usa el inventario \textbf{actual} $M$, no $M_0$).
+
+\textbf{Inventario de refrigerante y actuador}: el control actúa a través del inventario.
+
+\[
+\dot M=\dot m_{\rm leak}(t)+\sigma\,\dot m_{\rm ACS}(u),\qquad
+\dot m_c=\dot m_{c0}\frac{M}{M_0},\qquad
+h_{wc}(\dot m_c)=h_{wc0}\Big(\frac{\dot m_c}{5550}\Big)^{0.8},
+\]
+
+con $\dot m_{\rm ACS}(u)\approx204.6\,(u-56.687)$ en la ventana de operación y $\sigma\in\{0,1\}$ el estado del ACS. En el HRM, la fuga sigue $\dot m_{\rm leak}=-k_{\rm leak}+A(t-t_f)^{1/B}$; en el MPC se usa el pronóstico de la BiLSTM.
+
+\textbf{Salida (PCT)}:
+
+\[
+\hat y=T_w+p_4(\dot m_{\rm net}+5550)+0.4,\qquad \dot m_{\rm net}=\dot m_{\rm leak}+\dot m_{\rm ACS},
+\]
+
+donde $p_4$ es el polinomio de grado 4 de \code{fit\_poly}: una \textbf{regresión estadística} de $\Delta\mathrm{PCT}=\mathrm{PCT}_{\rm HRM}-T_{w,\rm ROM}$ contra el caudal neto, con el término constante desplazado en $-$2.5 K.
+
+\textbf{Dimensión}: 17 estados ($N$, 6 $C_i$, 6 $C^e_i$, $T_f$, $T_w$, $T_c$, $\Delta M$) y una entrada de control. \textbf{Integración en Simulink}: \code{ode1be} (Euler implícito) con $\Delta t=0.5$ s y \textbf{una sola iteración de Newton}.
+
+\subsection*{3.1 Puntos resueltos (F0, 5-11-2026)}
+\addcontentsline{toc}{subsection}{3.1 Puntos resueltos (F0, 5-11-2026)}
+\begin{enumerate}
+\item \textbf{$\Delta$PCT por regresión, no por BiLSTM (decisión).} La entrada \code{pred\_delta\_tw\_max} llega al subsistema \code{SMDFR 1} pero no está conectada; lo confirmó L. Miqueles. La corrección de la PCT es la regresión $p_4(\dot m_{\rm net})$, y la formulación monolítica se construye así. La BiLSTM sólo aporta el pronóstico de la fuga. Queda pendiente corregir la descripción del gemelo (README, presentaciones y tesis hablan de $\hat\Delta_k$ como salida de la red).
+\item \code{Tbar\_f0 = mean(Te\_f0, Tin\_f0)} usa el segundo argumento como dimensión, así que $\bar T_{f0}=T_{e,f0}$ y $\bar T_{c0}=T_{e,c0}$. Se adopta tal cual: es lo que el ROM simula.
+\item La temperatura de entrada del refrigerante usa una relación empírica $T_{in,c}=T_{e,c0}-Q(\dot m_c)/(\dot m_cc_{pc})$ con $Q=Q_0\dot m_c/2775-(5500-\dot m_c)$ y $Q_0=0.578\cdot8.2564\cdot10^7$ W. Se adopta tal cual; su origen sigue sin documentar.
+\item El $-$2.5 K de $p_4$ está en \code{poly\_vector} del espacio de trabajo del modelo; el +0.4 K, en el bloque \code{Polynomial fit}. El archivo de la consulta de 1180 s se generó \textbf{antes} del +0.4 K: el re-run en R2024b difiere en exactamente 0.4000 K (desviación 7·10$^{-7}$ K). Además, el ROM \textbf{no} es la causa de la brecha del 11 \% del piloto R2024a/R2024b.
+\end{enumerate}
+
+\textbf{Trazabilidad}: cada término de esta sección está en \code{julia/SMDFRROM.jl} con el nombre del bloque MATLAB Function del \code{.slx} del que sale.
+
+\medskip
+\section*{4. Escalera de modelos: un modelo, cuatro usos}
+\addcontentsline{toc}{section}{4. Escalera de modelos: un modelo, cuatro usos}
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYYYY@{}}
+\toprule
+\textbf{Nivel} & \textbf{Modelo} & \textbf{Cómo se obtiene} & \textbf{Problema de control} & \textbf{Qué captura} & \textbf{Qué pierde} \\
+\midrule
+\endhead
+\textbf{N0} & Estacionario & Resolver \S{}3 con derivadas nulas (como \code{SA\_DualFluid.m}) & Mapa estático $\dot m_c\mapsto T_w$; restricción terminal o chequeo de autoridad & Ganancia en régimen & Toda la dinámica: inventario, precursores, retardo \\
+\textbf{N1} & Lineal invariante (LTI) & Pequeña perturbación en el estado de la consulta: $A=\partial f/\partial x$, $B=\partial f/\partial u$, $E=\partial f/\partial d$ (método HPR1000); $G(s)=C(sI-A)^{-1}B+D$ & QP convexo; MPC lineal clásico, robusto o con restricción probabilística & Dinámica cerca del punto & Validez lejos del punto (fase aguda) \\
+\textbf{N2} & Lineal variante (LTV) & Linealizar a lo largo de la trayectoria predicha en la consulta anterior (iteración en tiempo real, SQP) & Un QP por iteración & Transitorio grande, si se itera & Garantía de convergencia en una sola iteración \\
+\textbf{N3} & No lineal completo & Ecuaciones de \S{}3 discretizadas como restricciones (colocación o disparo múltiple) & NLP (Ipopt) & Todo el ROM & Convexidad; tiempo de cálculo mayor \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Recomendación}: escribir el ROM \textbf{una sola vez} en un lenguaje algebraico con diferenciación automática (JuMP, CasADi o ModelingToolkit). N0 es su solución estacionaria; N1 y N2 son sus jacobianos, en un punto o a lo largo de una trayectoria; N3 es el modelo mismo. Así los cuatro niveles son consistentes por construcción, y N3 sirve de referencia exacta para medir a N1, N2 y a las metaheurísticas (V3).
+
+\subsection*{4.1 Escalas de tiempo y discretización}
+\addcontentsline{toc}{subsection}{4.1 Escalas de tiempo y discretización}
+Las magnitudes salen de los parámetros del ROM:
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Fenómeno} & \textbf{Escala} & \textbf{Consecuencia con $\Delta t=0.5$ s} \\
+\midrule
+\endhead
+Neutrones prontos & $\Lambda/(\beta-\rho_0)\approx5.5\cdot10^{-4}$ s & Euler explícito es inestable; usar \textbf{aproximación de salto pronto} (PJA: $N$ algebraico) o integración implícita \\
+Pared & $\tau_w\approx0.07$ s & Casi estática frente a $\Delta t$: candidata a ecuación algebraica \\
+Refrigerante, combustible & $\tau_c\approx0.25$ s, $\tau_f\approx0.72$ s & Del orden de $\Delta t$: Euler implícito o subpasos \\
+Precursores & 0.14–79 s; tránsitos de 5.4 s (núcleo) y 10 s (lazo) & Lentos; bien resueltos \\
+Inventario & 10 kg/s durante 12.5 s cambian $M$ en 1.5 \% y $\dot m_c$ en $\approx$ 85 kg/s & Integrador: el efecto del ACS se \textbf{acumula} en el horizonte \\
+\bottomrule
+\end{xltabular}}
+
+La razón de rigidez entre neutrones prontos y el precursor más lento es del orden de $10^5$. Con PJA y pared cuasiestática, el sistema dinámico efectivo tiene 15 estados.
+
+\subsection*{4.2 Las no linealidades y su tratamiento}
+\addcontentsline{toc}{subsection}{4.2 Las no linealidades y su tratamiento}
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Término} & \textbf{Tipo} & \textbf{En N1/N2} & \textbf{En N3} \\
+\midrule
+\endhead
+$\rho N$ & Bilineal & Jacobiano & Exacto \\
+$\dot m_c(T_{in}-T_e)$ & Bilineal (control $\times$ estado) & Jacobiano & Exacto; o McCormick si se busca una relajación convexa \\
+$h_{wc}\propto\dot m_c^{0.8}$ & Potencia & Jacobiano & Exacto \\
+$Q(\dot m_c)/\dot m_c$ & Racional & Jacobiano & Exacto ($\dot m_c$ acotado lejos de 0) \\
+$p_4(\dot m_{\rm net})$ & Polinomio de grado 4 & Jacobiano & Exacto \\
+$f_{\rm ACS}(u)$ & Afín en la ventana & Exacto & Exacto; decidir $\dot m_{\rm ACS}$ directamente \\
+$[z]_+^2$, $\lvert\Delta\dot m\rvert$ & Bisagras & Holguras (exacto) & Holguras (exacto) \\
+\bottomrule
+\end{xltabular}}
+
+\medskip
+\section*{5. La formulación monolítica}
+\addcontentsline{toc}{section}{5. La formulación monolítica}
+Discretización en $K$ pasos de $\Delta t=0.5$ s (o subpasos), con Euler implícito o colocación de Radau:
+
+\[
+\begin{aligned}
+\min_{\dot m_{\rm ACS},\,x,\,s,\,r}\quad & \sum_{k=1}^{K}(\hat y_k-y_{\rm ref})^2+\lambda_m\sum_k s_k^2+\lambda_s\sum_k r_k^2\\
+\text{s.a.}\quad & x_{k+1}=x_k+\Delta t\,f(x_{k+1},\dot m_{{\rm ACS},k},\hat d_k)\quad\text{(ROM de §3, implícito)}\\
+& 0=g(x_k)\quad\text{(PJA y pared cuasiestática, opcional)}\\
+& \hat y_k=T_{w,k}+p_4(\hat d_k+\dot m_{{\rm ACS},k}+5550)+0.4\\
+& \lvert\dot m_{{\rm ACS},k+1}-\dot m_{{\rm ACS},k}\rvert\le\Delta\dot m+s_k,\quad s_k\ge0\\
+& \mathrm{DSM}_k\le\tau+r_k,\quad r_k\ge0\qquad(\text{o la versión dura }\hat y_k\le y_{\rm ref}+\tau(U_y-y_{\rm ref}))\\
+& \dot m_{\min}\le\dot m_{{\rm ACS},k}\le\dot m_{\max},\qquad x_0=\hat x(t_q).
+\end{aligned}
+\]
+
+\textbf{Tamaño}: con $K=26$, son 17 $\times$ 26 = 442 variables de estado, 26 de control y unas 50 holguras. Es un NLP pequeño: Ipopt lo resuelve en $\approx$ 0.1 s (\S{}8.1).
+
+\textbf{Ventajas frente a P0}: el costo y las restricciones se evalúan sobre un modelo explícito (sin una caja negra de Simulink), el solver entrega multiplicadores y, en N1, una cota dual. Además, el mismo problema admite capas de riesgo (\S{}7).
+
+\medskip
+\section*{6. Modelos Julia del secundamiento ARAMIS}
+\addcontentsline{toc}{section}{6. Modelos Julia del secundamiento ARAMIS}
+Ubicación: \code{Secondments/Industrial secondment - ARAMIS/July 2023 - Research Progress/smdfr\_control/smdfr\_control/toy example/} (repositorio \code{leomiq/smdfr\_control}). Hay 28 archivos \code{.jl}, sin \code{Project.toml}; el código usa sintaxis antigua de JuMP (\code{@NLconstraint}) y Julia 1.8.
+
+\textbf{Qué hay}
+
+\begin{itemize}
+\item \textbf{El mismo reactor y los mismos parámetros}: PKE de 6 grupos con precursores circulantes y TH de 3 nodos (pleno inferior, núcleo y pleno superior), portados línea a línea de \code{parameters\_dualfluid\_rom.m} (\code{parameters\_dualfluid\_rom.jl}). Hay un juego de 12 nodos comentado.
+\item \textbf{Ecuaciones en forma DAE semiexplícita con matriz de masa} (\code{reactor\_ode+rod\_insertion.jl}, \code{function\_odes!}): 23 estados diferenciales y 8 algebraicos (reactividad, potencia y temperaturas de salida).
+\item \textbf{Un MPC monolítico no lineal ya escrito}: \code{smdfr\_mpc\_test\_4.jl}, \code{optimizer\_implicit\_euler} (líneas 200–253). Discretiza la DAE con Euler implícito como restricciones de JuMP, impone el término bilineal $\rho N/\Lambda$ con \code{@NLconstraint} (línea 220), lo resuelve con Ipopt y lo usa en lazo cerrado dentro de un \code{PeriodicCallback}. \textbf{Es la plantilla natural de N3.}
+\item \textbf{Linealización}: jacobianos con ForwardDiff (\code{smdfr\_mpc\_test\_3.jl}) y una PKE linealizada a mano (\code{smdfr\_linearized\_odes.jl}); no hay funciones de transferencia.
+\end{itemize}
+
+\textbf{Qué falta o hay que corregir}
+
+\begin{enumerate}
+\item \textbf{El control es otro}: la entrada es la tasa de reactividad externa ($\pm$15 pcm/s) y $\dot m_c$ es un parámetro fijo. Hay que reemplazarlo por el inventario $M$ y el caudal del ACS de \S{}3. Eso introduce el bilineal $\dot m_c(T_{in}-T_e)$ y la dependencia $h_{wc}(\dot m_c)$.
+\item \textbf{La salida es otra}: se sigue la potencia, no la PCT. Hay que añadir $\hat y=T_w+p_4(\cdot)$ (o el máximo nodal con restricciones de epígrafe si se usan 12 nodos).
+\item \textbf{Escalado}: el código trabaja en unidades absolutas ($N\sim10^{13}$, $C_i\sim10^{16}$, $P\sim10^8$ W). Para Ipopt hay que normalizar ($n=N/N_0$, $c_i=C_i/C_{i0}$, temperaturas como desviaciones).
+\item \textbf{Estado inicial consistente}: $\bar T_{f0}=1288$ y $\bar T_{c0}=1060$ K se ajustaron por inspección. Hay que resolver $f(x,u)=0$ (N0) y partir de ese equilibrio, o del estado del HRM en $t_q$.
+\item \textbf{Linealización de \code{smdfr\_mpc\_test\_3.jl}}: ignora la matriz de masa y omite el término afín $f(x_0)-Ax_0$. No debe reutilizarse tal cual.
+\item \textbf{Higiene}: variables globales, cadenas de \code{include} y extracción manual de coeficientes (\code{Symbolics.coeff} con parches a mano). Conviene escribir el modelo directamente en JuMP moderno, con los parámetros en una estructura y un entorno fijado.
+\end{enumerate}
+
+\textbf{Valoración}: la física necesaria ya está escrita en Julia, y el esqueleto de N3 existe. El trabajo es de \textbf{adaptación}: cambiar la entrada al caudal del ACS, la salida a la PCT, escalar y fijar el estado inicial. Hay dos caminos:
+
+\begin{itemize}
+\item \textbf{Julia} (JuMP + Ipopt): reutiliza la plantilla y es rápido; habría que reproducir la BiLSTM o pasar sus pronósticos como datos.
+\item \textbf{CasADi desde MATLAB o Python}: queda más cerca del lazo actual (Simulink y BiLSTM), pero hay que reescribir el modelo.
+\end{itemize}
+
+La recomendación es Julia para F1–F3 (prototipo y referencia exacta, fuera del lazo) y decidir el lenguaje de integración en F5.
+
+\medskip
+\section*{7. El riesgo sobre la base monolítica}
+\addcontentsline{toc}{section}{7. El riesgo sobre la base monolítica}
+Hay tres capas, de menor a mayor costo:
+
+\begin{enumerate}
+\item \textbf{Restricción probabilística analítica (N1/N2)}: si el error de pronóstico es gaussiano, $\mathbb P(\hat y_k>U_y)\le\varepsilon$ equivale a $\bar y_k+z_{1-\varepsilon}\sigma_k\le U_y$, con $\sigma_k$ obtenida de las 59 trayectorias de MC-dropout propagadas por el modelo lineal. Sigue siendo un QP.
+\item \textbf{Escenarios (SAA)}: $M$ trayectorias de fuga y eventos del ACS. Con N1/N2 es un QP de tamaño $M$ veces mayor; con N3, un NLP con estructura de bloques.
+\item \textbf{Escenario óptimo} (Homem-de-Mello et al., 2026): resolver un \textbf{único} escenario que reproduzca la decisión estocástica.
+\end{enumerate}
+
+\subsection*{7.1 ¿Aplica el teorema del escenario óptimo?}
+\addcontentsline{toc}{subsection}{7.1 ¿Aplica el teorema del escenario óptimo?}
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Supuesto del artículo} & \textbf{En nuestro MPC} & \textbf{Cómo cumplirlo} \\
+\midrule
+\endhead
+Dos etapas: decisión ahora, recurso después & MPC multietapa & Aproximación estándar: $u_0$ como primera etapa y el resto del horizonte como recurso \\
+Segunda etapa \textbf{lineal} (LP) & Costo cuadrático, dinámica no lineal & Modelo N1/N2 y costo de seguimiento en norma $L_1$ ($y^+,y^-$ como en el \emph{newsvendor}) \\
+\textbf{Recurso fijo} ($W$, $q$ deterministas) & Si la incertidumbre es la fuga o el error del modelo, entra en el lado derecho $h$ $\checkmark$ & Cumple para el pronóstico de fuga \\
+ & La falla del ACS multiplica el efecto de controles futuros, así que vuelve aleatoria $W$ $\times$ & Sólo admisible si la falla afecta a la primera etapa ($T$ aleatoria, caso ii del teorema); si no, queda fuera del teorema \\
+Recurso relativamente completo (supuesto 2: duales acotados) & Las restricciones suaves con holguras penalizadas garantizan $Q$ finita & $\checkmark$ por diseño \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Lectura}: el teorema cubre la incertidumbre de \textbf{pronóstico} (fuga, error del ROM) con un MPC lineal y costo $L_1$. No cubre directamente la falla del ACS. Para ella sirven las capas 1–2 y el MPC multietapa (V8).
+
+\subsection*{7.2 Experimento mínimo inspirado en el artículo}
+\addcontentsline{toc}{subsection}{7.2 Experimento mínimo inspirado en el artículo}
+En el \emph{newsvendor}, el escenario óptimo es un \textbf{cuantil} de la demanda. El código ya calcula los percentiles 50 y 95 del ensamble de MC-dropout (\code{Y\_denorm\_50}, \code{Y\_denorm\_95}), y P0 usa la mediana. El experimento es: para varios niveles $q$, resolver el MPC determinista con el percentil $q$ de la fuga y comparar su acción y su costo con los de la solución SAA, que usa las 59 trayectorias. Si algún $q$ reproduce la decisión SAA, ese es un escenario óptimo empírico. El paso siguiente es aprender $q$ (o un sesgo) en función del contexto, lo que corresponde al pronóstico orientado a la decisión del artículo.
+
+\medskip
+\section*{8. Plan sistemático}
+\addcontentsline{toc}{section}{8. Plan sistemático}
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Etapa} & \textbf{Objetivo} & \textbf{Entregable} & \textbf{Criterio de cierre} \\
+\midrule
+\endhead
+\textbf{F0} Ecuaciones & Fijar el modelo de \S{}3 & Este documento, más la resolución de los puntos de \S{}3.1 & Cada término trazado a un bloque del \code{.slx} \\
+\textbf{F1} Réplica algebraica & Escribir el ROM en un lenguaje con diferenciación automática & Código del ROM (16 estados) y su estado estacionario (N0) & La réplica reproduce la PCT de Simulink en el horizonte, con error $\ll$ 1 K, sobre trayectorias archivadas \\
+\textbf{F2} Monolítico no lineal (N3) & Resolver P0 como NLP & Solver sobre los estados $t=1161$ y $1180$ s & Acción y costo comparados con Luus–Jaakola, re-simulando en Simulink (V3) \\
+\textbf{F3} Linealizado (N1, N2) & QP y funciones de transferencia & $A,B,E,C,D$ en cada consulta; $G(s)$ de $\dot m_{\rm ACS}$ a PCT; MPC lineal & Error de N1/N2 frente a N3 $\ll$ 1 K; brecha de costo medida \\
+\textbf{F3c} Certificación de N3 & Brecha de optimalidad del NLP \textbf{no lineal}, no del QP (\S{}8.5) & Certificado local (KKT y segundo orden), NLP sobre \code{ode1be}, evidencia global y cota inferior rigurosa & "La solución está a menos de X \% del óptimo global de P0" en cada consulta \\
+\textbf{F4} Riesgo & Las capas de \S{}7 & Restricción probabilística, SAA y experimento de cuantiles & Una decisión que cambia por riesgo, con intervalos de confianza \\
+\textbf{F1b} HRM programable (11-11-2026, \S{}8.6) & Planta de 12 nodos sin Simulink & \code{julia/SMDFRHRM.jl} y su validación contra la corrida archivada de 0 a 1180 s & PCT máxima y $T_{e,c}$ del nodo 12 reproducidas en toda la corrida (\S{}8.6) \\
+\textbf{F4.5} Robustez en lazo abierto (\S{}8.6) & Extender F2–F4 más allá de dos consultas & 10–15 consultas, tres configuraciones del actuador y desajuste ROM–HRM & N1/N2/N3 comparados donde el óptimo es interior; error ROM–HRM medido \\
+\textbf{F5a} Lazo cerrado determinista (\S{}8.6) & N1/N2/N3 en lazo cerrado \textbf{sin} capas de riesgo & Banco de lazo cerrado con planta intercambiable (réplica ROM $\to$ HRM en Julia $\to$ Simulink); campaña Monte Carlo en Olab & Métricas de \S{}8.6 con intervalos de confianza; menos de 120 s por consulta \\
+\textbf{F5b} Lazo cerrado con riesgo (\S{}8.6) & Las capas de \S{}7 sobre la mejor variante de F5a & Restricción probabilística con el error ROM–HRM, SAA con fallas del ACS, escenario óptimo y escenario aprendido (V6) & Frontera costo–riesgo fuera de muestra \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Para la próxima reunión (3–4 semanas)}: F0 cerrado, F1 con la réplica validada en al menos una trayectoria, y un primer resultado de F2 o F3 en el estado $t=1180$ s.
+
+\subsection*{8.1 Avance (5-11-2026)}
+\addcontentsline{toc}{subsection}{8.1 Avance (5-11-2026)}
+\textbf{F0 cerrado} (\S{}3.1). \textbf{F1 cerrado} en la consulta archivada $t_q=1180$ s (\code{models/LJ\_test\_sampled\_vel\_ACS\_2\_loop\_1180.mat}):
+
+\begin{itemize}
+\item \code{matlab/f1\_export\_rom\_reference.m} reconstruye la simulación del nodo raíz como \code{DET\_2}: estado del HRM en $t_q-10$ s inyectado al ROM, 10 s de calentamiento y luego 26 pasos con el pronóstico de fuga y la acción \code{u\_opt}. La simula en Simulink con registro de todos los estados. El punto de operación archivado no se puede reutilizar, porque el modelo se llamaba \code{SMDFR\_rom\_…}, así que el contenedor se reconstruye y se copian los mismos valores.
+\item \code{julia/SMDFRROM.jl} es la réplica algebraica; \code{julia/validate\_replica.jl} la compara con Simulink:
+\end{itemize}
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YRR@{}}
+\toprule
+\textbf{Esquema de la réplica} & \textbf{Error máx. de $\hat y$ en el horizonte} & \textbf{Error máx. en toda la ventana} \\
+\midrule
+\endhead
+\code{ode1be} (1 Newton), entradas en $t_{n+1}$ & \textbf{2.2·10$^{-6}$ K} & 1.1·10$^{-4}$ K \\
+\code{ode1be}, entradas en $t_n$ & 7.2·10$^{-2}$ K & 7.2·10$^{-2}$ K \\
+Euler implícito convergido, entradas en $t_{n+1}$ & 3.7·10$^{-4}$ K & 0.88 K \\
+\bottomrule
+\end{xltabular}}
+
+El mapa de salida, la reactividad y la bomba coinciden a precisión de máquina. El Euler implícito convergido se aparta en el calentamiento, por el transitorio rápido que produce inyectar el estado del HRM, pero no en el horizonte. Por eso el NLP parte del estado en $t_q-\Delta t$.
+
+\textbf{F2, primer resultado} (\code{julia/f2\_monolithic\_nlp.jl}). P0 se resuelve como NLP en JuMP + Ipopt, con Euler implícito como restricciones, variables escaladas, holguras exactas para las bisagras y el caudal del ACS como decisión. Cada acción se re-simula en Simulink:
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YRR@{}}
+\toprule
+\textbf{} & \textbf{Luus–Jaakola (archivado)} & \textbf{NLP monolítico} \\
+\midrule
+\endhead
+Costo P0 en Simulink & 4.0810 & \textbf{0.2440} \\
+Primera acción $u_0$ & 56.690 A & 56.750 A (cota) \\
+PCT máxima en el horizonte & 1179.715 K & 1179.579 K \\
+Tiempo de cálculo & minutos (versión anterior al ajuste de LJ) & \textbf{$\approx$ 0.1 s} \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item Las cuatro inicializaciones (acción LJ, $u_{\min}$, $u_{\max}$, punto medio) llegan al mismo óptimo, 0.244034 en el modelo de Euler implícito. No hay indicio de mínimos locales en este caso, pero eso no es una garantía.
+\item Estructura de la solución: satura en $u_{\max}$ durante 3 s para bajar la PCT y luego sigue la referencia exactamente ($\hat y=y_{\rm ref}$ desde $t=1184$ s).
+\item \textbf{Límites del resultado}: es una sola consulta y sólo el nodo raíz, sin ramas del árbol; la acción de Luus–Jaakola es de la versión \textbf{anterior} a la corrección de la búsqueda (techo del radio y parada relativa), así que la brecha de 16.7$\times$ no describe a la versión actual. Falta repetir la comparación con LJ corregido y con el algoritmo genético en varias consultas (E2/V3).
+\end{itemize}
+
+\textbf{E2 en la misma consulta} (\code{matlab/e2\_compare\_optimizers.m}, resultados en \code{results/e2\_optimizers\_1180/}). Optimizadores del lazo con la configuración de producción (cotas [56.69, 56.75] A; LJ corregido: R = 24, $\gamma$ = 0.90, M = 5, parada relativa; GA: 20 $\times$ 20, cruce 0.8, mutación 0.3), todos costeados con el mismo evaluador \code{DET\_2} + \code{fitness\_cost}. Sin Parallel Computing Toolbox los \code{parfor} corren en serie.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YRRRRRR@{}}
+\toprule
+\textbf{Método} & \textbf{Costo P0} & \textbf{Brecha vs NLP} & \textbf{PCT máx. [K]} & \textbf{$u_0$ [A]} & \textbf{Evaluaciones} & \textbf{Tiempo} \\
+\midrule
+\endhead
+NLP (N3) / QP (N1) & \textbf{0.2440} & — & 1179.5789 & 56.750 & — & 0.1 s \\
+LJ corregido, semilla 1 & 0.3169 & +30 \% & 1179.5789 & 56.750 & 721 & 868 s \\
+LJ corregido, semilla 2 & 0.3131 & +28 \% & 1179.5789 & 56.750 & 721 & 820 s \\
+LJ corregido, semilla 3 & 0.3805 & +56 \% & 1179.5970 & 56.730 & 721 & 794 s \\
+GA, semilla 1 & 0.3527 & +45 \% & 1179.5815 & 56.747 & 420 & 629 s \\
+GA, semilla 2 & 0.3489 & +43 \% & 1179.5841 & 56.744 & 420 & 603 s \\
+LJ archivado (antes de la corrección) & 4.0810 & +1573 \% & 1179.7154 & 56.690 & — & — \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item Ningún optimizador sin derivadas alcanza el óptimo: quedan entre +28 \% y +56 \% por encima, y la primera acción (la que se aplica) depende de la semilla: 2 de 5 corridas no saturan. El NLP y el QP dan siempre la misma acción, $\approx$ 10$^{4}$ veces más rápido.
+\item En temperatura las diferencias son pequeñas ($\le$ 0.02 K de PCT máxima): en esta consulta el beneficio es velocidad y reproducibilidad, no seguridad.
+\item GA semilla 3 no terminó (proceso detenido por falta de memoria del sistema).
+\end{itemize}
+
+\textbf{F3, primer resultado} (\code{julia/f3\_linearized\_qp.jl}, misma consulta). La réplica se linealiza con ForwardDiff y el MPC lineal se resuelve como QP convexo (Euler implícito sobre el modelo afín); la acción del QP se re-simula con el modelo no lineal y se costea con P0.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YRRRR@{}}
+\toprule
+\textbf{Modelo de predicción} & \textbf{Tiempo} & \textbf{Costo P0 (re-simulación no lineal)} & \textbf{Brecha vs NLP} & \textbf{Error máx. de la predicción lineal} \\
+\midrule
+\endhead
+N3 (NLP) & 0.1 s & 0.243998 & — & — \\
+N1: LTI en $t_q-\Delta t$ & 0.06 s & 0.244005 & +0.003 \% & $\le$ 0.001 K \\
+N2: LTV a lo largo de la trayectoria, 2 iteraciones & 0.07 s & 0.243999 & 0.000 \% & < 0.001 K \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item \textbf{Estructura de $G(s)$} de $\dot m_{\rm ACS}$ a $\hat y$: el caudal del ACS sólo entra en $\dot{\Delta M}=\dot m_{\rm leak}+\dot m_{\rm ACS}$ y en el término $p_4$. Con el inventario congelado la ganancia estática es $2\cdot10^{-4}$ K/(kg/s), sólo por $p_4'$. El efecto real pasa por el inventario (polo en $s=0$): $\partial\hat y/\partial\Delta M=-1.58\cdot10^{-2}$ K/kg, así que $G(s)\approx G_M/s$ (fase $\approx$ +90$^\circ$ bajo 0.1 rad/s). Esto explica la solución "saturar y luego seguir": hay que acumular inventario lo antes posible.
+\item \textbf{Autoridad}: el rango de $u$ equivale a $\approx$ 12 kg/s; en 12.5 s eso suma $\approx$ 150 kg, $\approx$ $-$2.4 K como máximo sobre la PCT.
+\item Valores propios de $A$: el más rápido $-$1.7·10$^{3}$ s$^{-1}$ (cinética), ninguno inestable.
+\item \textbf{Lectura}: en esta consulta el modelo lineal basta. El MPC lineal (QP) es viable y abre la restricción probabilística analítica de \S{}7.
+\end{itemize}
+
+\textbf{Fase aguda, $t_q=1161$ s.} \code{matlab/build\_query\_from\_archive.m} reconstruye la consulta desde la realización archivada: corrientes aplicadas por el lazo hasta $t_q-\Delta t$, HRM re-simulado (idéntico al archivo, $\Delta$ fuga = 0) y ROM en $t_q-10$ s. El pronóstico de fuga es la \textbf{fuga real del HRM} (pronóstico perfecto): la BiLSTM no se puede regenerar aquí (falta \code{torch} y el \code{.pth} que carga \code{mc\_inference.py}). Para comparar optimizadores da igual, porque todos reciben la misma serie.
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YRR@{}}
+\toprule
+\textbf{} & \textbf{$t_q=1161$ s} & \textbf{$t_q=1180$ s} \\
+\midrule
+\endhead
+PCT al inicio del horizonte & 1181.33 K (2.1 K sobre la referencia) & 1179.63 K \\
+Réplica vs Simulink (horizonte) & 1.6·10$^{-6}$ K & 2.2·10$^{-6}$ K \\
+NLP: costo óptimo (4 inicios, mismo óptimo) & 48.027 & 0.244 \\
+NLP evaluado con \code{DET\_2} + \code{fitness\_cost} & 48.026942 & 0.243996 \\
+QP N1 / N2: costo re-simulado & 48.026949 / 48.026949 & 0.244005 / 0.243999 \\
+Error de la predicción lineal N1 & $\le$ 0.015 K & $\le$ 0.001 K \\
+$\partial\hat y/\partial\Delta M$ & $-$1.62·10$^{-2}$ K/kg & $-$1.58·10$^{-2}$ K/kg \\
+Solución & $u=u_{\max}$ todo el horizonte & satura 3 s y luego sigue $y_{\rm ref}$ \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Autoridad del actuador} (NLP con la cota superior ampliada; sólo cambia la cota):
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YRRR@{}}
+\toprule
+\textbf{$u_{\max}$} & \textbf{$\dot m_{\rm ACS,max}$} & \textbf{Costo óptimo 1161 s} & \textbf{Costo óptimo 1180 s} \\
+\midrule
+\endhead
+56.75 A (lazo actual) & 12.9 kg/s & 48.03 & 0.244 \\
+56.80 A & 23.1 kg/s & 21.51 & 0.098 \\
+56.90 A & 43.6 kg/s & 10.32 & — (no terminó) \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item En la fase aguda el óptimo es la esquina $u=u_{\max}$: \textbf{la cota de la bomba, no el optimizador, determina el resultado}, y aun así la PCT no llega a la referencia en el horizonte (1179.76 K al final). Cualquier comparación de optimizadores en esa fase mide sobre todo si encuentran la esquina.
+\item El LJ y el GA a 1161 s no se completaron (procesos detenidos por falta de memoria).
+\end{itemize}
+
+\subsection*{8.2 F4, primer resultado (6-11-2026, leo\_acer, sin MATLAB)}
+\addcontentsline{toc}{subsection}{8.2 F4, primer resultado (6-11-2026, leo\_acer, sin MATLAB)}
+\textbf{Ensamble de la BiLSTM regenerado} (\code{python/f4\_leak\_ensemble.py}). La ventana de entrada se reconstruye como en \code{DET\_scheduler\_v1\_perc\_online\_LJ.m}: últimas 200 muestras de \code{X\_1\_trajectory} (fuga del HRM) y \code{X\_2\_trajectory} (Te\_c, nodo 12), normalizadas con \code{X\_minmax}. Los pesos \code{models/model\_200x200\_drop1\_1.pth} tienen la arquitectura de \code{mc\_inference.py} (2 capas bidireccionales de 32, FC 64$\to$10$\to$2) y la muestra archivada en 1180 s cae dentro del ensamble (rango por paso entre 0.08 y 0.93; percentil 27 de distancia a la mediana). Esto es evidencia de que son los pesos del lazo, aunque no una prueba: el \code{model\_100x100\_drop2\_BILSTM.pth} que carga \code{mc\_inference.py} sigue sin aparecer.
+
+\begin{itemize}
+\item \textbf{El lazo archivado usaba \code{N\_par = 1}}: en 1180 s, \code{Y\_denorm} y \code{Y\_denorm\_95} son \textbf{una sola muestra de dropout}, no un percentil. El MPC de P0 decidía con una realización aleatoria del pronóstico.
+\end{itemize}
+
+\textbf{Calibración} (\code{python/f4\_forecast\_calibration.py}, 16 consultas 1160–1167.5 s con la fuga real registrada, 500 trayectorias):
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YRR@{}}
+\toprule
+\textbf{Indicador} & \textbf{Valor} & \textbf{Nominal} \\
+\midrule
+\endhead
+Cobertura de la banda central del 90 \% & 0.44 & 0.90 \\
+PIT en el decil superior & 0.57 & 0.10 \\
+RMSE de la mediana / desviación del ensamble & 0.164 / 0.084 kg/s & $\approx$ 1 \\
+Error de la fuga integrada en el horizonte & +1.5 kg, $z\approx+7$ & $|z|\lesssim 2$ \\
+Efecto equivalente sobre la PCT ($\partial\hat y/\partial\Delta M$ de F3) & $\le$ 0.025 K & — \\
+\bottomrule
+\end{xltabular}}
+
+El pronóstico está \textbf{sesgado} (la fuga real es $\approx$ 0.12 kg/s menor en magnitud) y es \textbf{sobreconfiado}: el MC-dropout con $p=0.05$ subestima la incertidumbre. Sin embargo, el error completo pesa $\approx$ 0.025 K, y la dispersión del ensamble $\approx$ 0.003 K. Las dos cifras quedan muy por debajo de la autoridad del actuador ($\approx$ 2.4 K) y del desvío inicial en 1161 s (2.1 K).
+
+\textbf{¿Cambia la decisión?} (\code{julia/f4\_risk\_decisions.jl}, NLP N3). Se compararon el NLP determinista con la fuga en p05, p50 y p95, sin dropout, la fuga de F2 y la fuga real (oráculo), y un \textbf{SAA en dos etapas} con 59 escenarios ($\dot m_0$ común y el resto como recurso, la estructura de \S{}7.1). Todo se evaluó fuera de muestra sobre 941 miembros.
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{} & \textbf{1161 s} & \textbf{1180 s} \\
+\midrule
+\endhead
+$u_0$ de todas las variantes & 56.750 A ($u_{\max}$) & 56.750 A ($u_{\max}$) \\
+Costo propio p05 / p50 / p95 & 48.87 / 48.37 / 47.77 & 0.248 / 0.244 / 0.240 \\
+Costo medio fuera de muestra (lazo abierto), rango entre variantes & 48.350 (idéntico) & 0.2443–0.2480 \\
+Valor en dos etapas de $\dot m_0$ (100 miembros, recurso reoptimizado) & 48.343 & 0.2439 \\
+Tiempo: NLP determinista / SAA con 59 escenarios & 0.03 s / 2.2 s & 0.03 s / 2.3 s \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item \textbf{No hay una decisión que cambie por el riesgo de pronóstico}, así que el criterio de cierre de F4 no se cumple con esta fuente de incertidumbre. La causa es estructural: en ambas consultas la primera acción está en la cota de la bomba, y la incertidumbre de fuga mueve la PCT tres órdenes de magnitud menos de lo que haría falta para sacarla de ahí.
+\item En 1180 s la única diferencia está en el recurso, cuando el óptimo deja la saturación (desde $t\approx1184$ s): p05 y p95 cuestan +1.3 \% y +1.5 \% fuera de muestra, frente a la mediana o el SAA. El SAA de 59 escenarios es tratable ($\approx$ 2 s), así que la capa 2 de \S{}7 es viable en tiempo real.
+\item \textbf{Implicación para el plan}: el riesgo que puede mover la decisión no es el error de pronóstico de la fuga. Son los eventos del árbol (falla del ACS, deriva de la fuga) y el desajuste ROM–HRM. Este último exige MATLAB (leo\_asus). El siguiente experimento de F4 debería usar escenarios de falla del ACS, con $W$ aleatoria y fuera del teorema de \S{}7.1, y consultas donde $u_0$ no esté saturado: con autoridad ampliada, o más tarde en el transitorio.
+\item \textbf{Condición de validez}: todo lo anterior usa la cota archivada (56.75 A $\leftrightarrow$ 12.86 kg/s) y la rampa blanda de P0. \S{}8.3 muestra cómo cambia con otras cotas.
+\end{itemize}
+
+\subsection*{8.3 Cotas del actuador con base física (6-11-2026)}
+\addcontentsline{toc}{subsection}{8.3 Cotas del actuador con base física (6-11-2026)}
+\textbf{El problema.} La cota archivada $u\in[56.69,\,56.75]$ A decide los resultados de F2–F4: en 1161 s el óptimo es la esquina $u_{\max}$, y en F4 el riesgo no mueve $u_0$ en parte porque $u_0$ está saturado. Hasta aquí esa cota no tenía justificación física. El argumento de \code{DSM\_PENALTY\_RESULTS.md} ("el PID llegó a 57.26 A") sólo muestra que el \emph{modelo} se evaluó allí, no que el actuador pueda hacerlo.
+
+\textbf{Qué es el actuador en el modelo.} En el ROM, $\dot m_{\rm ACS}$ es una \textbf{inyección de reposición de inventario}: $\dot{\Delta M}=\dot m_{\rm leak}+\dot m_{\rm ACS}$. El caudal primario es una consecuencia, $\dot m_c=\dot m_{\rm nom}\,M_{\rm act}/M_c$ con $\dot m_{\rm nom}=5550.5$ kg/s y $M_c=8144.8$ kg. No es una bomba que impulse directamente el circuito primario.
+
+\textbf{Referencia bibliográfica aportada} (nota de revisión del 6-11-2026; las citas no se verificaron aquí):
+
+\begin{itemize}
+\item Liu et al. (2021), tabla 3: caudal nominal de Pb de 5550.5 kg/s para el SMDFR de 100 MWt. \textbf{Coincide con \code{mdot\_c} del modelo} (5550.50).
+\item Banda exploratoria de $\pm$10 \% y $\pm$20 \% sobre ese nominal: hipótesis de simulación, no una capacidad homologada.
+\item Velocidad admisible $\approx$ 2 m/s (Li et al., 2025, para LBE), una rampa de 5 kg/s por paso y la cota admisible $\dot m_{\max}=\min\{\dot m_{\rm MHD},\dot m_{\rm vel},\dot m_{\rm térm}\}$.
+\end{itemize}
+
+\textbf{Traducción al modelo} (verificada numéricamente con \code{julia/F4Lib.jl}):
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Criterio de la referencia} & \textbf{Qué acota en nuestro modelo} & \textbf{Valor en las consultas} & \textbf{¿Restringe el MPC?} \\
+\midrule
+\endhead
+Banda $\pm$20 \% sobre $\dot m_c$ & El inventario: $0.8\le M_{\rm act}/M_c\le1.2$ & $\dot m_c/\dot m_{\rm nom}=0.590$ (1161 s) y 0.603 (1180 s): ya se perdió $\approx$ 40 \% del inventario ($\approx$ 3300 kg) & \textbf{No}: la cota inferior ya está violada por el LOCA. Recuperar 0.8 exige $\approx$ 1700 kg, es decir $\approx$ 200 s con 8.3 kg/s netos o $\approx$ 40 s con 39 kg/s, muy por encima del horizonte de 12.5 s. Es un objetivo de recuperación de largo plazo, no una restricción de la consulta \\
+Velocidad $\le$ 2 m/s en el ducto & $\dot m\le\rho A v$ & Ducto del ECM de 0.515 $\times$ 0.515 m: \textbf{5543 kg/s} & No para la inyección. Revela que el ECM de \code{CurrentToMassFlow.m} es una \textbf{bomba principal} ($\Delta$P = 15 kPa, nominal a $\approx$ 2 m/s y a 86.9 A, del orden de Kwak y Kim, 2021), y que el ACS usa el pie de su curva (0–13 kg/s, 0.06 A sobre el arranque de 56.687 A) \\
+Criterio térmico $\Delta T=P/(\dot m_c c_p)$ & Consistencia energética & $P\approx114$ MW, $\Delta T\approx248$ K (nominal 128.5 K) & No es una cota del actuador. Confirma que el transitorio está lejos de la envolvente nominal \\
+Rampa de 5 kg/s por paso (10 kg/s$^{2}$) & $\lvert\dot m_k-\dot m_{k-1}\rvert\le5$ & En P0 es una penalización con $\lambda_m=10^{-4}$, prácticamente nula, y no incluye el paso desde la acción aplicada & \textbf{Sí}, si se impone como cota dura (ver barrido) \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Consecuencia: la cota en amperios no es física.} Toda la decisión cabe en 0.06 A (0.1 \% de la corriente), y 1 mA equivale a 0.2 kg/s. Un cálculo de orden de magnitud de una bomba de conducción, $\Delta p\approx BI/h$, da $\approx$ 110 Pa con 57 A, 1 T y 0.515 m, frente a los 15 kPa del ECM. El ECM sirve como parametrización, pero \textbf{la cota defendible se expresa en kg/s} y la fija la especificación del sistema de inyección, que aún no existe. Mientras tanto, se adopta como cota física superior la de velocidad del ducto (5543 kg/s), $\dot m_{\min}=0$ (una bomba de reposición no invierte el flujo) y la rampa dura de 5 kg/s por paso como límite dinámico del actuador. Además, los resultados se dan en función de $\dot m_{\max}$.
+
+\textbf{Barrido} (\code{julia/f4\_actuator\_sweep.jl}, \code{results/f4\_risk/actuator\_sweep.csv}). Para cada cota se resolvió el NLP con la fuga p50, p05 y p95, y el SAA en dos etapas con 59 miembros, con costo fuera de muestra en 300 miembros:
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYRRRYY@{}}
+\toprule
+\textbf{$t_q$} & \textbf{Rampa} & \textbf{$\dot m_{\max}$ [kg/s]} & \textbf{Costo óptimo (p50)} & \textbf{$\dot m_0$ p50} & \textbf{$\dot m_0$ p05 / p95 / SAA} & \textbf{Qué limita a $\dot m_0$} \\
+\midrule
+\endhead
+1161 & blanda & 12.86 (archivada) & 48.37 & 12.86 & iguales & $\dot m_{\max}$ \\
+1161 & blanda & 43.55 & 10.33 & 43.55 & iguales & $\dot m_{\max}$ \\
+1161 & blanda & 125 & 3.60 & 125.0 & iguales & $\dot m_{\max}$ \\
+1161 & blanda & 5543 & 3.09 & 171.84 & 172.05 / 171.57 / 171.82 & nada (interior) \\
+1161 & \textbf{dura} & $\ge$ 43.55 & \textbf{17.47} & 17.86 & iguales & rampa \\
+1180 & blanda & 12.86 (archivada) & 0.244 & 12.86 & iguales & $\dot m_{\max}$ \\
+1180 & blanda & $\ge$ 43.55 & 0.063 & 36.36 & 36.47 / 36.24 / 36.35 & nada (interior) \\
+1180 & \textbf{dura} & $\ge$ 25 & \textbf{0.161} & 14.48 & iguales & rampa \\
+\bottomrule
+\end{xltabular}}
+
+Validez del modelo: con $\dot m_{\rm net}>0.5$ kg/s, $p_4$ ya se evalúa fuera de los datos de su ajuste ([1738, 5550.5] kg/s), pero el término extrapolado aporta $\le$ 0.017 K en todos los casos. En el horizonte el caudal primario sólo pasa de 0.59 a 0.61 del nominal, así que el ROM no sale de su rango.
+
+\textbf{Lectura}:
+
+\begin{enumerate}
+\item \textbf{Con la rampa dura, la cota de caudal deja de importar}: desde 25–44 kg/s la limita la rampa, y el resultado es el mismo para cualquier $\dot m_{\max}$ mayor, hasta los 5543 kg/s del ducto. Si la rampa de 10 kg/s$^{2}$ es la dinámica real del actuador, la autoridad del MPC queda fijada por ella, no por la cota en amperios. Así, la cuestión física abierta pasa de "¿qué $u_{\max}$?" a "¿qué rampa admite la inyección?".
+\item Con la rampa blanda de P0, el resultado depende de la cota hasta $\approx$ 40 kg/s (1180 s) o $\approx$ 170 kg/s (1161 s). Por encima de eso el óptimo es interior. Las conclusiones de F2 ("satura y luego sigue la referencia") y de la autoridad (\S{}8.1) son de la cota archivada.
+\item \textbf{Riesgo (F4) cuando $u_0$ es interior}: el pronóstico p05 o p95 mueve $\dot m_0$ $\le$ 0.5 kg/s ($\le$ 0.6 \%). Fuera de muestra, decidir con p05 o p95 cuesta +5 a +6 \% frente al SAA en 1180 s, y +0.03 \% en 1161 s. El SAA y la mediana empatan. La conclusión de \S{}8.2 se mantiene: la incertidumbre de pronóstico de la fuga no cambia la decisión de forma relevante, ni siquiera sin saturación.
+\item La banda de $\pm$20 \% sobre el caudal primario no es una restricción útil para la consulta del MPC durante este LOCA. Sí lo sería en una capa de recuperación de minutos, o como restricción de estado (inventario) en un MPC de horizonte largo.
+\end{enumerate}
+
+\subsection*{8.4 Estado y próximos pasos (6-11-2026)}
+\addcontentsline{toc}{subsection}{8.4 Estado y próximos pasos (6-11-2026)}
+\textbf{Estado.}
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Etapa} & \textbf{Estado} & \textbf{Dónde} \\
+\midrule
+\endhead
+F0 Ecuaciones & Cerrada & \S{}3.1 \\
+F1 Réplica algebraica & Cerrada (error $\approx$ 10$^{-6}$ K frente a Simulink en 1161 s y 1180 s) & \code{julia/SMDFRROM.jl}, \S{}8.1 \\
+F2 NLP monolítico & Resuelto en 1161 s y 1180 s. En 1180 s es 28–56 \% mejor que LJ y GA corregidos; en 1161 s LJ y GA no terminaron (falta de memoria) & \code{julia/f2\_monolithic\_nlp.jl}, \S{}8.1 \\
+F3 QP linealizado & Cerrada en dos consultas; brecha frente al NLP $\le$ 0.003 \%. QP disperso y condensado, con certificado dual (9-11) & \code{julia/f3\_certificates\_condensed.jl}, \S{}8.1 \\
+F3c Certificación de N3 & Pasos 1–4b hechos (9-11): mínimo local estricto, óptimo único en $\approx$ 590 arranques, brecha certificada de 2.3 \% (1180 s) y 11.4 \% (1161 s); comparación de decisiones de todos los métodos. Pendiente: 4b.5 & \code{julia/f3c\_*.jl}, \S{}8.5 \\
+F4 Riesgo & Abierta. Ensamble regenerado y calibración medida; el riesgo de pronóstico no cambia la decisión & \code{python/f4\_*.py}, \code{julia/f4\_*.jl}, \S{}8.2–8.3 \\
+F5 Lazo cerrado & Sin empezar & — \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Cambios de esta sesión} (leo\_acer, sin MATLAB):
+
+\begin{itemize}
+\item \code{.venv} con \code{torch} en CPU. Se verificó que \code{model\_200x200\_drop1\_1.pth} es compatible con \code{mc\_inference.py}, y se halló que el lazo archivado usaba \code{N\_par = 1}.
+\item Ensamble de 1000 trayectorias en 1161 s y 1180 s; calibración en 16 consultas (cobertura de 0.44 frente a 0.90).
+\item Decisiones con cuantiles y SAA en dos etapas, con evaluación fuera de muestra (\S{}8.2).
+\item Cotas del actuador traducidas a unidades físicas y barrido de $\dot m_{\max}$ con rampa blanda o dura (\S{}8.3, \S{}9.6).
+\item \code{julia/F4Lib.jl}: código común de F4 (carga de la consulta, NLP determinista y SAA con límites del actuador configurables).
+\end{itemize}
+
+\textbf{Próximos pasos}, en orden de prioridad. \emph{Nota del 11-11-2026: esta lista queda reemplazada por la ruta de \S{}8.6. Se conserva como registro.}
+
+\begin{enumerate}
+\item \textbf{Fijar el actuador con quien conozca el sistema de inyección} (\S{}9.6): la rampa admisible, el caudal máximo y si el ACS repone inventario o impulsa el caudal primario. Es la decisión que más cambia los resultados: el costo óptimo en 1161 s va de 3.1 a 48.4 según la cota y la rampa. Mientras no se fije, informar cada resultado con la cota a la que vale. \emph{(Ninguna máquina; decisión del equipo.)}
+\item \textbf{F4 con riesgo que sí pueda mover la decisión: falla del ACS} (leo\_acer). Escenarios de falla y reparación como en \code{DET\_2.m} (modo $\sigma\in\{0,1\}$, tasas $\lambda,\mu$), en un SAA o un MPC multietapa con no anticipación. La falla vuelve aleatoria $W$, así que queda fuera del teorema de \S{}7.1; comparar la decisión con y sin falla. Criterio: una primera acción que cambie por el riesgo, con intervalo de confianza.
+\item \textbf{Desajuste ROM–HRM como incertidumbre} (leo\_asus, requiere MATLAB). Re-simular en el HRM las acciones del NLP y medir el error de predicción del ROM. Si es del orden de 1 K, y no de 0.01 K como el de la fuga, es la incertidumbre relevante para la restricción probabilística de la capa 1 de \S{}7.
+\item \textbf{Recalibrar o sustituir el MC-dropout} (leo\_acer). Corregir el sesgo de $\approx$ 0.12 kg/s, por ejemplo con un modelo de error ajustado a los residuos de \S{}8.2 o con predicción conformal. Su efecto sobre la PCT es pequeño, pero un pronóstico sobreconfiado invalida cualquier restricción probabilística basada en él. Además, el lazo debe usar \code{N\_par} > 1, porque con una muestra decide con una realización aleatoria.
+\item \textbf{Más consultas para F2–F4} (leo\_asus). Reconstruir varias consultas de las 61 con \code{matlab/build\_query\_from\_archive.m}, de modo que las conclusiones no dependan de sólo dos.
+\item \textbf{F5, lazo cerrado} (leo\_asus). Las 61 consultas con el NLP o el QP y las cotas del paso 1, frente al lazo LJ archivado, con menos de 120 s por consulta. El NLP tarda $\approx$ 0.1 s y el SAA $\approx$ 2 s, así que el tiempo no es un obstáculo.
+\item \textbf{F3c, paso 4b.5} (leo\_acer, próxima ronda; agregado el 9-11-2026). Ajustar la cota inferior certificada con una partición por masa inyectada o un modelo de Taylor de segundo orden (\S{}8.5). El objetivo es cerrar el intervalo de exceso garantizado de N1–N3 (hoy 0–2.4 \% en 1180 s y 0–12.9 \% en 1161 s) hacia los valores semi-rigurosos (0.3 \% y 1.2 \%).
+\end{enumerate}
+
+Pendientes menores: decidir la corrección $p_4$ (\S{}9.4), que se evalúa en $\dot m_{\rm net}+5550$ y no en $\dot m_c$; actualizar \code{mc\_inference.py} para que cargue \code{model\_200x200\_drop1\_1.pth} si se confirma que el 100x100 no existe; y clonar el repositorio fuera de OneDrive (ver \code{setup\_entorno.md}).
+
+\subsection*{8.5 F3c: certificación de optimalidad del NLP no lineal (9-11-2026)}
+\addcontentsline{toc}{subsection}{8.5 F3c: certificación de optimalidad del NLP no lineal (9-11-2026)}
+\textbf{Punto de partida.} \code{julia/f3\_certificates\_condensed.jl} (documentado en \code{docs/reporte\_estado\_mpc\_monolitico.pdf}, secciones de formulaciones y de resultados de F3) dio un certificado dual con brecha $\approx$ 10$^{-12}$ para el \textbf{QP linealizado} (N1, N2). Ese certificado no vale para P0 no lineal (N3). Una brecha de optimalidad para N3 necesita una \textbf{cota superior} (UB), que es cualquier solución factible y ya existe (el óptimo de Ipopt), y una \textbf{cota inferior} (LB), que hoy es sólo $J\ge0$. Como N3 no es convexo, la LB exige una relajación o una cota rigurosa. Los pasos 1 y 3 dan \textbf{evidencia}, no una brecha; los pasos 4 y 5 dan una \textbf{brecha}.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYYY@{}}
+\toprule
+\textbf{Paso} & \textbf{Qué produce} & \textbf{Tipo de resultado} & \textbf{Máquina} & \textbf{Criterio de cierre} \\
+\midrule
+\endhead
+\textbf{1. Certificado local} & Residuos KKT y condiciones suficientes de segundo orden (hessiana reducida de $J(u)$ por diferenciación automática a través de la simulación, restringida a las direcciones libres de restricciones activas) & Prueba de \textbf{mínimo local estricto}, con su margen $\lambda_{\min}$ & leo\_acer & KKT $\le$ tolerancia y $\lambda_{\min}>0$ en las dos consultas \\
+\textbf{2. P0 sobre \code{ode1be}} & NLP en espacio reducido con la discretización exacta de Simulink (una iteración de Newton, explícita en $x_{k-1}$), frente al NLP con Euler implícito convergido & El óptimo del \textbf{mismo} modelo que corre en el lazo, y la diferencia entre ambas definiciones de P0 & leo\_acer & Diferencia de costo y de $u_0$ medida \\
+\textbf{3. Evidencia global} & (a) Multistart masivo con Sobol ($\ge$ 500 arranques, más las esquinas y las soluciones de LJ y GA). (b) Búsqueda global sin derivadas sobre la réplica (evolución diferencial o CMA-ES, \textasciitilde{}10$^{5}$ evaluaciones). (c) Muestreo de los valores propios de $\nabla^2J(u)$ en la caja de control & Número de óptimos locales distintos, mejor costo encontrado y señal de convexidad (evidencia, no prueba) & leo\_acer & Ningún arranque ni búsqueda mejora el NLP más allá de la tolerancia \\
+\textbf{4a. Cota inferior semi-rigurosa} & $\hat y_k(u)=a_k(u)+e_k(u)$ con $a_k$ afín y $\lvert e_k\rvert\le\varepsilon_k$ estimado por muestreo con factor de seguridad. Como $(\hat y_k-y_{\rm ref})^2\ge(\lvert a_k-y_{\rm ref}\rvert-\varepsilon_k)_+^2$ es convexo, minimizar la cota es un problema convexo & Estimación de la brecha $J_{\rm NLP}-LB$: indica si 4b vale la pena & leo\_acer & Brecha estimada en las dos consultas \\
+\textbf{4b. Cota inferior rigurosa} & Igual que 4a, con $\varepsilon_k$ por aritmética de intervalos o modelos de Taylor (\code{IntervalArithmetic.jl}, \code{TaylorModels.jl}, Newton por intervalos en cada paso implícito). Si la brecha es grande, ramificación y acotamiento en espacio reducido, subdividiendo la caja de control como en \code{matlab/m1\_branch\_and\_bound.m} & \textbf{Certificado de optimalidad global} de N3, con brecha X \% & leo\_acer & Brecha $\le$ 1 \% (o la que fije el equipo) \\
+\textbf{5. Solvers globales genéricos} (opcional) & NLP completo en SCIP (\code{SCIP.jl}) o EAGO.jl con límite de tiempo & Contraste independiente; cualquier cota dual > 0 ya mejora $J\ge0$ & leo\_acer & Cota obtenida o no viable documentado \\
+\bottomrule
+\end{xltabular}}
+
+Orden: 1 $\to$ 2 $\to$ 3 $\to$ 4a $\to$ 4b; el paso 5 es opcional. Los pasos 1–3 dicen si hay motivos para dudar del óptimo de Ipopt. El 4a dice, en pocas horas, si la brecha rigurosa será útil antes de invertir en intervalos. El 4b es el certificado propiamente dicho. Todo corre sobre la réplica en Julia, que simula en milisegundos: es lo que hace viable ahora la línea V10 de \code{implementation\_route.md}, que con Simulink sólo había cerrado un problema de juguete.
+
+\textbf{Resultados de los pasos 1–4a (9-11-2026, leo\_acer).} Scripts \code{julia/f3c\_optimality.jl} (pasos 1–3) y \code{julia/f3c\_lower\_bound.jl} (paso 4a), con el costo reducido común en \code{julia/ReducedP0.jl}. Resultados en \code{results/f3c\_optimality/}.
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Paso} & \textbf{1180 s} & \textbf{1161 s} \\
+\midrule
+\endhead
+1. Certificado local (BE) & \textbf{Mínimo local estricto}: 6 cotas activas con multiplicadores $\ge$ 3.2·10$^{-4}$; 20 variables libres con gradiente 9·10$^{-10}$; hessiana reducida definida positiva ($\lambda _{min}$ = 4.3·10$^{-6}$, condición 4.6·10$^{3}$) & \textbf{Mínimo local estricto en un vértice}: 26 cotas activas, multiplicadores $\ge$ 4.2·10$^{-3}$ \\
+2. P0 sobre \code{ode1be} & El óptimo BE queda 4.5·10$^{-9}$ por encima del óptimo \code{ode1be}; mismo $u_0$; $\max_k\lvert\Delta u_k\rvert$ = 6·10$^{-4}$ kg/s; también es mínimo local estricto & 6.8·10$^{-7}$ por encima; la misma acción \\
+3a. Multistart ($\approx$ 590 arranques) & 593/593 convergen al mismo óptimo (a $\le$ 5·10$^{-6}$ kg/s); ninguno lo mejora & 587/587 al mismo óptimo \\
+3b. Evolución diferencial (90 060 evaluaciones) & +2.4·10$^{-7}$ sobre el NLP; pulida, el mismo óptimo & Igual al NLP \\
+3c. Hessiana en 300 puntos de la caja & Definida positiva en los 300 ($\lambda _{min}$ $\ge$ 3.2·10$^{-6}$) & \textbf{No convexa}: valores propios negativos en 255/300, pero mínimos ($\ge$ $-$2.2·10$^{-6}$, $\approx$ 0.006 \% de $\lambda _{max}$) \\
+4a.2 Residuo $\max_u\lvert e_k\rvert$ & Crece con $k$ hasta 0.010 K; la búsqueda adversaria no lo supera en ningún paso & Hasta 0.038 K (el óptimo es un vértice, y el modelo afín se aleja más) \\
+4a.4 Brecha $(UB-LB)/UB$ con factor 1 / 1.5 / 2 & \textbf{0.30 / 0.45 / 0.59 \%} & \textbf{1.2 / 1.8 / 2.4 \%} \\
+4a.5 Brecha en sub-cajas de semiancho $\rho$ = 0.5 / 0.25 / 0.1 & 0.11 / 0.029 / 0.005 \% & 0.45 / 0.11 / 0.018 \% \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Lectura.}
+
+\begin{itemize}
+\item Los pasos 1–3 no dan ninguna señal de un óptimo mejor que el de Ipopt. Hay un solo óptimo local en $\approx$ 590 arranques por consulta, y la búsqueda global sin derivadas tampoco lo mejora.
+\item La no convexidad de 1161 s, aunque mínima, muestra que la convexidad no se puede suponer: hace falta la cota del paso 4.
+\item El paso 4a da una brecha \textbf{semi-rigurosa} de 0.3–0.6 \% (1180 s) y 1.2–2.4 \% (1161 s) sobre toda la caja de control.
+\item El residuo baja de forma cuadrática con el tamaño de la caja, como el resto de Taylor. En ramificación y acotamiento, uno o dos niveles de subdivisión bastarían para llevar la brecha por debajo de \textasciitilde{}0.1 \%.
+\item Queda pendiente el paso 4b: reemplazar la estimación por muestreo de $\varepsilon_k$ por una cota con aritmética de intervalos. Con eso la brecha pasa a ser un certificado.
+\end{itemize}
+
+\textbf{Paso 4b, primer resultado certificado (9-11-2026)} (\code{julia/f3c\_rigorous.jl}).
+
+\emph{Método.} Modelo de Taylor de primer orden con resto por intervalos, $\delta_k(u)=T_k\Delta u+r_k$:
+
+\begin{itemize}
+\item La parte lineal $T_k$ es un número por entrada (coincide con la diferenciación automática a 2·10$^{-17}$).
+\item El resto $r_k$ se propaga con la forma de valor medio de Euler implícito: $M^\star_k r_k = r_{k-1} + h([A](Z_k)-A^\star_k)[\delta_k] - \text{res}_k - D_k\Delta u$.
+\item $[A]$ es el jacobiano por intervalos de $f$ sobre la caja alcanzable. $B=e_{\Delta M}$ es constante, porque el control sólo entra en el inventario.
+\item Los defectos de punto flotante de la trayectoria nominal y de la parte lineal se acotan con intervalos.
+\item El resto se acepta cuando el operador lleva una caja de prueba dentro de sí misma (Brouwer).
+\item El término $p_4$ se acota exactamente: $\tfrac12[p_4'']\Delta u_k^2$.
+\item Supuesto: la solución de cada paso implícito es única, lo que respalda la convergencia de Newton en todos los casos.
+\end{itemize}
+
+\emph{Verificaciones.} El jacobiano por intervalos contiene los 1300 jacobianos muestreados por consulta (0 violaciones). La propagación cierra en los 26 pasos en las dos consultas. El $\varepsilon_k$ riguroso queda por encima del residuo muestreado \textbf{del mismo modelo afín} en todos los pasos.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYRR@{}}
+\toprule
+\textbf{Centro del modelo de Taylor} & \textbf{$\varepsilon_{26}$ riguroso / muestreado} & \textbf{Brecha certificada 1180 s} & \textbf{Brecha certificada 1161 s} \\
+\midrule
+\endhead
+$u^\star$ (solución del NLP) & 0.50 / 0.010 K (1180 s); 1.32 / 0.038 K (1161 s) & 4.86 \% & 20.85 \% \\
+Punto medio de la caja & 0.47 / 0.0093 K (1180 s); 0.48 / 0.0096 K (1161 s) & \textbf{2.34 \%} & \textbf{11.44 \%} \\
+\bottomrule
+\end{xltabular}}
+
+\emph{Lectura.}
+
+\begin{itemize}
+\item Es la \textbf{primera cota inferior certificada} del P0 no lineal (antes sólo había $J\ge0$): el óptimo de Ipopt está a $\le$ 2.3 \% (1180 s) y $\le$ 11.4 \% (1161 s) del óptimo global sobre toda la caja de control.
+\item El $\varepsilon$ riguroso sobreestima el muestreado entre 16 y 50 veces. Hay dos causas. (i) El término de segundo orden se acota como el producto de dos cajas, $\lvert[A]-A^\star\rvert\cdot\lvert[\delta]\rvert$, que ignora que las 26 direcciones de control mueven el estado casi en una sola dirección (la del inventario). (ii) El resto se acumula a través del integrador.
+\end{itemize}
+
+\emph{Próximo ajuste (4b.5), por prioridad:}
+
+\begin{enumerate}
+\item \textbf{Partición por la masa inyectada.} Cortar la caja en franjas $w^\top\Delta u\in[\alpha_i,\beta_i]$ según la dirección dominante, $w$ = masa acumulada. En cada franja, el rango de $T_k\Delta u$ se calcula con programación lineal sobre caja $\cap$ franja, en lugar del producto de cajas. La cota inferior global es el mínimo entre franjas, que cubren toda la caja. Como el resto es \textasciitilde{}cuadrático en el ancho, unas 10 franjas deberían reducir $\varepsilon$ en un orden de magnitud o más.
+\item \textbf{Modelo de Taylor de segundo orden}: un término cuadrático con un número por entrada y el resto de tercer orden por intervalos. Conserva la correlación entre direcciones, pero su implementación es más pesada.
+\end{enumerate}
+
+\textbf{Estado de 4b.5: pendiente para la próxima ronda} (paso 7 de \S{}8.4).
+
+\textbf{Comparación de las decisiones de todos los métodos (9-11-2026)} (\code{julia/f3c\_compare\_decisions.jl}, \code{results/f3c\_optimality/decisions\_compared.csv}).
+
+Que cada solver resuelva bien \textbf{su propio} problema (brecha dual del QP, residuos KKT del NLP) no dice cuál decisión es mejor. Por eso, el control que entrega cada método se evalúa con una \textbf{misma vara}: el costo P0 sobre el ROM no lineal. Se usan las dos discretizaciones (Euler implícito convergido y \code{ode1be}), que dan el mismo ordenamiento. Cada costo se ubica frente a la cota inferior certificada del paso 4b. Como $LB\le J^\star\le UB$, el exceso real de un método sobre el óptimo global queda en el intervalo $[(J-UB)/UB,\ (J-LB)/LB]$.
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YRRRRR@{}}
+\toprule
+\textbf{Método} & \textbf{1180 s: costo} & \textbf{Exceso sobre el mejor} & \textbf{Exceso garantizado sobre el óptimo global} & \textbf{1161 s: costo} & \textbf{Exceso sobre el mejor} \\
+\midrule
+\endhead
+N3, NLP monolítico (Ipopt, Euler implícito) & 0.244034 & 0 & 0 – 2.4 \% & 48.028 & 0 \\
+N3 sobre \code{ode1be} (espacio reducido) & 0.244034 & 0 & 0 – 2.4 \% & 48.028 & 0 \\
+N2, QP-LTV iterado (SQP) & 0.244034 & 0 & 0 – 2.4 \% & 48.028 & 0 \\
+N1, QP-LTI (una linealización) & 0.244040 & +0.0026 \% & 0.0026 – 2.4 \% & 48.028 & 0 \\
+Evolución diferencial (90 000 evaluaciones) & 0.244034 & +0.0001 \% & 0.0001 – 2.4 \% & 48.028 & 0 \\
+LJ corregido, 3 semillas & 0.313 – 0.381 & +28 a +56 \% & 28 – 60 \% & — & — \\
+GA, 2 semillas & 0.349 – 0.353 & +43 a +45 \% & 43 – 48 \% & — & — \\
+LJ archivado / acción archivada del lazo & 4.081 & +1572 \% & 1572 – 1612 \% & 94.45 & +97 \% \\
+\bottomrule
+\end{xltabular}}
+
+\emph{Lectura.}
+
+\begin{itemize}
+\item \textbf{N3 y N2 son los mejores y empatan:} son la misma decisión, a 6·10$^{-6}$ kg/s. \textbf{N1} cuesta un 0.0026 \% más en 1180 s y lo mismo en 1161 s. Es el más rápido (\textasciitilde{}10 ms) y el único con estructura de QP convexo, así que es el candidato natural para tiempo real.
+\item La primera acción aplicada (56.75 A) coincide en N1, N2, N3 y la evolución diferencial.
+\item LJ y GA quedan \textbf{dominados con garantía}: su exceso sobre el óptimo global es de al menos 28 \% y 43 \%, y son unas 10$^{4}$ veces más lentos.
+\item El límite superior del intervalo de N1–N3 (2.4 \%) es la brecha de la cota inferior, que es conservadora. Los pasos 1–3 indican que el exceso real es $\approx$ 0. Cerrarlo es el paso 4b.5.
+\item Alcance: la comparación vale para P0 sobre el ROM. No dice nada sobre el desajuste ROM–HRM (paso 3 de \S{}8.4).
+\end{itemize}
+
+\subsection*{8.6 Reorientación (11-11-2026): HRM programable antes del lazo cerrado}
+\addcontentsline{toc}{subsection}{8.6 Reorientación (11-11-2026): HRM programable antes del lazo cerrado}
+\textbf{Por qué cambia el orden.} Todo lo obtenido en F2–F4 es en lazo abierto, en dos consultas y sobre el ROM. La planta "verdadera" del lazo, el HRM de 12 nodos, sólo existe en Simulink. Eso tiene cuatro consecuencias:
+
+\begin{itemize}
+\item el lazo cerrado sólo corre donde hay licencia (leo\_asus);
+\item el desajuste ROM–HRM no se puede medir en leo\_acer;
+\item las campañas Monte Carlo en la VM Olab de la USM dependen de que tenga MATLAB;
+\item cada consulta nueva exige \code{build\_query\_from\_archive.m}.
+\end{itemize}
+
+Una réplica programable del HRM elimina esa dependencia y convierte a Simulink en un validador, ya no en un requisito.
+
+\textbf{Hallazgo: el HRM es el ROM con 12 nodos.} Inventario de \code{models/SMDFR\_hrm\_MCDET\_2022b\_control\_CMEX.slx} (11-11-2026, leo\_acer, por lectura del XML):
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{} & \textbf{ROM} & \textbf{HRM} \\
+\midrule
+\endhead
+Solver & \code{ode1be}, $\Delta t=0.5$ s & \code{ode1be}, $\Delta t=0.5$ s \\
+Funciones MATLAB & 23 & 25, con $\approx$ 140 líneas de ecuaciones en total \\
+Cinética & PKE de 6 grupos con precursores circulantes & La misma (\code{eqn2}, \code{eqn3}, \code{eqn4}, \code{eqn15}) \\
+Termohidráulica & 1 nodo de combustible, pared y refrigerante & 12 nodos encadenados (\code{eqn8}, \code{eqn9}, \code{eqn10}; \code{cons1} pasa $T_e$ de un nodo a la entrada del siguiente), potencia repartida con $\Pi_0$ (\code{distr}) \\
+PCT & $T_w+p_4(\dot m_{\rm net})$ (regresión) & Máximo nodal de la pared (\code{tp\_function}, \code{vec maximum2}): \textbf{sin $p_4$} \\
+Propiedades & $c_{pc}$ constante & $c_{pc}(T_c)$ (\code{MATLAB Function7}) \\
+Fuga y ACS & Pronóstico como entrada & Modelo de Park (2021) con $A,B$ muestreados; \code{ACS\_fun} con tiempo de respuesta; ruido sobre la fuga (\code{MATLAB Function4}) \\
+S-functions en C & — & \code{msfcn\_indirectps\_hrm\_c}, \code{msfcn\_limintm\_hrm\_c} y \code{msfcn\_schedule\_hrm\_c}: lógica del DET (cadena de Markov de componentes, monitor de umbral y planificador de protecciones), sin física \\
+\bottomrule
+\end{xltabular}}
+
+Parámetros: \code{matlab/parameters\_dualfluid\_hrm.m}; estado inicial: \code{models/SA\_DualFluid.mat}. Las dos fuentes se leen sin MATLAB.
+
+\textbf{Datos de validación disponibles sin MATLAB.} \code{models/LJ\_test\_sampled\_vel\_ACS\_2\_loop\_1180.mat} contiene la corrida completa del lazo LJ de 0 a 1180 s:
+
+\begin{itemize}
+\item \code{control\_series} (corriente y estado del ACS en cada paso);
+\item \code{X\_1\_trajectory} (fuga del HRM);
+\item \code{X\_2\_trajectory} ($T_{e,c}$ del nodo 12);
+\item \code{tw\_max\_V2P\_trajectory} (PCT máxima);
+\item los parámetros de fuga muestreados (\code{sampled\_A}, \code{sampled\_B}).
+\end{itemize}
+
+Los puntos de operación de Simulink (\code{finalOP\_*}) no se pueden leer sin MATLAB. No hacen falta: el HRM parte del estado estacionario y la corrida se reproduce desde $t=0$ con las entradas archivadas.
+
+\textbf{Ruta revisada.}
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Paso} & \textbf{Qué} & \textbf{Máquina} & \textbf{Criterio de cierre} \\
+\midrule
+\endhead
+\textbf{F1b.1} Ecuaciones del HRM & Extraer las 25 funciones y su cableado del \code{.slx}, y trazar cada término a su bloque, como en F0 & leo\_acer & Ecuaciones escritas, con las diferencias frente al ROM explicadas \\
+\textbf{F1b.2} Réplica \code{ode1be} & \code{julia/SMDFRHRM.jl}, con una iteración de Newton y entradas en $t_{n+1}$ como en F1 (unos 50 estados: 13 de cinética, 36 térmicos e inventario), más la lógica del ACS. Fuga del archivo o del modelo de Park & leo\_acer & Corre de 0 a 1180 s \\
+\textbf{F1b.3} Validación contra el archivo & Repetición de lazo abierto con la corriente y el estado del ACS archivados & leo\_acer & Error de la PCT máxima $\le$ 0.01 K en las ventanas de consulta y $\le$ 0.1 K en toda la corrida; $T_{e,c}$ del nodo 12 igual \\
+\textbf{F1b.4} Confirmación con todos los estados & Registro de los 12 nodos en Simulink en varias consultas, incluida una corrida con falla del ACS & leo\_asus (cuando esté disponible) & Error de estado $\approx$ precisión de máquina, como en F1 \\
+\textbf{F4.5} Robustez en lazo abierto & Consultas nuevas generadas con la réplica del HRM, sin \code{build\_query\_from\_archive.m}. Tres configuraciones del actuador (archivada; kg/s con rampa dura de 5 kg/s por paso; ampliada) para tener óptimos interiores. Perturbaciones del estado inicial, fuga severa ($B=15$) y estadística de los solvers. \textbf{Desajuste ROM–HRM}: re-simular en la réplica del HRM las acciones del NLP & leo\_acer & N1/N2/N3 coinciden en $u_0$ en casi todas las consultas y el error ROM–HRM está medido \\
+\textbf{F5a.0} Banco de lazo cerrado & Interfaz \code{Plant} intercambiable (réplica del ROM, réplica del HRM y, después, Simulink). Controladores N1, N2 (iteración de tiempo real: un QP por consulta, relinealizado sobre la predicción desplazada) y N3 con arranque en caliente. Inicialización del ROM desde el HRM como en \code{DET\_2}. Variante con costo $L_1$ para no cerrar la vía de \S{}7.1 & leo\_acer & Con la planta ROM y un pronóstico perfecto, la primera consulta reproduce el óptimo de lazo abierto \\
+\textbf{F5a.1} Lazo cerrado sobre el HRM & Las 61 consultas con planta HRM en Julia, pronóstico BiLSTM y MPC \emph{offset-free} (estimación de la perturbación de salida). Líneas base: el lazo LJ archivado y el PID & leo\_acer & Métricas listadas abajo para cada variante \\
+\textbf{F5a.2} Campaña Monte Carlo & Realizaciones de fuga (incluida $B=15$), ACS degradado y falla forzada, con números aleatorios comunes entre controladores & \textbf{Olab} (Julia; sin MATLAB) & Diferencias entre controladores con intervalos de confianza \\
+\textbf{F5b} Riesgo & (1) Restricción probabilística con $\sigma_k$ del error ROM–HRM y del pronóstico recalibrado. (2) SAA o multietapa con fallas del ACS. (3) Escenario óptimo empírico (\S{}7.2). (4) Escenario aprendido $g_\theta$ (V6), entrenado con contextos de lazo cerrado en Olab & leo\_acer y Olab & Frontera costo–riesgo fuera de muestra \\
+F3c 4b.5 & \textbf{Postergado}: la evidencia indica una brecha $\approx$ 0 y ajustar la cota no cambia ninguna decisión & — & — \\
+\bottomrule
+\end{xltabular}}
+
+\textbf{Métricas del lazo cerrado} (fijadas antes de correr):
+
+\begin{itemize}
+\item \textbf{Seguridad}: PCT máxima, tiempo sobre $y_{\rm ref}$ y sobre el margen, DSM mínimo.
+\item \textbf{Desempeño}: costo P0 acumulado y error de seguimiento integrado.
+\item \textbf{Actuador}: masa inyectada y violaciones de rampa.
+\item \textbf{Cómputo}: tiempo por consulta (p50/p99) y fallas del solver.
+\item \textbf{Modelo}: error de predicción del ROM frente a la planta en cada consulta (insumo de la capa 1 de F5b).
+\end{itemize}
+
+\textbf{Opción abierta por F1b: el HRM como modelo de predicción.} Con unos 50 estados, el NLP sobre el HRM sigue siendo pequeño. La PCT sería el máximo nodal (restricciones de epígrafe), sin la regresión $p_4$. Se evaluará como variante "N3-HRM" en F5a si el desajuste ROM–HRM de F4.5 resulta del orden de 1 K.
+
+\textbf{Límites de la validación en leo\_acer.} El archivo cubre una sola realización (vel\_ACS = 2, sin falla del ACS en la ventana) y sólo dos salidas del HRM. F1b.3 valida las salidas que usa el lazo, pero no cada estado nodal ni la lógica de fallas. Eso queda para F1b.4. Mientras tanto, los resultados del lazo cerrado con falla del ACS se informan como provisionales.
+
+\medskip
+\section*{9. Decisiones abiertas}
+\addcontentsline{toc}{section}{9. Decisiones abiertas}
+\begin{enumerate}
+\item \textbf{ROM o HRM como restricción}: el ROM (16 estados) es suficiente para empezar; el HRM de 12 nodos multiplica los estados TH por 12 y elimina la corrección $p_4$.
+\item \textbf{Herramienta}: JuMP + Ipopt (Julia), CasADi (Python/MATLAB) o fmincon. Ver \S{}6.
+\item \textbf{PJA y pared cuasiestática}: reducen la rigidez, pero hay que medir su error.
+\item \textbf{Corrección de la PCT}: mantener $p_4$, reconectar la BiLSTM o ambas.
+\item \textbf{Norma del seguimiento}: cuadrática (P0) o $L_1$ (compatible con el teorema de \S{}7.1).
+\item \textbf{Cota del actuador en unidades físicas} (\S{}8.3): la cota en amperios (56.75 o 56.90 A) \textbf{no tiene significado físico}. El ECM es el de una bomba principal y la ventana de 0.06 A es un artefacto de usar el pie de su curva. La decisión es de caudal: $\dot m_{\rm ACS}\in[0,\dot m_{\max}]$ kg/s, con una rampa $\lvert\Delta\dot m\rvert\le$ 5 kg/s por paso como restricción dura. Falta fijar, con la especificación del sistema de inyección: (a) $\dot m_{\max}$, que deja de ser relevante si la rampa dura es la dinámica real; (b) la rampa admisible, que pasa a ser el parámetro que decide la autoridad; y (c) si el ACS es de verdad una inyección de inventario o debería actuar sobre el caudal primario. En el caso (c), la estructura del modelo cambia y la banda de $\pm$20 \% sobre $\dot m_c$ se aplicaría directamente.
+\item \textbf{Lenguaje de la réplica del HRM} (\S{}8.6): Julia, por coherencia con \code{SMDFRROM.jl}, diferenciación automática y JuMP. El pronóstico BiLSTM puede pasarse como datos desde Python o cargarse en ONNX. Queda por confirmar si Olab tiene MATLAB: si no lo tiene, la réplica del HRM es la única planta posible allí.
+\end{enumerate}
+
+\end{document}

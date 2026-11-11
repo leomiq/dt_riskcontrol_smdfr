@@ -309,7 +309,10 @@ lo que corresponde al pronóstico orientado a la decisión del artículo.
 | **F3** Linealizado (N1, N2) | QP y funciones de transferencia | $A,B,E,C,D$ en cada consulta; $G(s)$ de $\dot m_{\rm ACS}$ a PCT; MPC lineal | Error de N1/N2 frente a N3 ≪ 1 K; brecha de costo medida |
 | **F3c** Certificación de N3 | Brecha de optimalidad del NLP **no lineal**, no del QP (§8.5) | Certificado local (KKT y segundo orden), NLP sobre `ode1be`, evidencia global y cota inferior rigurosa | "La solución está a menos de X % del óptimo global de P0" en cada consulta |
 | **F4** Riesgo | Las capas de §7 | Restricción probabilística, SAA y experimento de cuantiles | Una decisión que cambia por riesgo, con intervalos de confianza |
-| **F5** Lazo cerrado | Tiempo real y extensiones | 61 consultas con la mejor variante; luego multietapa y dos protecciones | Menos de 120 s por consulta; frontera costo–riesgo fuera de muestra |
+| **F1b** HRM programable (11-11-2026, §8.6) | Planta de 12 nodos sin Simulink | `julia/SMDFRHRM.jl` y su validación contra la corrida archivada de 0 a 1180 s | PCT máxima y $T_{e,c}$ del nodo 12 reproducidas en toda la corrida (§8.6) |
+| **F4.5** Robustez en lazo abierto (§8.6) | Extender F2–F4 más allá de dos consultas | 10–15 consultas, tres configuraciones del actuador y desajuste ROM–HRM | N1/N2/N3 comparados donde el óptimo es interior; error ROM–HRM medido |
+| **F5a** Lazo cerrado determinista (§8.6) | N1/N2/N3 en lazo cerrado **sin** capas de riesgo | Banco de lazo cerrado con planta intercambiable (réplica ROM → HRM en Julia → Simulink); campaña Monte Carlo en Olab | Métricas de §8.6 con intervalos de confianza; menos de 120 s por consulta |
+| **F5b** Lazo cerrado con riesgo (§8.6) | Las capas de §7 sobre la mejor variante de F5a | Restricción probabilística con el error ROM–HRM, SAA con fallas del ACS, escenario óptimo y escenario aprendido (V6) | Frontera costo–riesgo fuera de muestra |
 
 **Para la próxima reunión (3–4 semanas)**: F0 cerrado, F1 con la réplica validada en al
 menos una trayectoria, y un primer resultado de F2 o F3 en el estado $t=1180$ s.
@@ -605,7 +608,8 @@ el ROM no sale de su rango.
 - `julia/F4Lib.jl`: código común de F4 (carga de la consulta, NLP determinista y SAA con
   límites del actuador configurables).
 
-**Próximos pasos**, en orden de prioridad:
+**Próximos pasos**, en orden de prioridad. *Nota del 11-11-2026: esta lista queda
+reemplazada por la ruta de §8.6. Se conserva como registro.*
 
 1. **Fijar el actuador con quien conozca el sistema de inyección** (§9.6): la rampa
    admisible, el caudal máximo y si el ACS repone inventario o impulsa el caudal primario.
@@ -787,6 +791,84 @@ $[(J-UB)/UB,\ (J-LB)/LB]$.
 - Alcance: la comparación vale para P0 sobre el ROM. No dice nada sobre el desajuste
   ROM–HRM (paso 3 de §8.4).
 
+### 8.6 Reorientación (11-11-2026): HRM programable antes del lazo cerrado
+
+**Por qué cambia el orden.** Todo lo obtenido en F2–F4 es en lazo abierto, en dos
+consultas y sobre el ROM. La planta "verdadera" del lazo, el HRM de 12 nodos, sólo existe
+en Simulink. Eso tiene cuatro consecuencias:
+
+- el lazo cerrado sólo corre donde hay licencia (leo_asus);
+- el desajuste ROM–HRM no se puede medir en leo_acer;
+- las campañas Monte Carlo en la VM Olab de la USM dependen de que tenga MATLAB;
+- cada consulta nueva exige `build_query_from_archive.m`.
+
+Una réplica programable del HRM elimina esa dependencia y convierte a Simulink en un
+validador, ya no en un requisito.
+
+**Hallazgo: el HRM es el ROM con 12 nodos.** Inventario de
+`models/SMDFR_hrm_MCDET_2022b_control_CMEX.slx` (11-11-2026, leo_acer, por lectura del XML):
+
+| | ROM | HRM |
+|---|---|---|
+| Solver | `ode1be`, $\Delta t=0.5$ s | `ode1be`, $\Delta t=0.5$ s |
+| Funciones MATLAB | 23 | 25, con ≈ 140 líneas de ecuaciones en total |
+| Cinética | PKE de 6 grupos con precursores circulantes | La misma (`eqn2`, `eqn3`, `eqn4`, `eqn15`) |
+| Termohidráulica | 1 nodo de combustible, pared y refrigerante | 12 nodos encadenados (`eqn8`, `eqn9`, `eqn10`; `cons1` pasa $T_e$ de un nodo a la entrada del siguiente), potencia repartida con $\Pi_0$ (`distr`) |
+| PCT | $T_w+p_4(\dot m_{\rm net})$ (regresión) | Máximo nodal de la pared (`tp_function`, `vec maximum2`): **sin $p_4$** |
+| Propiedades | $c_{pc}$ constante | $c_{pc}(T_c)$ (`MATLAB Function7`) |
+| Fuga y ACS | Pronóstico como entrada | Modelo de Park (2021) con $A,B$ muestreados; `ACS_fun` con tiempo de respuesta; ruido sobre la fuga (`MATLAB Function4`) |
+| S-functions en C | — | `msfcn_indirectps_hrm_c`, `msfcn_limintm_hrm_c` y `msfcn_schedule_hrm_c`: lógica del DET (cadena de Markov de componentes, monitor de umbral y planificador de protecciones), sin física |
+
+Parámetros: `matlab/parameters_dualfluid_hrm.m`; estado inicial: `models/SA_DualFluid.mat`.
+Las dos fuentes se leen sin MATLAB.
+
+**Datos de validación disponibles sin MATLAB.** `models/LJ_test_sampled_vel_ACS_2_loop_1180.mat`
+contiene la corrida completa del lazo LJ de 0 a 1180 s:
+
+- `control_series` (corriente y estado del ACS en cada paso);
+- `X_1_trajectory` (fuga del HRM);
+- `X_2_trajectory` ($T_{e,c}$ del nodo 12);
+- `tw_max_V2P_trajectory` (PCT máxima);
+- los parámetros de fuga muestreados (`sampled_A`, `sampled_B`).
+
+Los puntos de operación de Simulink (`finalOP_*`) no se pueden leer sin MATLAB. No hacen
+falta: el HRM parte del estado estacionario y la corrida se reproduce desde $t=0$ con las
+entradas archivadas.
+
+**Ruta revisada.**
+
+| Paso | Qué | Máquina | Criterio de cierre |
+|---|---|---|---|
+| **F1b.1** Ecuaciones del HRM | Extraer las 25 funciones y su cableado del `.slx`, y trazar cada término a su bloque, como en F0 | leo_acer | Ecuaciones escritas, con las diferencias frente al ROM explicadas |
+| **F1b.2** Réplica `ode1be` | `julia/SMDFRHRM.jl`, con una iteración de Newton y entradas en $t_{n+1}$ como en F1 (unos 50 estados: 13 de cinética, 36 térmicos e inventario), más la lógica del ACS. Fuga del archivo o del modelo de Park | leo_acer | Corre de 0 a 1180 s |
+| **F1b.3** Validación contra el archivo | Repetición de lazo abierto con la corriente y el estado del ACS archivados | leo_acer | Error de la PCT máxima ≤ 0.01 K en las ventanas de consulta y ≤ 0.1 K en toda la corrida; $T_{e,c}$ del nodo 12 igual |
+| **F1b.4** Confirmación con todos los estados | Registro de los 12 nodos en Simulink en varias consultas, incluida una corrida con falla del ACS | leo_asus (cuando esté disponible) | Error de estado ≈ precisión de máquina, como en F1 |
+| **F4.5** Robustez en lazo abierto | Consultas nuevas generadas con la réplica del HRM, sin `build_query_from_archive.m`. Tres configuraciones del actuador (archivada; kg/s con rampa dura de 5 kg/s por paso; ampliada) para tener óptimos interiores. Perturbaciones del estado inicial, fuga severa ($B=15$) y estadística de los solvers. **Desajuste ROM–HRM**: re-simular en la réplica del HRM las acciones del NLP | leo_acer | N1/N2/N3 coinciden en $u_0$ en casi todas las consultas y el error ROM–HRM está medido |
+| **F5a.0** Banco de lazo cerrado | Interfaz `Plant` intercambiable (réplica del ROM, réplica del HRM y, después, Simulink). Controladores N1, N2 (iteración de tiempo real: un QP por consulta, relinealizado sobre la predicción desplazada) y N3 con arranque en caliente. Inicialización del ROM desde el HRM como en `DET_2`. Variante con costo $L_1$ para no cerrar la vía de §7.1 | leo_acer | Con la planta ROM y un pronóstico perfecto, la primera consulta reproduce el óptimo de lazo abierto |
+| **F5a.1** Lazo cerrado sobre el HRM | Las 61 consultas con planta HRM en Julia, pronóstico BiLSTM y MPC *offset-free* (estimación de la perturbación de salida). Líneas base: el lazo LJ archivado y el PID | leo_acer | Métricas listadas abajo para cada variante |
+| **F5a.2** Campaña Monte Carlo | Realizaciones de fuga (incluida $B=15$), ACS degradado y falla forzada, con números aleatorios comunes entre controladores | **Olab** (Julia; sin MATLAB) | Diferencias entre controladores con intervalos de confianza |
+| **F5b** Riesgo | (1) Restricción probabilística con $\sigma_k$ del error ROM–HRM y del pronóstico recalibrado. (2) SAA o multietapa con fallas del ACS. (3) Escenario óptimo empírico (§7.2). (4) Escenario aprendido $g_\theta$ (V6), entrenado con contextos de lazo cerrado en Olab | leo_acer y Olab | Frontera costo–riesgo fuera de muestra |
+| F3c 4b.5 | **Postergado**: la evidencia indica una brecha ≈ 0 y ajustar la cota no cambia ninguna decisión | — | — |
+
+**Métricas del lazo cerrado** (fijadas antes de correr):
+
+- **Seguridad**: PCT máxima, tiempo sobre $y_{\rm ref}$ y sobre el margen, DSM mínimo.
+- **Desempeño**: costo P0 acumulado y error de seguimiento integrado.
+- **Actuador**: masa inyectada y violaciones de rampa.
+- **Cómputo**: tiempo por consulta (p50/p99) y fallas del solver.
+- **Modelo**: error de predicción del ROM frente a la planta en cada consulta (insumo de la capa 1 de F5b).
+
+**Opción abierta por F1b: el HRM como modelo de predicción.** Con unos 50 estados, el
+NLP sobre el HRM sigue siendo pequeño. La PCT sería el máximo nodal (restricciones de
+epígrafe), sin la regresión $p_4$. Se evaluará como variante "N3-HRM" en F5a si el
+desajuste ROM–HRM de F4.5 resulta del orden de 1 K.
+
+**Límites de la validación en leo_acer.** El archivo cubre una sola realización (vel_ACS = 2,
+sin falla del ACS en la ventana) y sólo dos salidas del HRM. F1b.3 valida las salidas que
+usa el lazo, pero no cada estado nodal ni la lógica de fallas. Eso queda para F1b.4.
+Mientras tanto, los resultados del lazo cerrado con falla del ACS se informan como
+provisionales.
+
 ---
 
 ## 9. Decisiones abiertas
@@ -807,3 +889,7 @@ $[(J-UB)/UB,\ (J-LB)/LB]$.
    (c) si el ACS es de verdad una inyección de inventario o debería actuar sobre el caudal
    primario. En el caso (c), la estructura del modelo cambia y la banda de ±20 % sobre
    $\dot m_c$ se aplicaría directamente.
+7. **Lenguaje de la réplica del HRM** (§8.6): Julia, por coherencia con `SMDFRROM.jl`,
+   diferenciación automática y JuMP. El pronóstico BiLSTM puede pasarse como datos desde
+   Python o cargarse en ONNX. Queda por confirmar si Olab tiene MATLAB: si no lo tiene, la
+   réplica del HRM es la única planta posible allí.
