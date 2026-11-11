@@ -1091,6 +1091,72 @@ y ningún controlador puede cambiarla.
 Tampoco hay fallas del ACS. Esos son los ejes de F5a.2 (Monte Carlo: realizaciones de fuga,
 pronóstico BiLSTM, ACS degradado y falla forzada) y de F5b (riesgo).
 
+### 8.10 F5a.2: Monte Carlo de lazos cerrados, primera tanda local (11-11-2026, leo_acer)
+
+`julia/f5a2_monte_carlo.jl` (con `Distributed`: `W` procesos; aquí `W = 0`) y
+`python/f5a2_summary.py`; resultados en `results/f5a2_monte_carlo/{runs,summary}.csv`.
+
+**Diseño.** Cada realización (semilla $r$) sortea una fuga de Park con los rangos del
+espacio de trabajo del modelo: $A\sim U(0.2,0.4)$, $B\sim U(9,15)$ y
+$d\sim U(8,10)$ kg/s. En la familia **nominal** sólo varía la fuga, y el pronóstico es
+perfecto. La familia **estresada** agrega tres perturbaciones que el MPC no conoce:
+
+- eficiencia del ACS $\eta\sim U(0.8,1)$: la planta recibe $\eta\dot m$;
+- una falla del ACS que empieza $U(5,20)$ s después de la primera consulta y dura
+  $U(5,15)$ s;
+- un error constante del pronóstico de fuga $\sim U(-0.25,0.05)$ kg/s (la BiLSTM sobrestima
+  la fuga en ≈ 0.12 kg/s, §8.2).
+
+El MPC arranca 17 s después de la activación del ACS por la lógica del DET, como en el lazo
+archivado, y corre 121 consultas (60 s). La activación depende mucho de la fuga: de 955 a
+2254 s, y con $A=0.4$ y $B=9$ no ocurre antes de 2500 s (esas realizaciones se descartan; en
+esta tanda no hubo ninguna). **Números aleatorios comunes**: todos los controladores enfrentan
+la misma realización, y se comparan por diferencias pareadas contra N3+sesgo con el mismo
+actuador.
+
+**Primera tanda**: 6 realizaciones (3 nominales y 3 estresadas), 10 controladores y 121
+consultas, es decir 7260 resoluciones del MPC, **sin ninguna falla**. Tardó ≈ 8 min en un
+proceso (≈ 75 s por realización).
+
+| Familia | Controlador | ISE [K²] | ΔISE frente a N3+sesgo (IC 95 %) | Tiempo sobre $y_{\rm ref}$ [s] | $\lvert e\rvert$ en los últimos 10 s [K] | p99 de resolución [s] |
+|---|---|---:|---|---:|---:|---:|
+| nominal | Sin ACS | 1958 | +1936 ± 586 | 60.5 | 5.51 | — |
+| nominal | Caudal máximo (arch.) | 878 | +840 ± 318 | 15.7 | 4.68 (sobrepaso) | — |
+| nominal | N1 / N2 / N3 + sesgo (arch.) | 38.74 | ≈ 0 (≤ 10⁻⁵) | 15.8 | 0.0106 | 0.08 / 0.07 / 0.66 |
+| nominal | N2 nominal (arch.) | 38.88 | +0.14 ± 0.01 (+0.4 %) | 15.7 | 0.040 | 0.06 |
+| nominal | N1 / N2 / N3 + sesgo (física) | 22.72 | ≈ 0 | 6.7 | 0.0106 | 0.09 / 0.05 / 0.57 |
+| nominal | N2 nominal (física) | 22.99 | +0.27 ± 0.02 (+1.2 %) | 6.3 | 0.040 | 0.11 |
+| estresada | Caudal máximo (arch.) | 198 | +144 ± 66 | 32.8 | 2.30 | — |
+| estresada | N1 / N2 / N3 + sesgo (arch.) | 54.42 | ≈ 0 | 34.0 | 0.0079 | 0.18 / 0.08 / 0.71 |
+| estresada | N2 nominal (arch.) | 57.46 | +3.0 ± 10.4 (+7 %) | 45.5 | 0.049 | 0.08 |
+| estresada | N1 / N2 / N3 + sesgo (física) | 26.84 | ≈ 0 | 22.0 | 0.0079 | 0.17 / 0.06 / 0.53 |
+| estresada | N2 nominal (física) | 31.75 | +4.9 ± 6.5 (+19 %) | 39.7 | 0.048 | 0.12 |
+
+**Lectura.**
+
+1. **La equivalencia N1 = N2 = N3 se mantiene en todas las realizaciones**, incluso con ACS
+   degradado, fallas y pronóstico sesgado: las diferencias pareadas de ISE son ≤ 10⁻⁵ K².
+   Esa equivalencia ya no se apoya en dos consultas sino en 6 realizaciones y 7260
+   decisiones. La elección del optimizador puede hacerse por costo de cómputo y por la
+   estructura que necesite F5b: QP para N1 y N2.
+2. **La corrección de sesgo pesa más cuando hay perturbaciones no modeladas**: sin ella, N2
+   pierde 0.4–1.2 % de ISE en la familia nominal y 7–19 % en la estresada, y el error
+   estacionario es 5–6 veces mayor (0.048 frente a 0.008 K).
+3. **El actuador físico reduce el ISE 41 % (nominal) y 51 % (estresada)** frente a la caja
+   archivada, de nuevo más que cualquier cambio de optimizador.
+4. **Saturar no sirve fuera de la fase aguda**: en 60 s, el caudal máximo constante
+   sobrepasa la referencia en 2–5 K. El MPC la sigue a 0.01 K.
+5. **Con perturbaciones**, el tiempo sobre la referencia sube de 16 a 34 s (archivada) y de
+   7 a 22 s (física): la falla del ACS y la pérdida de eficiencia se notan, pero el MPC con
+   sesgo las absorbe sin perder estabilidad.
+
+**Límites y siguientes tandas.** Seis realizaciones bastan para las comparaciones pareadas
+con IC estrechos (N1/N2/N3 y corrección de sesgo). No bastan para las de alta varianza
+(N2 nominal en la familia estresada) ni para estimar colas. El pronóstico es perfecto o con
+sesgo constante: falta el ensamble BiLSTM en el lazo (`python/f4_leak_ensemble.py` por
+consulta, o un modelo de error calibrado). La campaña grande (≥ 100 realizaciones, con
+`W > 0` procesos) es la candidata para Olab.
+
 ---
 
 ## 9. Decisiones abiertas

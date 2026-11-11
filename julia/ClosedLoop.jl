@@ -26,7 +26,7 @@ include(joinpath(@__DIR__, "HRMQueries.jl"))
 include(joinpath(@__DIR__, "F4Lib.jl"))
 using .HRMQueries, .F4Lib, MAT, JuMP, Clarabel, ForwardDiff, LinearAlgebra, Statistics
 
-export Bench, setup, run_loop, ACT_ARCH, ACT_PHYS
+export Bench, setup, run_loop, metrics, ACT_ARCH, ACT_PHYS
 
 const ROOT = joinpath(@__DIR__, "..")
 const h = 0.5
@@ -43,16 +43,36 @@ struct Bench
     pH; pR; pR4; y_ref::Float64; act_arch; cs::Matrix{Float64}
     t_start::Float64
     hist::Dict{Float64,Any}     # HRM (x, logic, pct) on the grid before t_start
+    t_act::Float64              # ACS activation by the DET logic (NaN if unknown)
 end
 
-function setup(; t_start = 1160.0)
-    arc = matread(joinpath(ROOT, "results", "f1b_hrm_replica", "archive_1180.mat"))
-    cs = arc["control_series"]
-    pH = hrm_params(A = arc["sampled_A"], B = arc["sampled_B"], mdot_c_drift = arc["sampled_mdot_c_drift"])
+"""
+    setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
+
+Archived realisation (default) or a new one with HRM parameters `pH` (leak A, B, drift).
+For a new realisation the MPC starts `lead` s after the DET logic activates the ACS (the
+archived loop: activation 1143 s, first query 1160 s); returns `nothing` if the ACS is never
+demanded before `t_max`.
+"""
+function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
     ref = matread(joinpath(ROOT, "results", "f1_rom_replica", "rom_reference_1180.mat"))
     ub = ref["u_bounds"]
     act_arch = (name = :arch, m_lo = current_to_massflow(minimum(ub[:, 1])),
                 m_hi = current_to_massflow(maximum(ub[:, 2])), ramp = :soft)
+    t_act = NaN
+    if pH === nothing
+        arc = matread(joinpath(ROOT, "results", "f1b_hrm_replica", "archive_1180.mat"))
+        cs = arc["control_series"]
+        pH = hrm_params(A = arc["sampled_A"], B = arc["sampled_B"], mdot_c_drift = arc["sampled_mdot_c_drift"])
+    else
+        s = SMDFRHRM.simulate(pH, ExtInput([0.0, 1.0], zeros(2, 2)), t_max)
+        ia = findfirst(>(0), s.act)
+        ia === nothing && return nothing
+        t_act = s.t[ia]
+        t_start = ceil((t_act + lead) / h) * h
+        tt = collect(0.0:h:(t_start - h))
+        cs = vcat([0.0 0.0 0.0], hcat(tt, zeros(length(tt), 2)))
+    end
     # plant history: no MPC before t_start (the archived series is zero there)
     last = findfirst(==(t_start - h), cs[:, 1])
     ext0 = ExtInput(cs[2:last, 1], cs[2:last, 2:3])
@@ -65,7 +85,7 @@ function setup(; t_start = 1160.0)
         hist[t+h] = (s2.x, s2.logic, s2.pct[end])
     end
     Bench(pH, rom_params(), R4.load_params(ref["par"]), Float64(ref["target"]), act_arch,
-          cs, t_start, hist)
+          cs, t_start, hist, t_act)
 end
 
 cost_step(y, y_ref) = (y - y_ref)^2
@@ -148,25 +168,33 @@ end
 
 # ---------------------------------------------------------------- the loop
 """
-    run_loop(B, ctrl; n = 61, act = B.act_arch, bias = false, lj = nothing)
+    run_loop(B, ctrl; n = 61, act = B.act_arch, bias = false, eta = 1.0, fail = nothing,
+             fbias = 0.0)
 
 Closed loop from t_start over `n` queries. Returns a NamedTuple of per-query logs.
-`lj`: archived (t, current) pairs used by `ctrl = :LJ`.
+Plant perturbations the MPC does not know about (F5a.2):
+  `eta`   ACS efficiency: the plant receives η·ṁ for a commanded ṁ (degraded ACS);
+  `fail`  (t_a, t_b): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
+  `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
+The ROM warm-up uses the COMMANDED currents (what the twin knows), the plant the real ones.
 """
-function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false)
+function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
+                  fail = nothing, fbias = 0.0)
     pH = B.pH; hist = copy(B.hist)
     last = findfirst(==(B.t_start - h), B.cs[:, 1])
-    T = B.cs[2:last, 1]; U = B.cs[2:last, 2:3]          # applied inport series (grows)
+    T = B.cs[2:last, 1]; U = B.cs[2:last, 2:3]          # commanded inport series (grows)
+    Up = copy(U)                                        # what the plant actually receives
     m_applied = 0.0; prev = nothing
-    log = (t_q = Float64[], pct = Float64[], m = Float64[], u = Float64[], yhat_now = Float64[],
-           d = Float64[], time = Float64[], status = String[], m_plan = Vector{Float64}[])
+    log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
+           yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
+           m_plan = Vector{Float64}[])
     for k in 1:n
         t_q = B.t_start + (k - 1) * h; τ = t_q - h
         x, Lg, pct_now = hist[τ]
         xH10, L10, _ = hist[t_q-DELAY]
         ext = ExtInput(T, U)
         w = warm_rom(pH, B.pR, xH10, L10.xI, ext, t_q; delay = DELAY, h)
-        L = [SMDFRHRM.leak_flow(t_q + (j - 1) * h, pH) for j in 1:K]        # perfect forecast
+        L = [SMDFRHRM.leak_flow(t_q + (j - 1) * h, pH) + fbias for j in 1:K]   # forecast
         yhat_now = R4.output(w.x_init, w.leak_warm[end], w.acs_warm[end], B.pR4)
         d = pct_now - yhat_now
         c = (; p = B.pR4, h, K, S = max.(abs.(w.x_init), 1.0), x_init = w.x_init,
@@ -180,16 +208,34 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             dec = (m = fill(m1, K), status = "-", time = 0.0)
         end
         u1 = m1 > 0 ? F4Lib.massflow_to_current(m1) : 56.0                  # 56 A: pump off
-        T = vcat(T, t_q); U = vcat(U, [u1 1.0])
-        s = SMDFRHRM.simulate(pH, ExtInput(T, U), t_q; t0 = τ, x0 = x, logic = Lg)
-        @assert abs(s.acs[end] - m1) <= 1e-6 * max(1.0, m1) "plant did not receive the decided flow"
+        failed = fail !== nothing && fail[1] < t_q <= fail[2]
+        mp = failed ? 0.0 : eta * m1                                         # real flow
+        up = mp > 0 ? F4Lib.massflow_to_current(mp) : 56.0
+        T = vcat(T, t_q); U = vcat(U, [u1 1.0]); Up = vcat(Up, [up 1.0])
+        s = SMDFRHRM.simulate(pH, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
+        @assert abs(s.acs[end] - mp) <= 1e-6 * max(1.0, mp) "plant did not receive the intended flow"
         hist[t_q] = (s.x, s.logic, s.pct[end])
         m_applied = m1
-        push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, m1); push!(log.u, u1)
+        push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, m1); push!(log.m_plant, mp)
+        push!(log.u, u1)
         push!(log.yhat_now, yhat_now); push!(log.d, d); push!(log.time, dec.time)
         push!(log.status, dec.status); push!(log.m_plan, dec.m)
     end
     log
+end
+
+const OK_STATUS = ("-", "LOCALLY_SOLVED", "OPTIMAL", "ALMOST_OPTIMAL", "ALMOST_LOCALLY_SOLVED")
+
+"""Closed-loop metrics of a `run_loop` log (PCT logged at each t_q, after the applied step)."""
+function metrics(lg, y_ref)
+    e = lg.pct .- y_ref
+    (; n = length(e), pct_max = maximum(lg.pct), pct_final = lg.pct[end],
+     t_above = h * count(>(0), e), ise = sum(e .^ 2), iae = h * sum(abs.(e)),
+     err_last10 = sum(abs.(e[max(1, end - 19):end])) / min(20, length(e)),
+     mass_cmd = h * sum(lg.m), mass_plant = h * sum(lg.m_plant),
+     ramp_max = maximum(abs.(diff(vcat(0.0, lg.m)))),
+     t_p50 = sort(lg.time)[cld(length(lg.time), 2)], t_p99 = sort(lg.time)[ceil(Int, 0.99 * length(lg.time))],
+     t_max = maximum(lg.time), fails = count(s -> !(s in OK_STATUS), lg.status))
 end
 
 end # module
