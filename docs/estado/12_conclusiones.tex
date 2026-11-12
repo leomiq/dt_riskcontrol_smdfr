@@ -16,6 +16,17 @@
         unas 100 veces menor que la autoridad del actuador.
   \item \textbf{¿Las cotas del actuador son físicas?} No. Deben fijarse en kg/s, junto con una
         rampa admisible.
+  \item \textbf{¿Se sostienen las conclusiones en lazo cerrado, con el HRM como planta?} Sí.
+        Con la réplica del HRM en Julia (error $\sim10^{-6}$~K frente a Simulink), N1, N2 y N3
+        dan el mismo resultado en lazo cerrado y en el Monte Carlo, sin fallas del solver. El
+        desajuste ROM--HRM es un sesgo de $\sim0.2$~K que la corrección \emph{offset-free}
+        elimina.
+  \item \textbf{¿Resuelven a optimalidad?} N1 y N2 resuelven su QP al óptimo global, y N3
+        llega a un óptimo local reproducible. Sus primeras acciones difieren en
+        $\le0.11$~kg/s.
+  \item \textbf{¿Dónde está el riesgo?} En los escenarios del modelo, en ninguna parte: la PCT
+        no pasa de 1185~K. En la familia extrema, el resultado lo decide la capacidad del
+        actuador, no el optimizador (sección~\ref{sec:extremos}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -54,29 +65,36 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
 
 \subsection{Limitaciones}
 \begin{itemize}
-  \item Todo se demostró en dos consultas. Las conclusiones deben extenderse a las 61.
+  \item La certificación global se demostró en dos consultas. En lazo cerrado sólo hay
+        evidencia de optimalidad local reproducible.
+  \item El Monte Carlo tiene 6 realizaciones nominales/estresadas y 14 extremas. Bastan para
+        las comparaciones pareadas con intervalos estrechos, no para estimar colas.
+  \item La réplica del HRM se validó contra una sola realización archivada y en las salidas
+        que usa el lazo. La validación nodo a nodo y con falla del ACS queda para leo\_asus.
+  \item El pronóstico de fuga en el lazo es perfecto o tiene un sesgo constante; el ensamble
+        BiLSTM todavía no está en el lazo.
   \item La certificación vale para P0 sobre el ROM. No dice nada sobre el desajuste entre el
         ROM y el HRM, ni sobre el reactor real.
-  \item Las cotas del actuador usadas son las archivadas, sin base física.
+  \item Las cotas del actuador siguen sin decidirse; se usan dos configuraciones de referencia.
   \item La brecha certificada es conservadora, sobre todo en 1161~s.
-  \item El riesgo por fallas del ACS, que es el que podría cambiar la decisión, todavía no se
-        incorporó.
+  \item La capa de riesgo todavía no se incorporó.
 \end{itemize}
 
 \subsection{Próximos pasos, por prioridad}
 \begin{enumerate}
-  \item \textbf{Fijar el actuador con el equipo}: rampa admisible, caudal máximo y si el ACS
-        repone inventario o impulsa el caudal primario. Es lo que más cambia los resultados: el
-        costo óptimo en 1161~s va de 3.1 a 48.4 según la cota y la rampa.
-  \item \textbf{Riesgo por fallas del ACS} (leo\_acer): SAA o MPC multietapa con no
-        anticipación sobre los modos de falla y reparación del DET. Es la fuente de
-        incertidumbre que podría mover la primera acción.
-  \item \textbf{Desajuste ROM--HRM} (leo\_asus): re-simular en el HRM las acciones del NLP.
-        Si el error es del orden de 1~K, es la incertidumbre que debería alimentar la
-        restricción probabilística.
-  \item \textbf{Recalibrar el pronóstico} y usar \code{N\_par}~$>1$ en el lazo: un pronóstico
-        sobreconfiado invalida cualquier restricción probabilística basada en él.
-  \item \textbf{Más consultas} (leo\_asus) y \textbf{lazo cerrado} sobre las 61 (F5).
-  \item \textbf{Ajustar la cota certificada} (paso 4b.5): partición por masa inyectada o modelo
-        de Taylor de segundo orden.
+  \item \textbf{Fijar el actuador con el equipo}: caudal máximo y rampa admisible. En la
+        familia extrema decide si se llega o no al estado final del DET.
+  \item \textbf{Barrido de capacidad del actuador en la familia extrema}: buscar el régimen
+        en que la capacidad es comparable a la fuga, donde la primera acción no está saturada
+        y una falla del ACS puede llevar la PCT a 1220~K. Ahí la capa de riesgo puede cambiar
+        decisiones.
+  \item \textbf{Pronóstico en el lazo (F5b.0)}: modelo de error calibrado de la BiLSTM y
+        ajuste paramétrico de la ley de Park. El ajuste fino de la BiLSTM, con datos de la
+        réplica del HRM, sólo si las decisiones de riesgo resultan sensibles al pronóstico.
+  \item \textbf{Capa de riesgo sobre N2 (F5b.1)}: escenarios de falla del ACS y de pronóstico
+        (SAA con CVaR de la excedencia de la PCT) y restricción probabilística con margen de
+        holgura analítico, comparadas en forma pareada contra N2+sesgo.
+  \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).
+  \item \textbf{Validación nodo a nodo del HRM} y corrida con falla del ACS en Simulink
+        (leo\_asus).
 \end{enumerate}

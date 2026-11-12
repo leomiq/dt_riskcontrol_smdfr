@@ -1,0 +1,223 @@
+%======================================================================
+\section{Del lazo abierto al lazo cerrado}\label{sec:cl-intro}
+%======================================================================
+\noindent Las secciones anteriores responden preguntas sobre \emph{una} decisión: dada una
+consulta, ¿qué acción es óptima y con qué garantía? Un controlador predictivo, sin embargo, se
+juzga por lo que pasa cuando sus decisiones se aplican una tras otra sobre la planta. Ese
+\emph{lazo cerrado} agrega tres efectos que el lazo abierto no ve:
+\begin{enumerate}
+  \item \textbf{El desajuste del modelo se acumula.} El MPC predice con el ROM (un nodo),
+        pero la planta es el HRM (doce nodos). Un error pequeño en cada predicción puede
+        sesgar todas las decisiones en la misma dirección.
+  \item \textbf{La realimentación corrige.} Cada 0.5~s el MPC vuelve a medir la PCT y
+        reoptimiza, así que parte de ese error se corrige solo.
+  \item \textbf{Las perturbaciones no previstas} (una falla del ACS, un pronóstico sesgado)
+        sólo se pueden evaluar con la planta en el lazo.
+\end{enumerate}
+\noindent Para cerrar el lazo hace falta la planta. En Simulink, cada consulta del lazo
+archivado tarda unos 800~s, y en leo\_acer no hay MATLAB. Por eso el primer paso fue
+programar el HRM en Julia, igual que se hizo antes con el ROM. Esta parte presenta ese
+trabajo (F1b), las consultas generadas sin Simulink (F4.5), el lazo cerrado determinista
+(F5a.1), un Monte Carlo de lazos cerrados (F5a.2), una auditoría de optimalidad de los
+solvers y los escenarios extremos (F5a.3). Termina con lo que todo esto implica para la capa
+de riesgo.
+
+%======================================================================
+\section{El HRM en Julia reproduce Simulink (F1b)}\label{sec:hrm}
+%======================================================================
+\paragraph{Qué se hizo.} El HRM tiene 50 estados: la potencia, 6 precursores de neutrones
+retardados, 6 de calor de decaimiento, las temperaturas de combustible, pared y refrigerante
+en 12 nodos axiales y el inventario de refrigerante. Se extrajeron sus ecuaciones bloque a
+bloque desde el \code{.slx} y se programaron en \code{julia/SMDFRHRM.jl}, con el mismo
+integrador que Simulink (\code{ode1be}: Euler implícito con una iteración de Newton,
+$\Delta t=0.5$~s). También se replicó la lógica discreta del DET: el monitor de la banda
+[1180, 1220]~K, el planificador que activa la protección, el PI de respaldo y el mapa de la
+bomba. La PCT del HRM es el máximo nodal de la temperatura de pared; no usa la regresión
+$p_4$ del ROM.
+
+\paragraph{El orden temporal importa.} Al principio la réplica derivaba 0.03~K. La causa
+estaba en el momento del paso en que se evalúa cada entrada: en Simulink, las entradas
+externas se leen al final del paso ($t_{n+1}$, interpolando y extrapolando), pero la fuga,
+que calculan funciones MATLAB controladas por el reloj, se lee al principio ($t_n$). Con esa
+convención la réplica coincide con el archivo:
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}Y l@{}}\toprule
+Comparación & Error frente al archivo de Simulink\\\midrule
+PCT, corrida completa 0--1160~s & $3.2\cdot10^{-6}$~K en 1100--1160~s; $\le8\cdot10^{-6}$~K desde 510~s\\
+PCT al final de cada consulta del lazo & $\le5\cdot10^{-6}$~K\\
+$T_{e,c}$ del nodo 12 (entrada de la BiLSTM) & $\approx10^{-6}$~K\\
+Activación del ACS & 1143.0~s, igual que el archivo\\\bottomrule
+\end{tabularx}
+\caption{Validación de la réplica del HRM contra la realización archivada.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_replica.pdf}
+\caption{Réplica del HRM frente a Simulink. El único pico (0.016~K) está en el paso en que
+comienza el LOCA (500.5~s) y desaparece en 10~s.}
+\end{figure}
+
+\paragraph{Un hallazgo sobre el lazo archivado.} Al repetir las consultas archivadas apareció
+un artefacto: en cada consulta, el lazo archivado re-simula el HRM desde $t=0$ con las
+corrientes conocidas hasta $t_{k-1}$, y Simulink \emph{extrapola} linealmente la última
+entrada: $u(t_k)=2u_{k-1}-u_{k-2}$. En 1160.5~s eso da 113.5~A y una caída ficticia de la PCT
+de 34.6~K. El resto de las consultas sufre errores de 0.01--0.04~K por la misma causa. Por eso
+la línea base de LJ que se usa abajo es la reconstrucción con la réplica, no la PCT archivada.
+
+\takeaway{La réplica del HRM en Julia reproduce Simulink con un error de $\sim10^{-6}$~K y
+corre sin MATLAB. Es la planta de todos los experimentos de lazo cerrado.}
+
+%======================================================================
+\section{Consultas sin Simulink y desajuste ROM--HRM (F4.5)}\label{sec:f45}
+%======================================================================
+Con la réplica del HRM, cada consulta del MPC se construye en Julia, como en el lazo: se
+proyecta el estado del HRM sobre el ROM (promedio de los 12 nodos) en $t_q-10$~s y se
+calienta el ROM durante 10~s. Las consultas así construidas coinciden con las exportadas de
+Simulink: estados con error relativo $\sim10^{-7}$ y predicción de la PCT con error
+$7\cdot10^{-7}$~K.
+
+\paragraph{¿Cuánto se equivoca el ROM?} En 41 consultas se resolvió el NLP N3 y su acción se
+aplicó al HRM:
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}Y r@{}}\toprule
+Indicador (41 consultas, 1160--1180~s) & Valor\\\midrule
+Error de la PCT predicha en el instante de la consulta & $-0.06$ a $-0.24$~K (el ROM predice más alto)\\
+Error máximo en el horizonte & 0.15--0.25~K\\
+Error máximo tras restar el sesgo inicial & $\le0.12$~K\\
+Autoridad del actuador (caída de PCT con el caudal máximo) & ROM 2.59~K, HRM 2.33~K\\\bottomrule
+\end{tabularx}
+\caption{Desajuste entre el ROM y el HRM.}
+\end{table}
+
+\noindent El error es pequeño y casi todo es un \textbf{sesgo} constante. El ROM además
+sobrestima en un 10\,\% el efecto del actuador. Las dos cosas sugieren un MPC
+\emph{offset-free}: medir en cada consulta $d=\mathrm{PCT}_{\rm HRM}-\hat y_{\rm ROM}$ y
+seguir $y_{\rm ref}-d$ en lugar de $y_{\rm ref}$.
+
+\paragraph{¿Cambia la decisión?} Para saberlo se resolvió el mismo problema con el HRM
+completo como modelo de predicción (N3-HRM: un NLP de 50 estados, 0.5--4~s por consulta), que
+hace de oráculo. En 9 consultas la primera acción es idéntica con el ROM, con el ROM más sesgo
+y con el oráculo. Medido sobre el HRM, el plan completo del ROM cuesta un 6\,\% (caja
+archivada) y un 20\,\% (actuador físico) más que el del oráculo; con la corrección de sesgo,
+sólo un 0.3\,\% y un 0.5\,\%.
+
+\takeaway{El ROM basta como modelo de predicción si se corrige su sesgo. Usar el HRM dentro
+del MPC no cambia la primera acción y cuesta diez veces más.}
+
+%======================================================================
+\section{Lazo cerrado determinista (F5a.1)}\label{sec:f5a1}
+%======================================================================
+\paragraph{El banco.} \code{julia/ClosedLoop.jl} reproduce la temporización del lazo
+archivado. En cada consulta $t_q$: (1) se construye la consulta desde el HRM; (2) el MPC
+decide el caudal de los 26 pasos siguientes; (3) se aplica el primero al HRM durante 0.5~s;
+(4) se avanza a $t_q+0.5$. A diferencia del lazo archivado, la planta se simula una sola vez
+hacia adelante, sin el artefacto de extrapolación. Se comparan N1 (QP con una
+linealización), N2 (iteración de tiempo real: un QP linealizado sobre la predicción
+desplazada) y N3 (NLP), con y sin corrección de sesgo, y con dos actuadores: la caja
+archivada (0--12.86~kg/s, rampa blanda) y el actuador físico (0--5543~kg/s, rampa dura de
+5~kg/s por paso).
+
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}llrrrr@{}}\toprule
+Actuador & Controlador & ISE [K$^2$] & $|e|$ final [K] & Tiempo p99 [s] & Fallas\\\midrule
+--- & Sin ACS & 274.2 & 2.92 & --- & ---\\
+Archivado & Caudal máximo constante & 42.02 & 0.32 & --- & ---\\
+Archivado & LJ archivado (reconstruido) & 46.70 & 0.44 & $\approx800$ & ---\\
+Archivado & N1 / N2 / N3 & 41.53 & 0.25 & 0.05 / 0.04 / 0.20 & 0\\
+Archivado & N1 / N2 / N3 + sesgo & 41.52 & 0.24 & 0.04 / 0.04 / 0.25 & 0\\
+Físico & N1 / N2 / N3 & 24.11--24.12 & 0.05 & 0.06 / 0.04 / 0.24 & 0\\
+Físico & N1 / N2 / N3 + sesgo & 23.97 & 0.01 & 0.04 / 0.03 / 0.67 & 0\\\bottomrule
+\end{tabular}
+\caption{Lazo cerrado sobre la realización archivada, 40 consultas (1160--1179.5~s, la
+ventana de LJ). En la ventana de 61 consultas la corrección de sesgo baja el error final de
+0.04 a 0.01~K.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_loop.pdf}
+\caption{PCT del HRM y caudal decidido. Con la caja archivada el MPC satura unos 15~s y luego
+sigue la referencia; con el actuador físico llega en 6~s.}
+\end{figure}
+
+\takeaway{En lazo cerrado, N1, N2 y N3 dan el mismo resultado. El MPC mejora a LJ en un
+11\,\% de ISE y tarda $10^4$ veces menos. El actuador físico reduce el ISE a la mitad: pesa
+más que la elección del optimizador.}
+
+%======================================================================
+\section{Monte Carlo de lazos cerrados (F5a.2)}\label{sec:f5a2}
+%======================================================================
+\paragraph{Diseño.} Una realización archivada no basta para comparar controladores. El
+Monte Carlo sortea la fuga en los rangos del modelo ($A\sim U(0.2,0.4)$, $B\sim U(9,15)$,
+$d\sim U(8,10)$~kg/s) y la aplica a todos los controladores (\emph{números aleatorios
+comunes}), así que cada comparación es pareada: se resta, realización por realización, el
+ISE de la referencia (N3 con sesgo y el mismo actuador). Hay dos familias:
+\begin{itemize}
+  \item \textbf{Nominal}: sólo cambia la fuga, con pronóstico perfecto.
+  \item \textbf{Estresada}: además, perturbaciones que el MPC no conoce: el ACS entrega el
+        80--100\,\% del caudal pedido, falla durante 5--15~s, y el pronóstico de fuga tiene
+        un error constante de $-0.25$ a $0.05$~kg/s (el sentido del sesgo de la BiLSTM).
+\end{itemize}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{@{}llrrrr@{}}\toprule
+& & \multicolumn{2}{c}{Nominal} & \multicolumn{2}{c}{Estresada}\\\cmidrule(lr){3-4}\cmidrule(l){5-6}
+Actuador & Controlador & ISE & $\Delta$ISE & ISE & $\Delta$ISE\\\midrule
+--- & Sin ACS & 1958 & --- & 1877 & ---\\
+Archivado & Caudal máximo & 878 & +2244\,\% & 198 & +271\,\%\\
+Archivado & N1+sesgo, N2+sesgo & 38.74 & $<10^{-4}$\,\% & 54.42 & $<10^{-4}$\,\%\\
+Archivado & N2 sin sesgo & 38.88 & +0.38\,\% & 57.46 & +7.0\,\%\\
+Archivado & N3+sesgo (ref.) & 38.74 & 0 & 54.42 & 0\\
+Físico & N1+sesgo, N2+sesgo & 22.72 & $<10^{-2}$\,\% & 26.84 & $<10^{-3}$\,\%\\
+Físico & N2 sin sesgo & 22.99 & +1.2\,\% & 31.75 & +19.5\,\%\\
+Físico & N3+sesgo (ref.) & 22.72 & 0 & 26.84 & 0\\\bottomrule
+\end{tabular}
+\caption{Seis realizaciones (3 por familia), 121 consultas (60~s) cada una, 7260 decisiones
+del MPC sin fallas. $\Delta$ISE es la diferencia pareada media contra N3+sesgo con el mismo
+actuador. Tiempo p99 por consulta: $\le0.18$~s (QP) y $\le0.71$~s (NLP).}
+\end{table}
+
+\takeaway{Con 6 realizaciones, la conclusión de una sola realización se sostiene: N1, N2 y
+N3 son indistinguibles cuando tienen corrección de sesgo. La corrección vale más cuanto más
+perturbada está la planta (de +0.4\,\% a +19\,\% de ISE sin ella). El actuador físico
+reduce el ISE en un 41--51\,\%.}
+
+%======================================================================
+\section{¿Los solvers resuelven a optimalidad?}\label{sec:auditoria}
+%======================================================================
+El conteo de fallas anterior trata como éxito la salida \emph{aceptable} de Ipopt
+(\code{ALMOST\_LOCALLY\_SOLVED}). Para saber si eso esconde algo, a lo largo de un lazo
+N3+sesgo (726 consultas: la realización archivada y dos del Monte Carlo, con los dos
+actuadores) cada consulta se resolvió de cinco maneras, y todas las soluciones se evaluaron
+con el mismo costo P0 sobre el ROM (\code{julia/f5a\_optimality\_audit.jl}).
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l Y r r@{}}\toprule
+Solver & Estado de terminación (726 consultas) & Brecha [K$^2$] (mediana / máx.) & $|\Delta\mdot_0|$ máx.\ [kg/s]\\\midrule
+N1 (QP) & óptimo: 726 & $10^{-6}$ / 0.0097 & 0.11\\
+N2 (QP) & óptimo: 726 & $5\cdot10^{-12}$ / 0.0022 & 0.01\\
+N3 en el lazo & óptimo local: 160; aceptable: 566 & $2\cdot10^{-14}$ / $3\cdot10^{-8}$ & ---\\
+N3 sin salida aceptable & igual, más 7 por límite de iteraciones & idéntica & $2\cdot10^{-7}$\\
+N3 con arranque en frío & igual & 0 / $4\cdot10^{-8}$ & 0.0015\\\bottomrule
+\end{tabularx}
+\caption{Auditoría de optimalidad. La brecha de costo se mide contra el mejor N3 de cada
+consulta. Estados: óptimo = \code{OPTIMAL} (Clarabel); óptimo local = \code{LOCALLY\_SOLVED}
+y aceptable = \code{ALMOST\_LOCALLY\_SOLVED} (Ipopt).}
+\end{table}
+
+\begin{itemize}
+  \item N1 y N2 resuelven su QP convexo al óptimo global. Ese óptimo es el del modelo
+        linealizado; medido sobre P0, la pérdida es $\le0.01$~K$^2$ y sólo aparece en las
+        primeras consultas, donde el costo vale 15--46~K$^2$.
+  \item N3 termina en la salida aceptable en el 78\,\% de las consultas porque, en régimen,
+        el costo óptimo es $\approx3\cdot10^{-12}$~K$^2$: el seguimiento es perfecto y la
+        tolerancia de $10^{-10}$ queda bajo el ruido numérico. Sin la salida aceptable, o
+        desde un arranque en frío, llega al mismo punto.
+\end{itemize}
+
+\takeaway{Todas las decisiones del lazo son óptimas para su problema: global en N1 y N2
+(QP convexos) y local reproducible en N3. La optimalidad global de N3 sólo está certificada
+en las dos consultas de la sección~\ref{sec:certificacion}.}
+
+\input{estado/11c_extremos}

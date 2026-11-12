@@ -1,0 +1,79 @@
+\paragraph{Resultados} (14 realizaciones, \code{results/f5a2\_monte\_carlo/runs\_extreme.csv}).
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l Y r r r r@{}}\toprule
+Actuador & Controlador & Llega a 1220~K & Tiempo hasta 1220~K & PCT máx.\ si no llega & Masa inyectada\\\midrule
+--- & Sin ACS & 14/14 & 113--181~s (media 140) & --- & 0\\
+Archivado & Caudal máximo, N2, N2+sesgo & 9/14 & 155--251~s (media 191) & 1206--1219~K & 470--2070~kg\\
+--- & PI del DET & 0/14 & --- & 1204--1216~K & 5300--6360~kg\\
+Físico & N2 / N2+sesgo & 0/14 & --- & 1189--1207~K & 3260--5170~kg\\\bottomrule
+\end{tabularx}
+\caption{Familia extrema. Los tiempos se cuentan desde la activación del ACS. Las tres
+variantes con la caja archivada dan resultados idénticos en las 14 realizaciones. Tiempo p99
+por consulta de N2: $\le0.19$~s, sin fallas del solver.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_extreme.pdf}
+\caption{Una realización extrema. Sin ACS, la PCT llega a 1220~K a los 128~s (cruz gris). Con
+la caja archivada, el MPC satura en todo momento (igual que el caudal máximo) y sólo retrasa
+el cruce hasta los 155~s (cruz azul). El PI del DET reacciona tarde pero con fuerza (hasta
+670~kg/s) y enfría hasta 1135~K. N2 con el actuador físico deja subir la PCT durante la falla
+hasta 1203~K y vuelve a la referencia sin sobreenfriar.}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_extreme_max.pdf}
+\caption{PCT máxima por realización. Los puntos sobre la línea de 1220~K son corridas que
+alcanzaron el estado final del DET.}
+\end{figure}
+
+\paragraph{Cómo leer estos resultados.}
+\begin{enumerate}
+  \item \textbf{Con la caja archivada, el optimizador no importa.} En las 14 realizaciones
+        el MPC decide el caudal máximo en cada consulta: la fuga supera la capacidad. N2, N2
+        con sesgo y el caudal máximo constante dan exactamente la misma trayectoria, y 9 de
+        14 llegan al estado final del DET, en promedio unos 60~s después de lo que llegarían sin ACS. Una
+        capa de riesgo tampoco cambiaría nada: no hay decisión que tomar, sólo capacidad.
+  \item \textbf{Con el actuador físico, el límite queda lejos.} Ninguna realización pasa de
+        1207~K, aun con fallas de hasta 90~s y un ACS al 60\,\%. El margen mínimo es de 13~K.
+        El MPC inyecta un 25\,\% menos de masa que el PI del DET y no sobreenfría.
+  \item \textbf{La corrección de sesgo pierde precisión con fallas del ACS.} El calentamiento
+        del ROM usa los caudales \emph{pedidos}, así que el gemelo no sabe que el ACS falló.
+        La corrección de sesgo absorbe esa diferencia, pero como un sesgo constante: en esta
+        familia, N2 con y sin sesgo no se distinguen ($\Delta$ISE $=-16\,000\pm21\,000$~K$^2$).
+        Si el caudal real del ACS se mide, el gemelo debería usarlo.
+\end{enumerate}
+
+\takeaway{El riesgo de cruzar 1220~K existe en esta familia, pero en los dos actuadores
+probados no depende de la decisión: con la caja archivada nada lo evita, y con el actuador
+físico nunca ocurre. La capa de riesgo sólo puede aportar en el régimen intermedio, con una
+capacidad comparable a la fuga y fallas largas del ACS. Ahí conviene mantener un margen bajo
+la referencia ante una falla posible. Ése es el banco de pruebas que debe tener F5b.}
+
+%======================================================================
+\section{Lo que esto implica para la capa de riesgo}\label{sec:implicancias}
+%======================================================================
+\begin{enumerate}
+  \item \textbf{Dónde montarla: sobre N2.} N1, N2 y N3 dan las mismas decisiones en lazo
+        cerrado. N2 es un QP de $\sim30$~ms, así que admite escenarios y restricciones de
+        riesgo sin salir del tiempo real.
+  \item \textbf{Qué riesgo: cruzar 1220~K}, el estado final del DET, en escenarios con
+        capacidad del actuador comparable a la fuga y fallas largas del ACS. El primer paso es
+        un barrido de capacidad (15--50~kg/s con rampa dura) para ubicar ese régimen.
+  \item \textbf{Corrección de la PCT: se mantiene $p_4$ con sesgo.} En la arquitectura de
+        caja gris del gemelo, la parte de caja negra que corrige la PCT del ROM es el
+        polinomio $p_4$, no la BiLSTM. Tras la corrección de sesgo, el desajuste ROM--HRM es
+        $\le0.12$~K. Reentrenar una red sobre la diferencia de PCT entre el HRM y el modelo de
+        caja blanca no se justifica con un residuo de ese tamaño.
+  \item \textbf{Pronóstico de fuga: la BiLSTM, con su error modelado.} La réplica del HRM le
+        entrega las mismas entradas que Simulink (fuga y $T_{e,c}$ del nodo 12), así que no hace
+        falta ajustarla para usarla con la réplica. Sí haría falta en la familia extrema, que
+        queda fuera de su rango de entrenamiento ($A\sim U(0.2,0.4)$, $d\sim U(8,10)$). El
+        orden propuesto es: un modelo de error calibrado sobre sus residuos, un ajuste
+        paramétrico de la ley de Park como alternativa sin red y, sólo si las decisiones de
+        riesgo resultan sensibles al pronóstico, un ajuste fino con datos de la réplica.
+  \item \textbf{Cómo evaluarla:} en forma pareada contra N2+sesgo, midiendo la frecuencia del
+        cruce de 1220~K, la PCT máxima, el margen y el costo de la prudencia (masa inyectada y
+        error de seguimiento).
+\end{enumerate}

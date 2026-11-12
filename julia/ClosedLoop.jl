@@ -177,6 +177,12 @@ Plant perturbations the MPC does not know about (F5a.2):
   `fail`  (t_a, t_b): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
   `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
   `audit(c, L, act, prev, dec)` optional callback after each MPC decision (same query data).
+`ctrl = :PI` leaves the plant to the DET's own PI (active_mpc = 0); only `fail` applies to it
+(the pump is forced off), `eta` does not. If the plant model breaks down (coolant inventory
+exhausted, the HRM algebra fails) the loop stops and `log.breakdown[1]` is set.
+When the PCT exceeds the upper edge of the DET monitor band (1220 K) the loop stops and
+`log.limit[1]` is set: in Simulink the limintm block stops the simulation there (end state of
+the event tree), so the replica's continuation (protection off) has no meaning.
 The ROM warm-up uses the COMMANDED currents (what the twin knows), the plant the real ones.
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
@@ -188,13 +194,32 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     m_applied = 0.0; prev = nothing
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
-           m_plan = Vector{Float64}[])
+           m_plan = Vector{Float64}[], breakdown = [false], limit = [false])
     for k in 1:n
         t_q = B.t_start + (k - 1) * h; τ = t_q - h
         x, Lg, pct_now = hist[τ]
         xH10, L10, _ = hist[t_q-DELAY]
+        failed = fail !== nothing && fail[1] < t_q <= fail[2]
+        if ctrl == :PI                       # the DET's own PI drives the pump (no twin needed)
+            T = vcat(T, t_q); U = vcat(U, [0.0 0.0]); Up = vcat(Up, failed ? [56.0 1.0] : [0.0 0.0])
+            s = try
+                SMDFRHRM.simulate(pH, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
+            catch err
+                err isa DomainError || rethrow(); log.breakdown[1] = true; break
+            end
+            hist[t_q] = (s.x, s.logic, s.pct[end])
+            push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, s.acs[end])
+            push!(log.m_plant, s.acs[end]); push!(log.u, s.current[end]); push!(log.yhat_now, NaN)
+            push!(log.d, NaN); push!(log.time, 0.0); push!(log.status, "-"); push!(log.m_plan, [s.acs[end]])
+            s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
+            continue
+        end
         ext = ExtInput(T, U)
-        w = warm_rom(pH, B.pR, xH10, L10.xI, ext, t_q; delay = DELAY, h)
+        w = try
+            warm_rom(pH, B.pR, xH10, L10.xI, ext, t_q; delay = DELAY, h)
+        catch err
+            err isa DomainError || rethrow(); log.breakdown[1] = true; break
+        end
         L = [SMDFRHRM.leak_flow(t_q + (j - 1) * h, pH) + fbias for j in 1:K]   # forecast
         yhat_now = R4.output(w.x_init, w.leak_warm[end], w.acs_warm[end], B.pR4)
         d = pct_now - yhat_now
@@ -210,18 +235,28 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             dec = (m = fill(m1, K), status = "-", time = 0.0)
         end
         u1 = m1 > 0 ? F4Lib.massflow_to_current(m1) : 56.0                  # 56 A: pump off
-        failed = fail !== nothing && fail[1] < t_q <= fail[2]
         mp = failed ? 0.0 : eta * m1                                         # real flow
         up = mp > 0 ? F4Lib.massflow_to_current(mp) : 56.0
         T = vcat(T, t_q); U = vcat(U, [u1 1.0]); Up = vcat(Up, [up 1.0])
-        s = SMDFRHRM.simulate(pH, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
-        @assert abs(s.acs[end] - mp) <= 1e-6 * max(1.0, mp) "plant did not receive the intended flow"
+        s = try
+            SMDFRHRM.simulate(pH, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
+        catch err
+            err isa DomainError || rethrow(); log.breakdown[1] = true; break
+        end
+        # the DET logic passes the MPC flow only while the protection is active (e.g. not yet
+        # in the first steps after the activation, scheduler delay): log what the plant got
+        if s.act[end] > 0
+            @assert abs(s.acs[end] - mp) <= 1e-6 * max(1.0, mp) "plant did not receive the intended flow"
+        else
+            mp = s.acs[end]
+        end
         hist[t_q] = (s.x, s.logic, s.pct[end])
         m_applied = m1
         push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, m1); push!(log.m_plant, mp)
         push!(log.u, u1)
         push!(log.yhat_now, yhat_now); push!(log.d, d); push!(log.time, dec.time)
         push!(log.status, dec.status); push!(log.m_plan, dec.m)
+        s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
     end
     log
 end
@@ -231,7 +266,8 @@ const OK_STATUS = ("-", "LOCALLY_SOLVED", "OPTIMAL", "ALMOST_OPTIMAL", "ALMOST_L
 """Closed-loop metrics of a `run_loop` log (PCT logged at each t_q, after the applied step)."""
 function metrics(lg, y_ref)
     e = lg.pct .- y_ref
-    (; n = length(e), pct_max = maximum(lg.pct), pct_final = lg.pct[end],
+    (; n = length(e), breakdown = lg.breakdown[1], limit = lg.limit[1],
+     t_limit = lg.limit[1] ? lg.t_q[end] - lg.t_q[1] + h : NaN, pct_max = maximum(lg.pct), pct_final = lg.pct[end],
      t_above = h * count(>(0), e), ise = sum(e .^ 2), iae = h * sum(abs.(e)),
      err_last10 = sum(abs.(e[max(1, end - 19):end])) / min(20, length(e)),
      mass_cmd = h * sum(lg.m), mass_plant = h * sum(lg.m_plant),

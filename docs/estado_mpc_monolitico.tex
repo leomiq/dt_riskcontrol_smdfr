@@ -1,10 +1,11 @@
-% Control predictivo monolítico del SMDFR: texto didáctico y técnico (versión del 10-11-2026).
+% Control predictivo monolítico del SMDFR: texto didáctico y técnico (versión del 11-11-2026).
 % Compilar desde docs/ con XeLaTeX o Tectonic (fontspec, fuente Inter):
 %   tectonic -X compile estado_mpc_monolitico.tex
 %   y renombrar el resultado a reporte_estado_mpc_monolitico.pdf (nombre de la versión publicada)
 % Los capítulos están en docs/estado/*.tex. Figuras:
 %   .venv\Scripts\python python/make_status_figures.py      (resultados)
 %   .venv\Scripts\python python/make_didactic_figures.py    (capítulos introductorios)
+%   .venv\Scripts\python python/make_closed_loop_figures.py (lazo cerrado, fig_cl_*)
 % Notas de compilación: con Tectonic no usar UprightFont= junto con Path=; en pies de figura
 % y títulos usar \rm max / \rm min (babel-spanish choca con \max y \min en argumentos móviles).
 \documentclass[11pt,a4paper]{article}
@@ -49,7 +50,7 @@
 \large\mdseries Del reactor y su accidente a la formulación, resolución y certificación\\
 del problema de control}
 \author{Proyecto DT--SMDFR Risk Control}
-\date{10 de noviembre de 2026}
+\date{11 de noviembre de 2026}
 
 \begin{document}
 \maketitle
@@ -81,6 +82,19 @@ derivadas exactas. Los resultados, en dos consultas de prueba, son:
   \item la incertidumbre del pronóstico de fuga no cambia la decisión, y la cota del actuador,
         que hoy se expresa en amperios, no tiene base física y debe fijarse en kg/s.
 \end{itemize}
+La última parte cierra el lazo. El modelo de alta resolución (HRM, 12 nodos) se programó en
+Julia y reproduce Simulink con un error de $10^{-6}$~K, lo que permite simular lazos cerrados
+completos sin MATLAB. Sobre esa planta:
+\begin{itemize}
+  \item N1, N2 y N3 dan el mismo resultado en lazo cerrado y en un Monte Carlo con
+        perturbaciones no previstas, sin fallas del solver y con $\le0.7$~s por consulta,
+        siempre que el MPC corrija el sesgo del ROM ($\sim0.2$~K);
+  \item el MPC mejora a LJ en un 11\,\% y el actuador físico reduce el error a la mitad;
+  \item en los escenarios del modelo la PCT no pasa de 1185~K, así que una capa de riesgo no
+        tendría nada que controlar; en escenarios extremos el resultado lo decide la
+        capacidad del actuador y no el optimizador, lo que define dónde debe trabajar la capa
+        de riesgo.
+\end{itemize}
 \end{abstract}
 
 \tableofcontents
@@ -105,6 +119,11 @@ derivadas exactas. Los resultados, en dos consultas de prueba, son:
 
 \part{Resultados}
 \input{estado/11_resultados}
+
+\part{Lazo cerrado sobre el HRM programable}
+\input{estado/11b_lazo_cerrado}
+
+\part{Conclusiones}
 \input{estado/12_conclusiones}
 
 \appendix

@@ -1185,6 +1185,115 @@ costo P0 sobre el ROM `ode1be`.
 - El conteo `fails` de F5a.1/F5a.2 trata `ALMOST_*` como éxito. La auditoría confirma que
   esa elección no cambia ninguna decisión.
 
+### 8.11 Ajuste de la ruta (11-11-2026): escenarios extremos, pronóstico y riesgo sobre N2
+
+**Por qué hace falta.** En las familias nominal y estresada de F5a.2, ningún controlador
+pasó de 1185 K, ni siquiera sin ACS. El límite $U_y=1244$ K queda unos 60 K más arriba. Una
+capa de riesgo sobre ese límite estaría siempre inactiva y daría lo mismo que el MPC
+determinista. Antes de F5b hay que construir escenarios donde el límite se pueda alcanzar.
+
+**Barrido de severidad** (sólo el HRM, con la lógica DET; script exploratorio en
+lazo abierto). La fuga se mide en el instante de activación del ACS.
+
+| Fuga ($d$, $A$, $B$) | Activación del ACS | Fuga en la activación | PCT máx. con el PI del DET | Sin ACS: 1180 → 1220 → 1244 K |
+|---|---:|---:|---:|---|
+| 10, 0.28, 10 (≈ archivada) | 1134 s | −4.7 kg/s | 1189 K | 1134 → 1649 → 1895 s |
+| 15, 0.20, 10 | 823 s | −9.7 kg/s | 1198 K | 822 → 1065 → 1178 s |
+| 20, 0.20, 15 | 724 s | −14.3 kg/s | 1206 K | 723 → 886 → 961 s |
+| 20, 0.10, 15 | 690 s | −17.2 kg/s | 1211 K | 688 → 823 → 884 s |
+| 30, 0.10, 10 | 629 s | −25.1 kg/s | — | el modelo colapsa en 820 s (inventario agotado) |
+
+- Sin ACS, toda fuga lleva la PCT a 1220 K, el estado final del DET (ver abajo). Con fugas
+  severas tarda 130–240 s desde la activación, y con la archivada unos 500 s.
+- El PI del DET contiene todas las fugas con caudales de 370–530 kg/s, pero tarda: su
+  integrador necesita ~150 s para alcanzar el umbral de la bomba (56.687 A).
+- Con fugas de 10–17 kg/s, la caja archivada (12.86 kg/s) ya no compensa la fuga: ése es el
+  caso (c).
+
+**Decisión 1: familia extrema F5a.3** (`julia/f5a2_monte_carlo.jl … extreme`, salida
+`results/f5a2_monte_carlo/runs_extreme.csv`). Combina (a) y (c):
+
+- fuga $d\sim U(15,25)$ kg/s, $A\sim U(0.1,0.2)$, $B\sim U(10,15)$;
+- el MPC arranca $U(0,17)$ s después de la activación (fase aguda);
+- ACS con $\eta\sim U(0.6,0.9)$ y una falla de $U(30,90)$ s;
+- error del pronóstico de fuga $\sim U(-0.5,0.1)$ kg/s;
+- ventana de 240 s.
+
+Se agrega como línea base el PI propio del DET (`ctrl = :PI`). Se dejan de lado N1 y N3,
+que coinciden con N2, y la referencia pareada pasa a ser N2+sesgo. Si la planta colapsa por
+inventario agotado, la corrida se detiene y se marca.
+
+**El límite que importa es 1220 K.** En el monitor del DET (`limintm`), una PCT sobre 1220 K
+detiene la simulación de Simulink: es el estado final del árbol de eventos. La réplica, en
+cambio, seguía con la protección apagada, lo que no tiene sentido físico. Ahora el lazo se
+detiene al cruzar 1220 K y lo registra (`limit`, `t_limit` en `ClosedLoop.metrics`). El
+límite $U_y=1244$ K del costo queda más allá de ese estado final.
+
+**Resultados de F5a.3** (14 realizaciones, semillas 101–114, 240 s, ~45 min en leo_acer;
+`results/f5a2_monte_carlo/runs_extreme{,_traj}.csv`; figuras
+`python/make_closed_loop_figures.py`).
+
+| Actuador | Controlador | Llega a 1220 K | Tiempo hasta 1220 K (desde la activación) | PCT máx. si no llega | Masa inyectada |
+|---|---|---:|---|---|---|
+| — | Sin ACS | 14/14 | 113–181 s (media 140) | — | 0 |
+| Archivado | Caudal máximo, N2, N2+sesgo (idénticos) | 9/14 | 155–251 s (media 191) | 1206–1219 K | 470–2070 kg |
+| — | PI del DET | 0/14 | — | 1204–1216 K | 5300–6360 kg |
+| Físico | N2 / N2+sesgo | 0/14 | — | 1189–1207 K | 3260–5170 kg |
+
+- **Con la caja archivada el optimizador no importa**: el MPC decide el caudal máximo en
+  todas las consultas, y 9/14 realizaciones llegan a 1220 K unos 60 s después de lo que
+  llegarían sin ACS. Una capa de riesgo tampoco cambiaría nada: no hay decisión que tomar.
+- **Con el actuador físico el límite queda lejos**: el máximo es 1207 K, con fallas de hasta
+  90 s y un ACS al 60 %. El margen mínimo es de 13 K. El MPC inyecta un 25 % menos de masa que
+  el PI del DET y no sobreenfría (el PI baja hasta ~1135 K).
+- **La corrección de sesgo pierde valor con fallas del ACS.** El calentamiento del ROM usa los
+  caudales pedidos, así que el gemelo no sabe que el ACS falló. N2 con y sin sesgo no se
+  distinguen (ΔISE = −16 000 ± 21 000 K²). Si se mide el caudal real del ACS, el gemelo
+  debería usarlo.
+- **Consecuencia para F5b**: la capa de riesgo sólo puede cambiar decisiones en el régimen
+  intermedio, con una capacidad del actuador comparable a la fuga (≈ 15–50 kg/s con rampa dura)
+  y fallas largas del ACS. Ahí conviene mantener un margen bajo la referencia ante una falla
+  posible. El primer paso de F5b.1 es un barrido de capacidad en la familia extrema para
+  ubicar ese régimen.
+- Tiempo p99 por consulta de N2: ≤ 0.19 s, sin fallas del solver.
+
+**Decisión 2: pronóstico y corrección de la PCT.** En el gemelo hay dos componentes de caja
+negra, y conviene no confundirlos:
+
+1. **La corrección de la PCT (ΔPCT = PCT_HRM − T_w,ROM)**, la parte de caja negra de la
+   arquitectura de caja gris, la hace hoy el polinomio $p_4$ y no la BiLSTM (§3.1). **Se
+   mantiene $p_4$ con la corrección de sesgo *offset-free*.** Tras esa corrección, el
+   desajuste ROM–HRM es ≤ 0.12 K (F4.5). Reentrenar la BiLSTM sobre la ΔPCT entre el HRM y
+   el modelo de caja blanca no se justifica: ese residuo es dos órdenes de magnitud menor que
+   las excursiones de los escenarios extremos.
+2. **El pronóstico de la fuga** sí lo hace la BiLSTM.
+   - **No hace falta ajustarla para usarla con la réplica**: la réplica reproduce sus entradas
+     (fuga y $T_{e,c}$ del nodo 12) con un error de ~10⁻⁶ K.
+   - **Sí haría falta en la familia extrema**, porque se entrenó con $A\sim U(0.2,0.4)$ y
+     $d\sim U(8,10)$. Fuera de ese rango extrapola. Ahora la réplica en Julia puede generar
+     datos de entrenamiento sin Simulink.
+   - **En el lazo**, por orden de costo:
+     - (i) un modelo de error calibrado sobre los residuos de la BiLSTM: sesgo ≈ 0.12 kg/s,
+       error correlacionado en el horizonte y cobertura corregida;
+     - (ii) como alternativa sin red, un ajuste paramétrico de la ley de Park, por mínimos
+       cuadrados sobre la historia de la fuga observada;
+     - (iii) un ajuste fino de la BiLSTM con datos de la réplica en los rangos extremos, sólo
+       si (i) o (ii) muestran que las decisiones de riesgo son sensibles al pronóstico. En F4
+       no lo fueron (≤ 0.025 K).
+
+**Decisión 3: F5b sobre N2-RTI.** N1, N2 y N3 dan la misma decisión en lazo cerrado. N2 es
+un QP de ~30 ms, así que admite escenarios y restricciones de riesgo sin salir del tiempo real.
+
+**Ruta revisada (sustituye las filas F5a.2–F5b de §8.6).**
+
+| Paso | Qué | Máquina | Criterio de cierre |
+|---|---|---|---|
+| **F5a.2** Monte Carlo nominal/estresado | Hecho (6 realizaciones, §8.10). Ampliar a ≥ 100 | leo_acer → Olab | IC de las diferencias pareadas |
+| **F5a.3** Familia extrema | Hecho (14 realizaciones, arriba). Ampliar en Olab | leo_acer → Olab | Frecuencia y duración de excursiones sobre 1220/1244 K por controlador |
+| **F5b.0** Pronóstico en el lazo | Modelo de error calibrado (i) y ajuste de Park (ii); (iii) sólo si hace falta | leo_acer | Calibración fuera de muestra (cobertura, PIT) en las tres familias |
+| **F5b.1** Riesgo sobre N2 | Primero, barrido de capacidad del actuador (≈ 15–50 kg/s, rampa dura) en la familia extrema, para ubicar el régimen con decisiones no saturadas y riesgo de cruzar 1220 K. Luego, escenarios de falla del ACS y de pronóstico (SAA con CVaR de la excedencia de la PCT) y restricción probabilística con margen de holgura analítico (back-off) a partir de la matriz condensada $G$ | leo_acer | Frontera costo–riesgo pareada contra N2+sesgo en F5a.3 |
+| **F5b.2** Campaña de riesgo | F5a.2 + F5a.3 + F5b.1 con ≥ 100 realizaciones | Olab | Diferencias con IC al 95 % |
+
 ---
 
 ## 9. Decisiones abiertas
