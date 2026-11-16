@@ -92,6 +92,15 @@ Base.@kwdef struct HRMParams
     monitor_band::Tuple{Float64,Float64} = (1180.0, 1220.0)  # `Constant4` (limintm `a`)
     monitor_reset::Float64 = 1144.0               # `Constant3` (limintm lb_ps)
     monitor_start::Float64 = 200.0                # `Constant26`: monitor input is 1100 K before
+    # finite ACS capacity (F5b.1a, plan §8.12; not in the Simulink model, Inf = as archived):
+    # the delivered flow is ≤ acs_max and rises by at most acs_ramp per step (decreases,
+    # e.g. a pump trip, are immediate). Applies to whatever drives the pump (PI or MPC).
+    acs_max::Float64 = Inf
+    acs_ramp::Float64 = Inf
+    acs_eta::Float64 = 1.0      # ACS efficiency: delivered = η·min(pump flow, acs_max)
+    # jumps of the break (F5b.0 robustness tests; not in the Simulink model): (t_j, Δ_j) adds
+    # Δ_j [kg/s] (< 0: more outflow) to the leak for t ≥ t_j
+    leak_jumps::Vector{Tuple{Float64,Float64}} = Tuple{Float64,Float64}[]
 end
 
 """
@@ -129,6 +138,9 @@ cp_lead(T) = 175.1 - 4.961e-2T + 1.985e-5T^2 - 2.099e-9T^3 - 1.524e6 / T^2
 function leak_flow(t, p::HRMParams)
     t >= p.fault_time || return 0.0
     leak = -p.mdot_c_drift + (t - p.fault_time)^(1 / p.B) * (p.A * p.mdot_c_drift)
+    for (tj, dj) in p.leak_jumps
+        t >= tj && (leak += dj)
+    end
     min(leak + p.noise, 0.0)
 end
 
@@ -249,6 +261,7 @@ Base.@kwdef mutable struct DETLogic
     act::Float64 = 0.0       # schedule: act_PS1 (protection activated)
     xI::Float64 = 0.0        # PI integrator (Forward Euler)
     sw1_prev::Float64 = 0.0  # previous Switch1 output (PI external reset, falling edge)
+    m_last::Float64 = 0.0    # last delivered ACS flow (for the finite-capacity ramp)
 end
 
 """
@@ -311,7 +324,8 @@ function simulate(p::HRMParams, ext::ExtInput, t_end; h = 0.5, t0 = 0.0,
         t1 = t[n+2]
         a = value(ext, t1, 2); u = value(ext, t1, 1)   # Switch4/5/6 in minor steps
         I_acs = a > 0 ? (ms.sw1_minor > 0 ? u : 0.0) : ms.u_pid
-        m_acs = current_to_massflow(I_acs)
+        m_acs = min(p.acs_eta * min(current_to_massflow(I_acs), p.acs_max), L.m_last + p.acs_ramp)
+        L.m_last = m_acs
         acs[n+2] = m_acs; cur[n+2] = I_acs; actv[n+2] = ms.sw1_minor
         # leak (Clock-driven MATLAB Functions) at t_n; root inports at t_{n+1} (see docstring)
         x = step_ode1be(x, leak_flow(tn, p), m_acs, h, p)

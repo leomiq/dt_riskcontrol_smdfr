@@ -1284,7 +1284,7 @@ negra, y conviene no confundirlos:
 **Decisión 3: F5b sobre N2-RTI.** N1, N2 y N3 dan la misma decisión en lazo cerrado. N2 es
 un QP de ~30 ms, así que admite escenarios y restricciones de riesgo sin salir del tiempo real.
 
-**Ruta revisada (sustituye las filas F5a.2–F5b de §8.6).**
+**Ruta revisada (sustituye las filas F5a.2–F5b de §8.6; a su vez la reemplaza §8.12).**
 
 | Paso | Qué | Máquina | Criterio de cierre |
 |---|---|---|---|
@@ -1293,6 +1293,228 @@ un QP de ~30 ms, así que admite escenarios y restricciones de riesgo sin salir 
 | **F5b.0** Pronóstico en el lazo | Modelo de error calibrado (i) y ajuste de Park (ii); (iii) sólo si hace falta | leo_acer | Calibración fuera de muestra (cobertura, PIT) en las tres familias |
 | **F5b.1** Riesgo sobre N2 | Primero, barrido de capacidad del actuador (≈ 15–50 kg/s, rampa dura) en la familia extrema, para ubicar el régimen con decisiones no saturadas y riesgo de cruzar 1220 K. Luego, escenarios de falla del ACS y de pronóstico (SAA con CVaR de la excedencia de la PCT) y restricción probabilística con margen de holgura analítico (back-off) a partir de la matriz condensada $G$ | leo_acer | Frontera costo–riesgo pareada contra N2+sesgo en F5a.3 |
 | **F5b.2** Campaña de riesgo | F5a.2 + F5a.3 + F5b.1 con ≥ 100 realizaciones | Olab | Diferencias con IC al 95 % |
+
+### 8.12 Ruta acordada (16-11-2026): capacidad, gemelo, márgenes y riesgo
+
+**Por qué se reordena.** F5a.3 mostró que una capa de riesgo no puede cambiar decisiones en
+los dos actuadores probados:
+
+- **Con la caja archivada**, la primera acción está siempre en la cota, así que el valor de la
+  solución estocástica es 0.
+- **Con el actuador físico**, el límite de 1220 K nunca se alcanza: la restricción queda
+  inactiva.
+
+Hay que ubicar el régimen intermedio y corregir lo que el gemelo no sabe. Sólo entonces
+tiene sentido agregar márgenes, primero deterministas y luego probabilísticos.
+
+**Paso 1 — Barrido de capacidad y rampa del actuador (F5b.1a).**
+
+- **Diseño.** Familia extrema (§8.11) con $\dot m_{\max}\in\{15,20,25,30,40,50\}$ kg/s y
+  rampa dura de $\{2.5, 5, 10\}$ kg/s por paso; la cota inferior es 0.
+- **Controladores.**
+  - N2+sesgo.
+  - El PI del DET **limitado a la misma $\dot m_{\max}$**, para comparar con igual capacidad.
+  - Como referencia, el PI sin límite (≈ 680 kg/s a 60 A).
+- **Métricas.**
+  - Frecuencia y tiempo del cruce de 1220 K.
+  - PCT máxima y margen mínimo.
+  - Fracción de consultas con la primera acción saturada, separando la cota de magnitud de la
+    de rampa.
+  - Masa inyectada.
+- **Implementación.** La cota y la rampa ya son parámetros del actuador (`act`) en
+  `ClosedLoop.jl`. Falta limitar el caudal del PI dentro de la planta (`SMDFRHRM.simulate`)
+  cuando se use como línea base con capacidad finita.
+- **Criterio de cierre.** Un mapa (capacidad, rampa) → {siempre satura, decisión libre con
+  riesgo, sin riesgo}. Ese mapa elige las configuraciones de los pasos 3.i y 3.ii.
+
+**Paso 2 — Lo que el gemelo no sabe (F5b.0).**
+
+1. **Caudal medido del ACS.** El calentamiento del ROM debe usar el caudal que recibió la
+   planta, no el pedido. Con fallas del ACS, el gemelo hoy no se entera, y la corrección de
+   sesgo lo absorbe como un sesgo constante (§8.11).
+2. **Pronóstico de fuga sin la ley de Park.** La ley de Park es el modelo que *genera* la fuga
+   de la réplica: usarla para pronosticar sería ajustar con el mismo modelo que produce los
+   datos.
+   - **Por qué alcanza un pronóstico simple.** En los 13 s del horizonte, la persistencia se
+     equivoca en ≤ 0.015 kg/s (nominal) y ≤ 0.029 kg/s (extrema), en el p99 del error máximo.
+     La tendencia lineal se equivoca en ≤ 7·10⁻⁴ kg/s. La BiLSTM tiene un RMSE de 0.164 kg/s,
+     porque está hecha para el horizonte de 100 s del DET y no hace falta dentro de N2.
+   - **El pronosticador.** Un **filtro de Kalman de tendencia lineal local**, con estados
+     nivel y pendiente (equivalente al suavizado de Holt). Se actualiza en línea; $q$ y $r$
+     se calibran fuera de línea. Entrega $\hat L_{1..K}$ y $\Sigma_L$.
+   - **Por qué el QP sigue convexo.** Como el ROM usa sólo el caudal neto (fuga + ACS), el
+     error de pronóstico se propaga con la misma matriz que el control:
+     $\Sigma_{\hat y}=G\,\Sigma_L\,G^\top$. El filtro corre antes del QP, y $\hat L$ y
+     $\sigma_k$ entran como datos.
+   - **Comparación.** Contra la persistencia, la tendencia de dos puntos y una regresión
+     robusta (Huber) sobre una ventana móvil de 5–10 s.
+3. **Pruebas de robustez del pronosticador.**
+   - Ruido de medición en la fuga que ve el gemelo; la planta no cambia.
+   - **Saltos bruscos de la rotura** en instantes al azar.
+   - Métricas: error de pronóstico, cobertura de $\Sigma_L$ y efecto en el lazo cerrado.
+
+**Paso 3.i — Márgenes deterministas, sin visión probabilística (F5b.1b).**
+
+- **N2+DSM.** Se agrega a N2 el término
+  $\lambda_s\sum_k[\mathrm{DSM}_k-\tau]_+^2$ con
+  $\mathrm{DSM}_k=(\hat y_k-y_{\rm ref})/(U-y_{\rm ref})$. Sigue siendo un QP, con una holgura
+  $r_k\ge\mathrm{DSM}_k-\tau$. Hoy N1–N3 sólo tienen la bisagra sobre $U_y=1244$ K
+  ($\lambda_{\rm pct}=10$, equivalente a $\mathrm{DSM}\le1$), que nunca se activó.
+- **PI+DSM (por formular).** El PI no optimiza, así que el margen entraría como un corrimiento
+  de su consigna, o como un límite superior que dispara la saturación. Hay que definir la
+  versión equivalente para que la comparación sea justa.
+- **Variantes.**
+  - Normalización con $U=1244$ K (actual) y con $U=1220$ K, el estado final del DET.
+  - Barrido de $\tau$ y $\lambda_s$.
+  - En las configuraciones de capacidad y rampa del paso 1 con decisión libre.
+- **Antecedente.** En la tesis, el DSM con LJ estuvo activo en 36 de 61 consultas y no cambió
+  la trayectoria, porque la bomba estaba saturada
+  (`results/results_penalty_saturation/README.md`).
+
+**Paso 3.ii — Capa de riesgo probabilística sobre N2 (F5b.1c).** Cuatro formulaciones,
+comparadas en forma pareada contra N2+sesgo y N2+DSM.
+
+1. **Escenarios con CVaR (SAA).**
+   - Escenarios de falla del ACS (falla o no, en el paso $j$) y de salto de la rotura, más el
+     error del filtro de Kalman.
+   - Penalización o restricción del CVaR$_\alpha$ de la excedencia de la PCT sobre 1220 K.
+   - Se escribe como QP o LP con las variables auxiliares de Rockafellar–Uryasev.
+2. **Restricción probabilística con margen de holgura (back-off).**
+   - Se exige $\hat y_k+z_{1-\alpha}\,\sigma_k\le1220$ K, con $\sigma_k$ de
+     $G\,\Sigma_L\,G^\top$ y del filtro.
+   - Restricciones por paso, que siguen siendo lineales.
+3. **Pronóstico orientado a la decisión (Homem-de-Mello et al., 2026; §7.2).** Elegir el
+   escenario o pronóstico puntual que, usado en N2 determinista, reproduce la decisión
+   estocástica.
+4. **PSM estimado en línea (por formular).** Lleva al MPC el margen probabilístico que el lazo
+   archivado calculaba sólo después de decidir (IS-MCDET). Un esquema posible por consulta:
+   1. Resolver N2 y obtener el plan $\dot m^{(0)}$.
+   2. Simular $n=59$ corridas Monte Carlo del ROM a lo largo del horizonte de riesgo con ese
+      plan. Se sortean fallas del ACS, saltos de la rotura y el error del pronóstico.
+   3. Por Wilks (unilateral, primer orden, 95/95), el máximo de la PCT entre las 59 corridas
+      es un **límite superior de tolerancia** $\widehat{\mathrm{PCT}}_{95/95}$.
+   4. Calcular
+      $\widehat{\mathrm{PSM}}=(U-\widehat{\mathrm{PCT}}_{95/95})/(U-y_{\rm ref})$.
+   5. Si $\widehat{\mathrm{PSM}}$ queda bajo el umbral, endurecer el margen de N2 con
+      $\beta=\widehat{\mathrm{PCT}}_{95/95}-\max_k\hat y_k$ y volver a resolver.
+      Opcionalmente, iterar hasta que el PSM cumpla.
+
+   **Puntos por resolver.**
+   - El horizonte de riesgo: debe ser más largo que los 13 s del MPC para que las fallas se
+     vean.
+   - El costo: 59 simulaciones del ROM por consulta son ~ms cada una en Julia.
+   - La validez de Wilks cuando el plan depende de la muestra; una opción es una muestra
+     nueva para la verificación final.
+   - La relación con el back-off analítico (2): el PSM es su versión no paramétrica.
+
+**Paso 4 — Campaña en Olab.** Las familias nominal, estresada y extrema, con ≥ 100
+realizaciones cada una, más los pasos 1–3. Las diferencias pareadas se informan con IC al
+95 %.
+
+| Paso | Qué | Máquina | Criterio de cierre |
+|---|---|---|---|
+| **F5b.1a** Capacidad y rampa | Barrido $\dot m_{\max}$ × rampa, N2+sesgo vs PI limitado | leo_acer | Mapa de regímenes |
+| **F5b.0** Gemelo | Caudal medido del ACS; filtro de Kalman de tendencia lineal; ruido y saltos | leo_acer | Cobertura de $\Sigma_L$ y efecto en el lazo |
+| **F5b.1b** Márgenes deterministas | N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ | leo_acer | Frontera margen–costo |
+| **F5b.1c** Riesgo probabilístico | CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) | leo_acer → Olab | Frontera costo–riesgo pareada |
+| **F5b.2** Campaña | Todo lo anterior, ≥ 100 realizaciones por familia | Olab | IC al 95 % |
+
+### 8.13 Resultados de los pasos 1, 2 y 3.i (16-11-2026)
+
+Las 14 realizaciones de la familia extrema (semillas 101–114, §8.11) se usaron en todos los
+pasos, con números aleatorios comunes. **Cambio en la planta:** la capacidad del ACS es ahora
+un parámetro de la réplica (`hrm_params(…; acs_max, acs_ramp, acs_eta)`). Limita a quien mueva
+la bomba, sea el PI o el MPC; la rampa limita sólo las subidas, porque una falla detiene la
+bomba de inmediato. La eficiencia η de la familia extrema se aplica ahora **también al PI**
+(`eta_pi = true`); en F5a.3 sólo degradaba al MPC.
+
+**Paso 1 — Mapa de capacidad (F5b.1a).** `julia/f5b1a_capacity_sweep.jl`; mapa en
+`python/f5b1a_capacity_map.py`; figura `docs/figures/fig_f5b_capacity_map.pdf`.
+Configuraciones: $\dot m_{\max}\in\{15,20,25,30,40,50,70\}$ kg/s y rampa $\{2.5,5,10\}$ kg/s por paso.
+
+| $\dot m_{\max}$ [kg/s] | N2: llegan a 1220 K | PI: llegan a 1220 K | N2: 1.ª acción en la cota | N2: decisión interior | PCT máx. peor (N2) | Régimen |
+|---|---|---|---|---|---|---|
+| 15 | 6/14 | 10/14 | 100 % | 0 % | 1220 K | saturado y en riesgo |
+| 20 | 3/14 | 6/14 | 99 % | 0 % | 1220 K | saturado y en riesgo |
+| 25 | 0/14 | 2/14 | 99 % | 0 % | 1214.7 K | saturado, margen ≥ 5 K |
+| 30 | 0/14 | 0/14 | 93 % | 6 % | 1209.6 K | saturado, margen ≥ 10 K |
+| 40 | 0/14 | 0/14 | 71 % | 28 % | 1207.5 K | libre, sin riesgo |
+| 50–70 | 0/14 | 0/14 | 38–55 % | 44–59 % | 1206.4–1206.7 K | libre, sin riesgo |
+
+(Rampa 5 kg/s por paso. La rampa cambia la PCT máxima en ≤ 0.6 K: no es el parámetro que
+decide.)
+
+- Con la misma capacidad, N2+sesgo baja la PCT máxima entre 3.5 y 14 K respecto del PI
+  (pareado, IC al 95 % que excluye 0). El PI pasa ~40–55 % de las consultas con caudal 0: su
+  corriente queda bajo el umbral de la bomba (≈ 56.7 A) hasta que el integrador se carga.
+- **El régimen «decisión libre y en riesgo» está vacío en esta familia.** Donde hay riesgo
+  (≤ 20 kg/s), N2 está siempre saturado; donde N2 tiene decisiones libres (≥ 40 kg/s), no hay
+  riesgo.
+- **De dónde sale el pico** (`docs/figures/fig_f5b_peak_at_failure.pdf`). Con 40 kg/s, la PCT
+  máxima ocurre siempre ~2 s después del fin de la falla del ACS, y su correlación con la
+  duración de la falla es 0.86. La PCT sube ≈ 0.27–0.30 K/s durante la falla y, al empezar
+  la falla, está en la consigna (1179–1183 K). Para llegar a 1220 K desde la consigna hacen
+  falta fallas de ≈ 130–150 s; la familia tiene fallas de 30–90 s.
+- **Consecuencia para el paso 3.** Durante la falla ninguna decisión sirve, así que la única
+  palanca de una capa de riesgo es **pre-enfriar**: bajar la PCT antes de una falla posible,
+  pagando error de seguimiento y masa. Ese margen sólo se puede comprar con capacidad libre,
+  y su valor depende de la distribución de la duración de las fallas.
+
+**Paso 2 — Lo que el gemelo no sabe (F5b.0).**
+
+- *Fuera del lazo* (`python/f5b0_leak_forecast.py`, 60 realizaciones de prueba por familia,
+  distintas de las de calibración). El filtro de Kalman de tendencia lineal se calibra por el
+  puntaje logarítmico multipaso ($q_l\approx3\cdot10^{-13}$, $q_s\approx3\cdot10^{-10}$–$10^{-9}$ en
+  la familia extrema, $r=\sigma^2$).
+
+  | σ ruido [kg/s] | Caso | Persistencia | Kalman | Kalman + intervención |
+  |---|---|---|---|---|
+  | 0.1 | sin saltos (p99 error máx. 13 s) | 0.26 | 0.04–0.05 | 0.04–0.05 |
+  | 0.1 | ≤ 10 s después de un salto | 0.26 | 4.5–5.5 | 0.16–0.18 |
+  | 0.3 | sin saltos | 0.78 | 0.12–0.13 | 0.12–0.13 |
+  | 0.3 | ≤ 10 s después de un salto | 0.74 | 5.0–6.3 | 1.06–1.29 |
+
+  Sin saltos, la cobertura al 95 % del filtro es 0.93–0.97: $\Sigma_L$ está calibrada. Sin
+  intervención, el filtro no absorbe un salto de la rotura en decenas de segundos. La
+  intervención ($|\nu|/\sqrt S>5$: el salto se absorbe en el nivel) lo arregla, salvo los saltos
+  menores que $5\sqrt S$.
+- *En lazo cerrado* (`julia/f5b0_closed_loop.jl`, 40 kg/s, rampa 5; 14 realizaciones con
+  σ ∈ {0.1, 0.3} kg/s, sin y con saltos de la rotura). El caudal medido del ACS y el
+  pronosticador **no cambian el resultado**: las diferencias pareadas de PCT máxima e ISE
+  frente al oráculo son 0.00 ± 0.00 en los 16 casos. Los saltos endurecen la planta
+  (+0.6 K de PCT máxima media, +26 % de ISE), pero por igual con todos los pronosticadores. Las decisiones sí cambian, hasta 1.2 kg/s
+  con persistencia y σ = 0.3, y hasta 3.9 kg/s con un sesgo de +5 kg/s. Pero la PCT cambia
+  ≤ 0.1 K y el ISE ≤ 0.005 %. La inercia térmica filtra esas diferencias de caudal, y la
+  corrección de sesgo absorbe el resto. Esto confirma lo visto en F4: el pronóstico suave de
+  la fuga no es una fuente de riesgo relevante para N2.
+
+**Paso 3.i — Márgenes deterministas (F5b.1b).** `julia/f5b1b_dsm.jl`, 40 kg/s, rampa 5.
+
+- **N2+DSM no cambia nada.** En las 18 combinaciones
+  $U\in\{1244,1220\}$ K, $\tau\in\{0.00238, 0.1, 0.25\}$ y $\lambda_s\in\{10^3,10^4,10^5\}$, la PCT
+  máxima cambia como mucho +0.002 K. El DSM se activa sólo cuando $\hat y$ supera la consigna,
+  y eso ocurre justo durante y después de la falla, cuando N2 ya está en la cota. Es el mismo
+  mecanismo que en la tesis.
+- **El PI con consigna $y_{\rm ref}$ no inyecta nada** y las 14 realizaciones llegan a
+  1220 K. El PI del DET funciona sólo porque su consigna (1144 K) está 35 K bajo la de N2:
+  el error acumulado lleva el integrador sobre el umbral de la bomba. Es un relé de protección
+  con zona muerta, no un controlador de seguimiento. Un «PI+DSM» equivalente no tiene sentido:
+  el margen del PI *es* su consigna de 1144 K.
+
+**Qué implica para el paso 3.ii.** Una capa de riesgo sólo puede cambiar el resultado si
+se cumplen tres condiciones:
+
+1. un horizonte de riesgo más largo que la falla (≥ 100 s, no los 13 s de N2);
+2. capacidad libre antes de la falla;
+3. fallas lo bastante largas, o probables, para que la consigna deje de ser segura.
+
+Hay que definir una familia donde coincidan; ver la decisión abierta 11. La formulación
+natural es una **consigna ajustada por riesgo**. Con la ley empírica
+$\mathrm{PCT}_{\rm pico}\approx\mathrm{PCT}(t_f)+\dot T\,D$, donde $D$ es la duración de la falla,
+la restricción probabilística $P(\mathrm{PCT}_{\rm pico}>1220)\le\alpha$ da
+$y_{\rm ref}^{\rm riesgo}=\min\{y_{\rm ref},\,1220-\dot T\,q_{1-\alpha}(D)\}$. N2 sigue siendo un QP:
+el riesgo entra como dato. El CVaR por SAA y el PSM en línea con un horizonte largo son sus
+versiones no paramétricas.
 
 ---
 
@@ -1318,3 +1540,17 @@ un QP de ~30 ms, así que admite escenarios y restricciones de riesgo sin salir 
    diferenciación automática y JuMP. El pronóstico BiLSTM puede pasarse como datos desde
    Python o cargarse en ONNX. Queda por confirmar si Olab tiene MATLAB: si no lo tiene, la
    réplica del HRM es la única planta posible allí.
+8. **Límite de seguridad del margen** (§8.11–8.12): el DSM y $U_y$ usan 1244 K, pero el DET
+   termina en 1220 K. Hay que decidir con el equipo qué límite normaliza el DSM y el PSM.
+9. **PI+DSM** (§8.12, paso 3.i): cómo dar al PI un margen equivalente para una comparación
+   justa con N2+DSM. *Propuesta tras §8.13:* no formularlo. El margen del PI es su consigna
+   (1144 K); con la consigna de N2 no inyecta. Se compara el PI tal cual (DET) con la misma
+   capacidad y η.
+10. **PSM en línea** (§8.12, paso 3.ii.4): horizonte de riesgo, validez de Wilks cuando el
+    plan depende de la muestra, y si se itera hasta cumplir. *Tras §8.13:* el horizonte de
+    riesgo debe cubrir la falla completa (≥ 100 s).
+11. **Familia para la capa de riesgo** (§8.13): con fallas de 30–90 s y ≥ 40 kg/s no hay
+    riesgo, y con ≤ 20 kg/s no hay decisión libre. Hay que elegir una familia donde coincidan.
+    Opciones: (a) fallas más largas, hasta ~180 s; (b) una tasa de fallas y una distribución
+    de su duración, con fallas posibles en cualquier instante, que es la versión del DET;
+    (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo.

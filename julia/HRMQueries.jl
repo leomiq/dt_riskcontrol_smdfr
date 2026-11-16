@@ -60,18 +60,25 @@ ROM state at t_q − Δt from the HRM state `xH0` at t_q − delay (PI integrato
 projection `hrm_to_rom` and a warm-up with the HRM leak and the applied ACS currents
 (ROM inports at t_{n+1}).
 """
-function warm_rom(pH, pR, xH0, xI0, ext::ExtInput, t_q; delay = 10.0, h = 0.5)
+function warm_rom(pH, pR, xH0, xI0, ext::ExtInput, t_q; delay = 10.0, h = 0.5,
+                  leak_meas = nothing, acs_meas = nothing)
     t0 = t_q - delay
     xR0 = hrm_to_rom(xH0)
     tw = t0:h:(t_q - h)
-    leak = [SMDFRHRM.leak_flow(t, pH) for t in tw]
-    cur = [value(ext, t, 1) for t in tw]
-    act = [value(ext, t, 2) for t in tw]
-    # With active_mpc = 0 the ROM's own PI drives the pump; below the pump threshold
-    # (≈ 56.687 A) its flow is 0, which is the only case supported here.
-    acs = [a > 0 ? SMDFRROM.current_to_massflow(u) : 0.0 for (u, a) in zip(cur, act)]
-    if any(act .<= 0)
-        @assert xI0 < 50 "PI current near the pump threshold during the warm-up: not supported"
+    # F5b.0: `leak_meas(t)` / `acs_meas(t)` replace the true leak / the commanded flow by what
+    # the twin measures (noisy leak; flow the plant actually received)
+    leak = leak_meas === nothing ? [SMDFRHRM.leak_flow(t, pH) for t in tw] : [leak_meas(t) for t in tw]
+    if acs_meas === nothing
+        cur = [value(ext, t, 1) for t in tw]
+        act = [value(ext, t, 2) for t in tw]
+        # With active_mpc = 0 the ROM's own PI drives the pump; below the pump threshold
+        # (≈ 56.687 A) its flow is 0, which is the only case supported here.
+        acs = [a > 0 ? SMDFRROM.current_to_massflow(u) : 0.0 for (u, a) in zip(cur, act)]
+        if any(act .<= 0)
+            @assert xI0 < 50 "PI current near the pump threshold during the warm-up: not supported"
+        end
+    else
+        acs = [acs_meas(t) for t in tw]
     end
     X = SMDFRROM.simulate(xR0, leak, acs, h, pR; scheme = :ode1be, input_at = :next)
     (; xR0, x_init = X[end, :], X_warm = X, t_warm = collect(tw), leak_warm = leak, acs_warm = acs)

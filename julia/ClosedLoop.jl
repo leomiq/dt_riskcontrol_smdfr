@@ -24,9 +24,9 @@ module ClosedLoop
 
 include(joinpath(@__DIR__, "HRMQueries.jl"))
 include(joinpath(@__DIR__, "F4Lib.jl"))
-using .HRMQueries, .F4Lib, MAT, JuMP, Clarabel, ForwardDiff, LinearAlgebra, Statistics
+using .HRMQueries, .F4Lib, MAT, JuMP, Clarabel, ForwardDiff, LinearAlgebra, Statistics, Random
 
-export Bench, setup, run_loop, metrics, ACT_ARCH, ACT_PHYS
+export Bench, setup, run_loop, metrics, ACT_ARCH, ACT_PHYS, act_cap
 
 const ROOT = joinpath(@__DIR__, "..")
 const h = 0.5
@@ -36,6 +36,13 @@ const R4 = F4Lib.SMDFRROM
 
 const ACT_ARCH = (name = :arch, m_lo = NaN, m_hi = NaN, ramp = :soft)   # filled in setup
 const ACT_PHYS = (name = :phys, m_lo = 0.0, m_hi = 5543.0, ramp = :hard)
+"""Finite-capacity actuator of F5b.1a (plan §8.12): ṁ ∈ [0, m_max], hard ramp `dm` per step.
+Use it with a plant built with `hrm_params(…; acs_max = m_max, acs_ramp = dm)`."""
+act_cap(m_max, dm) = (name = :cap, m_lo = 0.0, m_hi = Float64(m_max), ramp = :hard, dm = Float64(dm))
+
+"""Copy of the HRM parameters with some fields replaced."""
+with_params(pH; kw...) = SMDFRHRM.HRMParams((haskey(kw, f) ? kw[f] : getfield(pH, f)
+                                             for f in fieldnames(SMDFRHRM.HRMParams))...)
 
 """Everything a closed-loop run needs: plant parameters, the plant history before the
 first query, the ROM parameters and the archived references."""
@@ -65,7 +72,11 @@ function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
         cs = arc["control_series"]
         pH = hrm_params(A = arc["sampled_A"], B = arc["sampled_B"], mdot_c_drift = arc["sampled_mdot_c_drift"])
     else
-        s = SMDFRHRM.simulate(pH, ExtInput([0.0, 1.0], zeros(2, 2)), t_max)
+        # activation time: the ACS capacity acts only after the activation, so detect it on the
+        # unlimited plant (a capped PI may exhaust the inventory before t_max)
+        # (and without jumps of the break: they are set after the first query, hence after t_act)
+        pA = with_params(pH; acs_max = Inf, acs_ramp = Inf, leak_jumps = Tuple{Float64,Float64}[])
+        s = SMDFRHRM.simulate(pA, ExtInput([0.0, 1.0], zeros(2, 2)), t_max)
         ia = findfirst(>(0), s.act)
         ia === nothing && return nothing
         t_act = s.t[ia]
@@ -89,6 +100,44 @@ function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
 end
 
 cost_step(y, y_ref) = (y - y_ref)^2
+
+# ---------------------------------------------------------------- leak forecast (F5b.0)
+"""
+Local-linear-trend Kalman filter of the leak (plan §8.12, step 2), without Park's law:
+level ℓ and slope s per step, ℓ⁺ = ℓ + s + w₁, s⁺ = s + w₂, y = ℓ + v, with
+Q = diag(q_l, q_s), R = r (calibrated offline: `python/f5b0_leak_forecast.py`).
+Intervention: if |ν|/√S > `thr`, a jump of the break is absorbed in the level (ℓ = y,
+P_ℓℓ += ν²), the slope is kept. `thr = Inf` disables it.
+"""
+mutable struct LeakKF
+    x::Vector{Float64}; P::Matrix{Float64}; ql::Float64; qs::Float64; r::Float64; thr::Float64
+end
+LeakKF(y0; q_l, q_s, r, thr = 5.0) = LeakKF([y0, 0.0], [r+1.0 0.0; 0.0 1.0], q_l, q_s, r, thr)
+
+function kf_update!(f::LeakKF, y)
+    F = [1.0 1.0; 0.0 1.0]
+    f.x = F * f.x; f.P = F * f.P * F' + Diagonal([f.ql, f.qs])
+    S = f.P[1, 1] + f.r; ν = y - f.x[1]
+    Kg = f.P[:, 1] ./ S
+    f.x = f.x .+ Kg .* ν; f.P = f.P - Kg * f.P[1:1, :]
+    if abs(ν) / sqrt(S) > f.thr
+        f.x[1] = y; f.P[1, 1] += ν^2
+    end
+    f
+end
+
+"""Forecast L̂(τ + jΔt), j = 1…K, and its covariance Σ_L (K×K)."""
+function kf_forecast(f::LeakKF, K)
+    m = [f.x[1] + f.x[2] * j for j in 1:K]
+    Σ = [dot([1.0, i], f.P * [1.0, j]) + sum((f.ql + (i - l) * (j - l) * f.qs for l in 1:min(i, j)); init = 0.0)
+         for i in 1:K, j in 1:K]
+    (m = m, Σ = Σ)
+end
+
+"""Kalman parameters calibrated offline (results/f5b0_leak_forecast/kalman_params.json, extreme family)."""
+const KF_PARAMS = Dict(0.1 => (q_l = 3.1623e-13, q_s = 3.1623e-10, r = 0.01),
+                       0.3 => (q_l = 3.1623e-13, q_s = 1.0e-9, r = 0.09))
+const KF_BURN = 60.0
 
 # ---------------------------------------------------------------- N1 / N2 (condensed QP)
 """Linearisation of the ROM step at (x, d, u)."""
@@ -124,15 +173,22 @@ function solve_qp(c, C, act)
     r = @variable(md, [1:K], lower_bound = 0)
     @constraint(md, [k = 1:K], y[k] - F4Lib.U_y <= r[k])
     obj = @expression(md, sum((y[k] - c.y_ref)^2 for k in 1:K) + F4Lib.lam_pct * sum(r .^ 2))
+    if get(c, :dsm, nothing) !== nothing          # F5b.1b: λ_s Σ [DSM_k − τ]₊², DSM on the bias-corrected ŷ
+        z = c.dsm; den = z.U - (c.y_ref + c.d)    # U − y_ref (c.y_ref is shifted by −d)
+        q = @variable(md, [1:K], lower_bound = 0)
+        @constraint(md, [k = 1:K], (y[k] - c.y_ref) / den - z.thr <= q[k])
+        obj = @expression(md, obj + z.lam * sum(q .^ 2))
+    end
     if act.ramp == :soft
         s = @variable(md, [1:K-1], lower_bound = 0)
         @constraint(md, [k = 1:K-1], u[k+1] - u[k] <= F4Lib.dm_lim + s[k])
         @constraint(md, [k = 1:K-1], u[k] - u[k+1] <= F4Lib.dm_lim + s[k])
         obj = @expression(md, obj + F4Lib.lam_m * sum(s .^ 2))
     else
+        dm = get(act, :dm, F4Lib.dm_lim)            # hard ramp [kg/s per step]
         mm = [c.m_prev; u]
-        @constraint(md, [k = 1:K], mm[k+1] - mm[k] <= F4Lib.dm_lim)
-        @constraint(md, [k = 1:K], mm[k] - mm[k+1] <= F4Lib.dm_lim)
+        @constraint(md, [k = 1:K], mm[k+1] - mm[k] <= dm)
+        @constraint(md, [k = 1:K], mm[k] - mm[k+1] <= dm)
     end
     @objective(md, Min, obj)
     t = @elapsed optimize!(md)
@@ -177,24 +233,54 @@ Plant perturbations the MPC does not know about (F5a.2):
   `fail`  (t_a, t_b): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
   `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
   `audit(c, L, act, prev, dec)` optional callback after each MPC decision (same query data).
-`ctrl = :PI` leaves the plant to the DET's own PI (active_mpc = 0); only `fail` applies to it
-(the pump is forced off), `eta` does not. If the plant model breaks down (coolant inventory
+`ctrl = :PI` leaves the plant to the DET's own PI (active_mpc = 0); `fail` applies to it
+(the pump is forced off), `eta` only with `eta_pi = true` (F5b.1a; false reproduces F5a);
+`pi_setpoint` replaces the PI setpoint (DET: 1144 K) after the first query. If the plant model breaks down (coolant inventory
 exhausted, the HRM algebra fails) the loop stops and `log.breakdown[1]` is set.
 When the PCT exceeds the upper edge of the DET monitor band (1220 K) the loop stops and
 `log.limit[1]` is set: in Simulink the limintm block stops the simulation there (end state of
 the event tree), so the replica's continuation (protection off) has no meaning.
-The ROM warm-up uses the COMMANDED currents (what the twin knows), the plant the real ones.
+By default the ROM warm-up uses the COMMANDED currents (what the twin knows), the plant the
+real ones, and the MPC gets the true future leak (+ `fbias`).
+What the twin knows (F5b.0, plan §8.12 step 2):
+  `measured_acs = true`  the warm-up uses the flow the plant actually received;
+  `leak_noise` σ [kg/s]  the twin sees y = ṁ_leak + σε (ε iid N(0,1), `noise_seed`), also in
+                         the warm-up; the plant is unchanged;
+  `forecast`             :oracle (true future leak + `fbias`), :persist (last measurement),
+                         :kalman (local-linear-trend filter with jump intervention, `kf`
+                         parameters, default `KF_PARAMS[leak_noise]`), :kalman_noint (no
+                         intervention). The filter starts `KF_BURN` s before the first query.
+`log.ferr` is the maximum forecast error over the horizon at each query.
+`dsm = (lam, thr, U)` adds to the N1/N2 QP the margin penalty λ_s Σ [DSM_k − τ]₊² with
+DSM_k = (ŷ_k − y_ref)/(U − y_ref) on the bias-corrected prediction (F5b.1b, plan §8.12 step 3.i;
+the thesis form of `matlab/fitness_cost_dsm.m`).
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
-                  fail = nothing, fbias = 0.0, audit = nothing)
+                  fail = nothing, fbias = 0.0, audit = nothing, measured_acs = false,
+                  leak_noise = 0.0, noise_seed = 1, forecast = :oracle, kf = nothing, kf_thr = 5.0, eta_pi = false,
+                  dsm = nothing, pi_setpoint = nothing)
     pH = B.pH; hist = copy(B.hist)
+    pPI = with_params(pH; acs_eta = eta_pi ? eta : 1.0,
+                      pct_setpoint = pi_setpoint === nothing ? pH.pct_setpoint : pi_setpoint)
     last = findfirst(==(B.t_start - h), B.cs[:, 1])
     T = B.cs[2:last, 1]; U = B.cs[2:last, 2:3]          # commanded inport series (grows)
     Up = copy(U)                                        # what the plant actually receives
     m_applied = 0.0; prev = nothing
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
-           m_plan = Vector{Float64}[], breakdown = [false], limit = [false])
+           m_plan = Vector{Float64}[], ferr = Float64[], breakdown = [false], limit = [false])
+    # leak measurements and forecaster
+    tb = B.t_start - KF_BURN - DELAY - h
+    nz = randn(Random.Xoshiro(noise_seed), round(Int, (B.t_start + n * h - tb) / h) + 2)
+    ymeas(t) = SMDFRHRM.leak_flow(t, pH) + leak_noise * nz[round(Int, (t - tb) / h) + 1]
+    forecast in (:oracle, :persist, :kalman, :kalman_noint) || error("forecast $forecast")
+    filt = nothing; t_kf = B.t_start - KF_BURN
+    if forecast in (:kalman, :kalman_noint)
+        par = kf === nothing ? KF_PARAMS[leak_noise] : kf
+        filt = LeakKF(ymeas(t_kf); par..., thr = forecast == :kalman ? kf_thr : Inf)
+    end
+    acs_meas = measured_acs ? (t -> hist[t][2].m_last) : nothing
+    leak_meas = leak_noise > 0 ? ymeas : nothing
     for k in 1:n
         t_q = B.t_start + (k - 1) * h; τ = t_q - h
         x, Lg, pct_now = hist[τ]
@@ -203,7 +289,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         if ctrl == :PI                       # the DET's own PI drives the pump (no twin needed)
             T = vcat(T, t_q); U = vcat(U, [0.0 0.0]); Up = vcat(Up, failed ? [56.0 1.0] : [0.0 0.0])
             s = try
-                SMDFRHRM.simulate(pH, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
+                SMDFRHRM.simulate(pPI, ExtInput(T, Up), t_q; t0 = τ, x0 = x, logic = Lg)
             catch err
                 err isa DomainError || rethrow(); log.breakdown[1] = true; break
             end
@@ -211,20 +297,32 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, s.acs[end])
             push!(log.m_plant, s.acs[end]); push!(log.u, s.current[end]); push!(log.yhat_now, NaN)
             push!(log.d, NaN); push!(log.time, 0.0); push!(log.status, "-"); push!(log.m_plan, [s.acs[end]])
+            push!(log.ferr, NaN)
             s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
             continue
         end
         ext = ExtInput(T, U)
         w = try
-            warm_rom(pH, B.pR, xH10, L10.xI, ext, t_q; delay = DELAY, h)
+            warm_rom(pH, B.pR, xH10, L10.xI, ext, t_q; delay = DELAY, h, leak_meas, acs_meas)
         catch err
             err isa DomainError || rethrow(); log.breakdown[1] = true; break
         end
-        L = [SMDFRHRM.leak_flow(t_q + (j - 1) * h, pH) + fbias for j in 1:K]   # forecast
+        Ltrue = [SMDFRHRM.leak_flow(t_q + (j - 1) * h, pH) for j in 1:K]   # leak at τ + jΔt
+        if forecast == :oracle
+            L = Ltrue .+ fbias
+        elseif forecast == :persist
+            L = fill(ymeas(τ), K)
+        else
+            while t_kf < τ - 1e-9
+                t_kf += h; kf_update!(filt, ymeas(t_kf))
+            end
+            L = kf_forecast(filt, K).m
+        end
         yhat_now = R4.output(w.x_init, w.leak_warm[end], w.acs_warm[end], B.pR4)
         d = pct_now - yhat_now
         c = (; p = B.pR4, h, K, S = max.(abs.(w.x_init), 1.0), x_init = w.x_init,
-             leak0 = w.leak_warm[end], y_ref = bias ? B.y_ref - d : B.y_ref, m_prev = m_applied)
+             leak0 = w.leak_warm[end], y_ref = bias ? B.y_ref - d : B.y_ref, m_prev = m_applied,
+             d = bias ? d : 0.0, dsm)
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)
             audit === nothing || audit(c, L, act, prev, dec)
@@ -244,18 +342,19 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             err isa DomainError || rethrow(); log.breakdown[1] = true; break
         end
         # the DET logic passes the MPC flow only while the protection is active (e.g. not yet
-        # in the first steps after the activation, scheduler delay): log what the plant got
-        if s.act[end] > 0
+        # in the first steps after the activation, scheduler delay), and a finite-capacity
+        # plant (pH.acs_max, pH.acs_ramp) limits it (e.g. the ramp-up after a failure):
+        # log what the plant got
+        if s.act[end] > 0 && isinf(pH.acs_max) && isinf(pH.acs_ramp)
             @assert abs(s.acs[end] - mp) <= 1e-6 * max(1.0, mp) "plant did not receive the intended flow"
-        else
-            mp = s.acs[end]
         end
+        mp = s.acs[end]
         hist[t_q] = (s.x, s.logic, s.pct[end])
         m_applied = m1
         push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, m1); push!(log.m_plant, mp)
         push!(log.u, u1)
         push!(log.yhat_now, yhat_now); push!(log.d, d); push!(log.time, dec.time)
-        push!(log.status, dec.status); push!(log.m_plan, dec.m)
+        push!(log.status, dec.status); push!(log.m_plan, dec.m); push!(log.ferr, maximum(abs.(L .- Ltrue)))
         s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
     end
     log

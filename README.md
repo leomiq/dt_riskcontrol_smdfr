@@ -148,7 +148,7 @@ constraints (N3). It then checks when the optimal-scenario result of Homem-de-Me
 (2026, *Math. Program.*, doi:10.1007/s10107-026-02359-9) applies to the forecast
 uncertainty.
 
-Status (9 Nov 2026, plan §8.1–8.5; summary with figures in
+Status (16 Nov 2026, plan §8.1–8.12; summary with figures in
 [docs/reporte_estado_mpc_monolitico.pdf](docs/reporte_estado_mpc_monolitico.pdf), a
 self-contained didactic report in Spanish, with the reference SMDFR model paper in
 [docs/references/](docs/references/)):
@@ -171,10 +171,55 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   coverage is 0.44. Its effect on the PCT is still only about 0.025 K, so neither
   quantile decisions nor a two-stage SAA change the first action, with or without
   actuator saturation (`julia/f4_risk_decisions.jl`, `julia/f4_actuator_sweep.jl`).
-- **Next steps.** Set the injection ramp and flow limits from the ACS specification.
-  Run ACS-failure scenarios and the ROM–HRM mismatch as the risk sources that can move
-  the decision. Then run the closed loop on the 61 queries. Tightening the certified
-  gap (plan §8.5, step 4b.5) is scheduled for the next round.
+- **F1b, HRM in Julia (11 Nov).** The 12-node HRM (50 states) and the DET logic
+  (band monitor, scheduler, backup PI, pump map) are ported to `julia/SMDFRHRM.jl`.
+  The port reproduces the archived Simulink run to 3e-6 K. Rebuilding the archived
+  queries exposed an artefact of the archived loop: inport extrapolation gave a spurious
+  −34.6 K at 1160.5 s.
+- **F4.5, queries without Simulink.** MPC queries are now built from the HRM replica
+  (`julia/HRMQueries.jl`). The ROM–HRM mismatch is 0.15–0.25 K, mostly bias; after
+  removing it, ≤ 0.12 K. An HRM-based NLP oracle gives the same first action.
+- **F5a, closed loop on the HRM replica (`julia/ClosedLoop.jl`).**
+  - N1, N2 and N3 give identical closed-loop results. With offset-free bias
+    correction the MPC beats the archived LJ loop by 11 % ISE, at ~30 ms (QP) or
+    ~0.2 s (NLP) per query.
+  - Monte Carlo with common random numbers (`julia/f5a2_monte_carlo.jl`): 0 solver
+    failures in > 8000 decisions. The bias correction matters most under unmodelled
+    perturbations: without it ISE rises by up to +19 %.
+  - Optimality audit (`julia/f5a_optimality_audit.jl`): the N1/N2 QPs reach their
+    global optimum; N3 reaches a reproducible local optimum.
+  - Extreme family (`… extreme`): a PCT above 1220 K is the DET end state, where
+    Simulink stops. With the archived pump box the MPC is always saturated and 9/14
+    realisations reach 1220 K. With the physical actuator none does: the PCT peaks at
+    1207 K.
+- **F5b, steps 1, 2 and 3.i (16 Nov, plan §8.13).**
+  - The ACS capacity is now a plant parameter that limits the PI and the MPC alike.
+  - Capacity sweep (`julia/f5b1a_capacity_sweep.jl`): at ≤ 20 kg/s, N2 is saturated and
+    reaches 1220 K in 3–6 of 14 realisations; the PI does in 6–10 of 14. At ≥ 40 kg/s, N2 has
+    free decisions and no risk.
+  - The PCT peak is set by the length of the ACS failure: correlation 0.86, about
+    0.3 K/s. Pre-cooling is the only lever a risk layer has.
+  - Leak forecast without Park (`python/f5b0_leak_forecast.py`): the local-linear-trend
+    Kalman filter with jump intervention is 5–10× more accurate than persistence, and its
+    coverage is calibrated. In closed loop, neither the forecaster nor the measured ACS flow
+    changes the PCT (≤ 0.1 K).
+  - N2+DSM (`julia/f5b1b_dsm.jl`) changes nothing; the DET PI is a dead-zone relay whose
+    margin is its 1144 K setpoint.
+  - Step 3.ii needs a failure family where free decisions and risk coexist (open decision
+    11).
+- **Next steps (plan §8.12).**
+  1. Sweep the actuator capacity (m_max 15–50 kg/s) and the ramp, comparing N2 with
+     the DET PI at the same capacity.
+  2. Feed the twin the measured ACS flow, and forecast the leak without Park's law
+     using a local-linear-trend Kalman filter (L̂, Σ_L).
+  3. Add margins and risk, in two stages:
+     - deterministic margins: N2+DSM against PI+DSM;
+     - the risk layer on N2: CVaR scenarios, chance-constraint back-off, the
+       Homem-de-Mello et al. decision-focused forecast, and an online PSM from 59
+       Wilks runs.
+  4. Run a large campaign on the USM Olab VM.
+
+  Tightening the certified gap (plan §8.5, step 4b.5) is postponed.
 
 - [Monolithic formulation plan](docs/monolithic_formulation_plan.md) and
   [its presentation](presentations/monolithic_formulation.pdf) (Spanish)
@@ -199,8 +244,9 @@ models/          Simulink models, trained BiLSTM weights, normalisation and
                  fixed-state inputs needed to run the pilot
 python/          MC-dropout inference bridge, training pipeline, plotting and
                  KPI-compilation scripts; F4 ensemble and calibration (f4_*.py)
-julia/           Algebraic ROM replica, monolithic NLP (F2), linearized QP (F3),
-                 risk and actuator studies (F4)
+julia/           Algebraic ROM and HRM replicas, monolithic NLP (F2), linearized QP (F3),
+                 risk and actuator studies (F4), queries from the HRM (F4.5),
+                 closed-loop bench and Monte Carlo (F5a)
 results/         Arrays and tables that regenerate the thesis figures without
                  re-running the simulations
 docs/            DSM-penalty record, improvement plan, reproducibility notes,
