@@ -140,7 +140,25 @@ tiempo hasta 1220~K sobre $q_{0.99}(D)\approx219$~s; sin cota queda en $\approx1
 DET baja hasta 45~s.}
 \end{figure}
 
+\paragraph{Las demás formulaciones del paso 3.ii.} Ante una falla que empieza ahora, el pico
+es $(\hat y_k+d)+\Delta T(D)$: la decisión controla el primer término y la duración sólo el
+segundo. Por esa estructura aditiva, el CVaR$_\beta$ por SAA (Rockafellar--Uryasev) se reduce
+exactamente a la cota $\hat y_k+d\le1220-\mathrm{CVaR}_\beta[\Delta T(D)]$, porque el CVaR es
+invariante a traslaciones. El PSM en línea de Wilks (59 corridas) es la misma cota con el
+máximo de 59 duraciones sorteadas. El escenario orientado a la decisión de Homem-de-Mello
+existe y es explícito: el $D^*$ cuyo $\Delta T$ es el margen. Sólo la pérdida esperada
+$\rho\,\mathbb E[(\text{pico}-1220)_+]$ no se reduce a una cota: es una penalización convexa
+dentro del QP.
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.7\linewidth]{figures/fig_f5b_risk_formulations.pdf}
+\caption{Las cuatro formulaciones sobre las mismas 7 realizaciones (estimador de
+Rao--Blackwell). Caen sobre la misma frontera: ninguna pide menos pre-enfriamiento para el
+mismo riesgo.}
+\end{figure}
+
 \takeaway{La cota de riesgo cumple su garantía: $P(\text{cruce}\mid\text{falla})\le\alpha$. Reducir
 el riesgo a la mitad cuesta trabajar 7.5~K bajo la consigna y un 17\,\% más de masa, y elegir
 $\alpha$ es una decisión del equipo. Contra el mismo criterio, el PID de la tesis es un 5\,\% más
-riesgoso que N2 y el PI del DET casi 4 veces más.}
+riesgoso que N2 y el PI del DET casi 4 veces más. CVaR, Wilks y la pérdida esperada no son
+más eficientes que la cota con cuantil: sólo recorren la misma frontera con otro parámetro.}

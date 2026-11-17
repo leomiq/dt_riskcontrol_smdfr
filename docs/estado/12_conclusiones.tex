@@ -43,6 +43,10 @@
         $P(\text{cruce}\mid\text{falla})$ es 0.031 para N2 y la cota la lleva a $\le\alpha$
         (0.015 con $\alpha=0.02$, 0.011 con $\alpha=0.01$). El precio es pre-enfriar 7.5--12.9~K.
         El PID de la tesis es un 5\,\% más riesgoso que N2, y el PI del DET casi 4 veces más.
+  \item \textbf{¿Qué formulación de riesgo conviene?} Por la estructura aditiva del pico, el
+        CVaR, el PSM en línea de Wilks y el escenario orientado a la decisión se reducen a una
+        cota sobre la PCT, y la pérdida esperada cae sobre la misma frontera. Ninguna es más
+        eficiente; la cota con cuantil es la más simple y su garantía está verificada.
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -103,9 +107,8 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
 \begin{enumerate}
   \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
         medida (sección~\ref{sec:f5b}).
-  \item \textbf{Completar la capa de riesgo (paso 3.ii)}: cota incondicional, CVaR por SAA sobre
-        escenarios de falla, escenario orientado a la decisión (Homem-de-Mello) y PSM en línea
-        con horizonte $\ge q_{1-\alpha}(D)$, todas medidas con el estimador de Rao--Blackwell.
+  \item \textbf{Fallas parciales del ACS} (caudal reducido en vez de nulo): ahí el calentamiento
+        depende de la decisión y las formulaciones de riesgo dejan de coincidir.
   \item \textbf{Confirmar con el equipo} la capacidad del ACS, la aceleración de las tasas de
         falla y el $\alpha$ objetivo.
   \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).

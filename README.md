@@ -219,6 +219,13 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   - The thesis PID (`ctrl = :PID`, `matlab/pid_controller.m`), replayed without the archived
     loop's extrapolation artefact, over-cools and never settles in the 0.30 K band. N2 has a
     2–50× lower IAE and settles in 3–14 s.
+- **F5b, rest of step 3.ii (17 Nov, plan §8.17).**
+  - Risk modes in `ClosedLoop.jl`: CVaR (exact reduction of the Rockafellar–Uryasev SAA),
+    online Wilks-59 PSM, and an expected-excess penalty.
+  - The peak is additive (PCT at failure + ΔT(D)), so all of them are margins below 1220 K;
+    the decision-focused scenario (Homem-de-Mello) is explicit.
+  - With the Rao–Blackwell estimator, all four formulations lie on the same risk vs
+    pre-cooling frontier. The quantile bound is recommended.
 - **F5b, Rao–Blackwell risk estimator (17 Nov, plan §8.16).**
   - The estimator integrates P(first failure at t) · P(D > τ(x_t)) along failure-free
     trajectories, where τ is the HRM time to 1220 K with the ACS off

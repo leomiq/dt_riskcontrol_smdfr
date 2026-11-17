@@ -1779,6 +1779,64 @@ condicional y el pre-enfriamiento es su precio. Elegir α es una decisión del e
 decisión 12). Este estimador es también el criterio para comparar las demás formulaciones
 del paso 3.ii (CVaR, cota incondicional, PSM en línea).
 
+### 8.17 Resto del paso 3.ii: CVaR, PSM en línea, escenario orientado a la decisión y pérdida esperada (17-11-2026)
+
+**Estructura que lo simplifica todo.** Ante una falla que empieza ahora y dura $D$, el pico es
+$\mathrm{PCT}_{\rm pico}=\big(\hat y_k+d\big)+\Delta T(D)$. La decisión $u$ controla el primer
+término. El segundo depende de $D$ y del estado, pero no de $u$ dentro del horizonte. Es la
+**curva de calentamiento**: una sola simulación del ROM con el ACS apagado por consulta
+(`heatup_curve`). Por esa estructura aditiva:
+
+| Formulación del plan (§8.12, 3.ii) | A qué se reduce | Margen $\Delta T$ |
+|---|---|---|
+| 2. Restricción probabilística (§8.14) | $\hat y_k+d\le1220-\Delta T(q_{1-\alpha}(D))$ | cuantil de $D$ |
+| 1. CVaR$_\beta$ por SAA (Rockafellar–Uryasev) | $\hat y_k+d\le1220-\mathrm{CVaR}_\beta[\Delta T(D)]$. Es exacto: el CVaR es invariante a traslaciones, así que la restricción RU con escenarios $\hat y_k+d+\Delta T(D_s)$ equivale a esa cota | media de la cola |
+| 4. PSM en línea (Wilks, 59 corridas) | $\hat y_k+d\le1220-\Delta T(\max_{s\le59}D_s)$, con un sorteo nuevo en cada consulta | cuantil aleatorio 95/95 |
+| 3. Escenario orientado a la decisión (Homem-de-Mello et al., 2026) | Existe y es explícito: cada cota equivale a resolver N2 determinista con el escenario $D^*$ tal que $\Delta T(D^*)$ es su margen | — |
+| Pérdida esperada (versión «incondicional») | $\rho\,\mathbb E_D[(\hat y_k+d+\Delta T(D)-1220)_+]$ en el costo. Es convexa, se aproxima por SAA sobre 40 cuantiles de $D$ y **no** se reduce a una cota | penalización suave |
+
+Implementación: modos `:cvar`, `:wilks` y `:expected` de `risk` en `julia/ClosedLoop.jl`, sobre
+200 o 40 cuantiles estratificados de $D$. Las duraciones se truncan en 400 s, porque una falla
+más larga cruza con cualquier controlador. Experimento: `julia/f5b1c_rb_risk.jl`, evaluado con
+el estimador de Rao–Blackwell de §8.16.
+
+**Resultados** (7 realizaciones comunes, semillas 201–207; las corridas se detuvieron por falta de
+memoria y son reanudables; figura `docs/figures/fig_f5b_risk_formulations.pdf`):
+
+| Formulación | P(llegar a 1220 K dada una falla) | K bajo $y_{\rm ref}$ | Masa |
+|---|---|---|---|
+| N2+sesgo | 0.028 | 0.0 | — |
+| Cota con cuantil, α = 0.05 / 0.02 / 0.01 | 0.028 / 0.014 / 0.010 | 0.1 / 7.2 / 12.8 | +0 / +16 / +31 % |
+| CVaR, β = 0.90 / 0.95 / 0.98 | 0.020 / 0.013 / 0.009 | 3.2 / 8.3 / 15.1 | +6 / +19 / +38 % |
+| PSM en línea (Wilks 59) | 0.010 | 13.1 | +28 % |
+| Pérdida esperada, ρ = 10 / 100 / 1000 | 0.028 / 0.023 / 0.012 | 0.2 / 1.9 / 10.0 | +0 / +4 / +23 % |
+
+- **Las cuatro familias caen sobre la misma frontera riesgo–pre-enfriamiento.** Para un mismo
+  nivel de riesgo piden el mismo pre-enfriamiento. Ninguna es más eficiente: sólo cambia el
+  parámetro con que se recorre la frontera (α, β, ρ o el tamaño de la muestra de Wilks).
+- **Equivalencias aproximadas:** CVaR$_{0.95}$ ≈ cuantil α ≈ 0.015; Wilks 59 ≈ α = 0.01, porque el
+  máximo de 59 sorteos es, en promedio, un cuantil ≈ 0.98, con dispersión entre consultas.
+- **Costo computacional:** las cotas (cuantil, CVaR, Wilks) agregan una simulación del ROM y
+  una restricción por paso (~25 s por corrida de 481 consultas). La pérdida esperada agrega
+  26×40 variables al QP (~85 s por corrida, 0.18 s por consulta). Las cuatro siguen en tiempo
+  real.
+- **Recomendación:** la cota con cuantil (§8.14). Es la más simple, su parámetro es una
+  probabilidad interpretable (α) y su garantía se verificó (§8.16). El CVaR conviene si el
+  equipo prefiere controlar la severidad de la cola en vez de su probabilidad. Wilks agrega
+  ruido entre consultas sin ganar eficiencia.
+- **El resultado de Homem-de-Mello se cumple aquí de forma exacta:** con la estructura aditiva
+  y monótona en $D$, la decisión estocástica es la de N2 determinista con un único escenario
+  de falla $D^*$. El pronóstico «orientado a la decisión» es simplemente elegir $D^*$, es decir,
+  el margen.
+
+**Qué cambiaría esta conclusión:**
+
+1. Si la falla redujera el caudal en lugar de anularlo (falla parcial), ΔT dependería de $u$
+   y la reducción ya no sería exacta.
+2. Si se modelara la falla dentro del horizonte de 13 s, con la decisión de recuperación en
+   juego.
+3. Con un ROM que no capture el calentamiento sin ACS. Aquí coincide con el HRM (≈ 0.3 K/s).
+
 ---
 
 ## 9. Decisiones abiertas

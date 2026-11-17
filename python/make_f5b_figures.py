@@ -196,7 +196,7 @@ ta = load(os.path.join(RES, "f5b1c_rb_risk", "tau.csv"))
 lab_of = {"N2": "N2+sesgo", "N2_risk_a0.1": r"$\alpha$=0.10", "N2_risk_a0.05": r"$\alpha$=0.05",
           "N2_risk_a0.02": r"$\alpha$=0.02", "N2_risk_a0.01": r"$\alpha$=0.01", "PID": "PID de la tesis", "PI": "PI del DET"}
 fig, ax = plt.subplots(1, 2, figsize=(W, 2.6), layout="constrained")
-n2 = [c.startswith("N2") for c in sm["case"]]
+n2 = [c in ("N2", "N2_risk_a0.1", "N2_risk_a0.05", "N2_risk_a0.02", "N2_risk_a0.01") for c in sm["case"]]
 ax[0].errorbar(-sm["mean_dev"][n2], sm["p_cond"][n2], yerr=sm["p_cond_ci"][n2], color=BLUE, marker="o", ms=4,
                capsize=2, lw=1.3, label="N2 y cota de riesgo")
 for c, col, mk in (("PID", ORANGE, "s"), ("PI", MUTED, "D")):
@@ -219,3 +219,27 @@ ax[1].set(title=f"Tiempo hasta 1220 K si el ACS falla (semilla {seed0:.0f})", xl
           ylabel=r"$\tau(x_t)$ [s]")
 ax[1].legend(loc="lower right", fontsize=7)
 save(fig, "fig_f5b_rb_risk")
+
+# ---- Fig 7: the formulations of step 3.ii on the same realisations (Rao-Blackwell risk) ------
+AQUA, YELLOW = "#1baf7a", "#eda100"
+rr = load(os.path.join(RES, "f5b1c_rb_risk", "runs.csv"))
+fams = [("cota (cuantil)", BLUE, "o", ["N2_risk_a0.1", "N2_risk_a0.05", "N2_risk_a0.02", "N2_risk_a0.01"]),
+        ("CVaR", AQUA, "^", ["N2_cvar_b0.9", "N2_cvar_b0.95", "N2_cvar_b0.98"]),
+        ("pérdida esperada", YELLOW, "s", ["N2_exp_r10", "N2_exp_r100", "N2_exp_r1000"]),
+        ("PSM en línea (Wilks 59)", INK2, "D", ["N2_wilks59"])]
+allc = ["N2"] + [c for _, _, _, cs in fams for c in cs]
+common = sorted(set.intersection(*[set(rr["seed"][rr["case"] == c]) for c in allc]))
+def stat(case):
+    q = sel(rr, (rr["case"] == case) & np.isin(rr["seed"], common))
+    return -np.mean(q["mean_dev"]), np.mean(q["p_cross_cond"])
+fig, ax = plt.subplots(1, 1, figsize=(W * 0.7, 2.7), layout="constrained")
+x0, y0 = stat("N2")
+ax.plot([x0], [y0], "o", color=MUTED, ms=5, label="N2+sesgo")
+for lab, col, mk, cs in fams:
+    pts = [(x0, y0)] + [stat(c) for c in cs]
+    ax.plot([p[0] for p in pts], [p[1] for p in pts], color=col, marker=mk, ms=4, lw=1.3,
+            ls="-" if len(cs) > 1 else "none", label=lab)
+ax.set(title=f"Formulaciones del paso 3.ii ({len(common)} realizaciones)",
+       xlabel=r"K bajo $y_{\rm ref}$ en promedio (sin fallas)", ylabel="P(llegar a 1220 K | falla)")
+ax.legend(loc="upper right", fontsize=7)
+save(fig, "fig_f5b_risk_formulations")

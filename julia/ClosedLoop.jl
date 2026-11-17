@@ -186,6 +186,12 @@ function solve_qp(c, C, act)
         @constraint(md, [k = 1:K], y[k] + c.d - c.ubound <= v[k])   # violation when not; a
         obj = @expression(md, obj + c.lam_r * sum(v))                # quadratic slack with an
     end                                                              # unreachable U_α broke Clarabel
+    if get(c, :exp_dT, nothing) !== nothing       # F5b.1c: ρ E_D[(ŷ_k + d + ΔT(D) − U)₊] (SAA on
+        nq = length(c.exp_dT)                     # stratified quantiles of D; convex, not a bound)
+        w = @variable(md, [1:K, 1:nq], lower_bound = 0)
+        @constraint(md, [k = 1:K, i = 1:nq], y[k] + c.d + c.exp_dT[i] - c.U_lim <= w[k, i])
+        obj = @expression(md, obj + c.rho / nq * sum(w))
+    end
     if act.ramp == :soft
         s = @variable(md, [1:K-1], lower_bound = 0)
         @constraint(md, [k = 1:K-1], u[k+1] - u[k] <= F4Lib.dm_lim + s[k])
@@ -231,17 +237,17 @@ end
 
 # ---------------------------------------------------------------- risk bound (F5b.1c)
 """
-    risk_bound(c, yhat_now, tau; U_lim = 1220.0)
+    heatup_curve(c, yhat_now, tmax)
 
-Risk-adjusted upper bound of the PCT (plan §8.14). If the ACS failed now and stayed off for
-`tau` = q₁₋α(D) seconds, the ROM (ACS = 0, leak held at its current value) predicts a heat-up
-ΔT = max_{t ≤ tau} ŷ_noACS(t) − ŷ_now (it includes the instantaneous p₄ jump when the flow
-drops). Then P(PCT_peak > U_lim | failure starting now) ≤ α holds if the bias-corrected PCT
-stays below U_α = U_lim − ΔT. Returns (U = U_α, dT = ΔT). If the ROM breaks down (inventory
-exhausted) before `tau`, the heat-up up to that point is used with the last rate extrapolated.
+Heat-up of the PCT if the ACS failed now and stayed off: the ROM (ACS = 0, leak held at its
+current value) from the query state, ΔT(t) = max_{s ≤ t} ŷ_noACS(s) − ŷ_now on t = 0:Δt:tmax
+(non-decreasing; it includes the instantaneous p₄ jump when the flow drops). If the ROM breaks
+down (inventory exhausted) the last rate is extrapolated. Shared by every risk formulation of
+F5b.1c (plan §8.14, §8.17): under the additive model PCT_peak = PCT(t_f) + ΔT(D), the duration
+D enters only through ΔT.
 """
-function risk_bound(c, yhat_now, tau; U_lim = 1220.0)
-    n = ceil(Int, tau / h)
+function heatup_curve(c, yhat_now, tmax)
+    n = ceil(Int, tmax / h)
     X = nothing; nok = n
     while X === nothing && nok >= 4
         X = try
@@ -251,8 +257,47 @@ function risk_bound(c, yhat_now, tau; U_lim = 1220.0)
         end
     end
     y = [R4.output(X[i, :], c.leak0, 0.0, c.p) for i in axes(X, 1)]
-    dT = maximum(y) - yhat_now
-    nok < n && (dT += (y[end] - y[end-1]) / h * (n - nok) * h)
+    dT = accumulate(max, y) .- yhat_now
+    if nok < n
+        r = max((y[end] - y[end-1]) / h, 0.0)
+        dT = vcat(dT, [dT[end] + r * h * k for k in 1:(n - nok)])
+    end
+    dT
+end
+
+"""ΔT at duration D from a heat-up curve (linear interpolation; the last slope beyond its end)."""
+function dT_at(curve, D)
+    x = D / h + 1; n = length(curve)
+    x <= 1 && return curve[1]
+    if x >= n
+        return curve[n] + max(curve[n] - curve[n-1], 0.0) * (x - n)
+    end
+    k = floor(Int, x); w = x - k
+    (1 - w) * curve[k] + w * curve[k+1]
+end
+
+"""Failure-length distribution of the DET-accelerated family: a mixture of exponentials
+(weights `w`, repair rates `mu`). Survival, quantile (bisection) and sampling."""
+failure_surv(t, dist) = sum(dist.w .* exp.(-dist.mu .* t))
+function failure_quantile(p, dist)
+    lo, hi = 0.0, 1e6
+    for _ in 1:200; m = (lo + hi) / 2; 1 - failure_surv(m, dist) < p ? (lo = m) : (hi = m); end
+    (lo + hi) / 2
+end
+function failure_sample(rng, dist)
+    u = rand(rng); i = findfirst(>=(u), cumsum(dist.w)); i === nothing && (i = length(dist.w))
+    randexp(rng) / dist.mu[i]
+end
+
+"""
+    risk_bound(c, yhat_now, tau; U_lim = 1220.0)
+
+Risk-adjusted upper bound of the PCT (plan §8.14): U_α = U_lim − ΔT(tau) with ΔT from
+`heatup_curve`. With tau = q₁₋α(D), P(PCT_peak > U_lim | failure starting now) ≤ α holds if the
+bias-corrected PCT stays below U_α. Returns (U = U_α, dT = ΔT).
+"""
+function risk_bound(c, yhat_now, tau; U_lim = 1220.0)
+    dT = dT_at(heatup_curve(c, yhat_now, tau), tau)
     (U = U_lim - dT, dT = dT)
 end
 
@@ -290,7 +335,14 @@ What the twin knows (F5b.0, plan §8.12 step 2):
 DSM_k = (ŷ_k − y_ref)/(U − y_ref) on the bias-corrected prediction (F5b.1b, plan §8.12 step 3.i;
 the thesis form of `matlab/fitness_cost_dsm.m`).
 `risk = (tau, lam)` adds the risk-adjusted soft bound ŷ_k + d ≤ U_α (`risk_bound`, exact ℓ1
-penalty `lam` [1/K] on the slack) for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
+penalty `lam` [1/K] on the slack). Other formulations (plan §8.17), all on `heatup_curve`:
+  `(mode = :cvar, beta, Dq, lam)`     U = 1220 − CVaR_β[ΔT(D)] over the quantile grid `Dq` of D
+                                      (the exact reduction of the Rockafellar–Uryasev SAA);
+  `(mode = :wilks, dist, n = 59, lam)` U = 1220 − ΔT(max of n fresh draws of D) per query
+                                      (online 95/95 PSM);
+  `(mode = :expected, rho, Dq)`       cost ρ/N Σ_k Σ_i (ŷ_k + d + ΔT(D_i) − 1220)₊ (expected
+                                      excess given a failure now; convex, no bound).
+  `Dcap` (400 s) caps D: a failure longer than that crosses 1220 K whatever the controller. for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
 `log.ubound` keeps U_α per query (NaN without `risk`).
 `ctrl = :PID` is the thesis PID (`matlab/pid_controller.m`, used in
 `DET_scheduler_v1_perc_online.m` and `run_phase2c_full_loop.m`): on e = y_ref − PCT(τ),
@@ -315,6 +367,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     Up = copy(U)                                        # what the plant actually receives
     m_applied = 0.0; prev = nothing
     pid_u = 0.0; pid_I = 0.0                            # thesis PID state
+    wrng = Random.Xoshiro(noise_seed + 7)               # Wilks draws (risk mode :wilks)
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
            m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], states = Any[], breakdown = [false], limit = [false])
@@ -375,8 +428,27 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
              d = bias ? d : 0.0, dsm)
         ub = NaN
         if risk !== nothing
-            ub = risk_bound(c, yhat_now, risk.tau).U
-            c = (; c..., ubound = ub, lam_r = risk.lam)
+            mode = get(risk, :mode, :var)
+            if mode == :var                                   # chance constraint, quantile q₁₋α
+                ub = risk_bound(c, yhat_now, risk.tau).U
+            else
+                Dcap = get(risk, :Dcap, 400.0)                # longer failures cross anyway
+                curve = heatup_curve(c, yhat_now, Dcap)
+                if mode == :cvar                              # CVaR_β of ΔT(D) (stratified SAA)
+                    dTs = sort([dT_at(curve, min(D, Dcap)) for D in risk.Dq])
+                    nt = max(1, ceil(Int, (1 - risk.beta) * length(dTs)))
+                    ub = 1220.0 - sum(dTs[end-nt+1:end]) / nt
+                elseif mode == :wilks                         # 95/95 Wilks: max of 59 fresh draws
+                    Dm = maximum(failure_sample(wrng, risk.dist) for _ in 1:get(risk, :n, 59))
+                    ub = 1220.0 - dT_at(curve, min(Dm, Dcap))
+                elseif mode == :expected                      # ρ E[(peak − 1220)₊], no bound
+                    c = (; c..., exp_dT = [dT_at(curve, min(D, Dcap)) for D in risk.Dq], rho = risk.rho,
+                         U_lim = 1220.0)
+                else
+                    error("risk mode $mode")
+                end
+            end
+            mode == :expected || (c = (; c..., ubound = ub, lam_r = risk.lam))
         end
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)

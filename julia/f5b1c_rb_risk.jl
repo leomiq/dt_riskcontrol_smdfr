@@ -14,7 +14,8 @@
 #
 # Realisations: the leak draws of f5b1c_risk.jl (seeds 201…), 40 kg/s, ramp 5, η = 1, NO
 # failures in the run itself. Controllers: N2+bias, N2+bias+risk bound α ∈ {0.10, 0.05, 0.02,
-# 0.01}, the thesis PID and the DET PI. τ is evaluated every `every` queries.
+# 0.01}, the thesis PID and the DET PI; and (plan §8.17) N2 with CVaR_β bound (β ∈ {0.90, 0.95,
+# 0.98}), online Wilks 59 PSM bound, and expected-excess penalty (ρ ∈ {10, 100, 1000}). τ is evaluated every `every` queries.
 # Rows: results/f5b1c_rb_risk/runs.csv; τ series: tau.csv (resumable, `budget` seconds).
 #
 # Usage, from the repository root:
@@ -44,6 +45,16 @@ const ALPHAS = (0.10, 0.05, 0.02, 0.01)
 cases = vcat([(name = "N2", ctrl = :N2, kw = NamedTuple())],
              [(name = "N2_risk_a$(a)", ctrl = :N2, kw = (risk = (tau = quantile_D(a), lam = 1e3),)) for a in ALPHAS],
              [(name = "PID", ctrl = :PID, kw = NamedTuple()), (name = "PI", ctrl = :PI, kw = NamedTuple())])
+# the rest of step 3.ii (plan §8.17): CVaR (exact reduction of the RU SAA), online Wilks PSM,
+# expected excess (unconditional-type soft penalty); D on stratified quantile grids
+const DIST = (w = W, mu = MU)
+const DQ200 = [ClosedLoop.failure_quantile((i - 0.5) / 200, DIST) for i in 1:200]
+const DQ40 = [ClosedLoop.failure_quantile((i - 0.5) / 40, DIST) for i in 1:40]
+append!(cases, [(name = "N2_cvar_b$(b)", ctrl = :N2, kw = (risk = (mode = :cvar, beta = b, Dq = DQ200, lam = 1e3),))
+                for b in (0.90, 0.95, 0.98)])
+push!(cases, (name = "N2_wilks59", ctrl = :N2, kw = (risk = (mode = :wilks, dist = DIST, n = 59, lam = 1e3),)))
+append!(cases, [(name = "N2_exp_r$(Int(r))", ctrl = :N2, kw = (risk = (mode = :expected, rho = r, Dq = DQ40),))
+                for r in (10.0, 100.0, 1000.0)])
 
 fmt(x) = x isa AbstractFloat ? @sprintf("%.8g", x) : string(x)
 function append(file, row)

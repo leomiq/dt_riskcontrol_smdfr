@@ -1522,6 +1522,58 @@ PI del DET & 0.119 $\pm$ 0.016 & 3.78 [3.76, 3.80] & $-$6.8 & +48 \% \\
 
 \textbf{Implicación.} La cota de riesgo es un control explícito y calibrado: $\alpha$ fija el riesgo condicional y el pre-enfriamiento es su precio. Elegir $\alpha$ es una decisión del equipo (\S{}9, decisión 12). Este estimador es también el criterio para comparar las demás formulaciones del paso 3.ii (CVaR, cota incondicional, PSM en línea).
 
+\subsection*{8.17 Resto del paso 3.ii: CVaR, PSM en línea, escenario orientado a la decisión y pérdida esperada (17-11-2026)}
+\addcontentsline{toc}{subsection}{8.17 Resto del paso 3.ii: CVaR, PSM en línea, escenario orientado a la decisión y pérdida esperada (17-11-2026)}
+\textbf{Estructura que lo simplifica todo.} Ante una falla que empieza ahora y dura $D$, el pico es $\mathrm{PCT}_{\rm pico}=\big(\hat y_k+d\big)+\Delta T(D)$. La decisión $u$ controla el primer término. El segundo depende de $D$ y del estado, pero no de $u$ dentro del horizonte. Es la \textbf{curva de calentamiento}: una sola simulación del ROM con el ACS apagado por consulta (\code{heatup\_curve}). Por esa estructura aditiva:
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Formulación del plan (\S{}8.12, 3.ii)} & \textbf{A qué se reduce} & \textbf{Margen $\Delta T$} \\
+\midrule
+\endhead
+2. Restricción probabilística (\S{}8.14) & $\hat y_k+d\le1220-\Delta T(q_{1-\alpha}(D))$ & cuantil de $D$ \\
+1. CVaR$_\beta$ por SAA (Rockafellar–Uryasev) & $\hat y_k+d\le1220-\mathrm{CVaR}_\beta[\Delta T(D)]$. Es exacto: el CVaR es invariante a traslaciones, así que la restricción RU con escenarios $\hat y_k+d+\Delta T(D_s)$ equivale a esa cota & media de la cola \\
+4. PSM en línea (Wilks, 59 corridas) & $\hat y_k+d\le1220-\Delta T(\max_{s\le59}D_s)$, con un sorteo nuevo en cada consulta & cuantil aleatorio 95/95 \\
+3. Escenario orientado a la decisión (Homem-de-Mello et al., 2026) & Existe y es explícito: cada cota equivale a resolver N2 determinista con el escenario $D^*$ tal que $\Delta T(D^*)$ es su margen & — \\
+Pérdida esperada (versión «incondicional») & $\rho\,\mathbb E_D[(\hat y_k+d+\Delta T(D)-1220)_+]$ en el costo. Es convexa, se aproxima por SAA sobre 40 cuantiles de $D$ y \textbf{no} se reduce a una cota & penalización suave \\
+\bottomrule
+\end{xltabular}}
+
+Implementación: modos \code{:cvar}, \code{:wilks} y \code{:expected} de \code{risk} en \code{julia/ClosedLoop.jl}, sobre 200 o 40 cuantiles estratificados de $D$. Las duraciones se truncan en 400 s, porque una falla más larga cruza con cualquier controlador. Experimento: \code{julia/f5b1c\_rb\_risk.jl}, evaluado con el estimador de Rao–Blackwell de \S{}8.16.
+
+\textbf{Resultados} (7 realizaciones comunes, semillas 201–207; las corridas se detuvieron por falta de memoria y son reanudables; figura \code{docs/figures/fig\_f5b\_risk\_formulations.pdf}):
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYY@{}}
+\toprule
+\textbf{Formulación} & \textbf{P(llegar a 1220 K dada una falla)} & \textbf{K bajo $y_{\rm ref}$} & \textbf{Masa} \\
+\midrule
+\endhead
+N2+sesgo & 0.028 & 0.0 & — \\
+Cota con cuantil, $\alpha$ = 0.05 / 0.02 / 0.01 & 0.028 / 0.014 / 0.010 & 0.1 / 7.2 / 12.8 & +0 / +16 / +31 \% \\
+CVaR, $\beta$ = 0.90 / 0.95 / 0.98 & 0.020 / 0.013 / 0.009 & 3.2 / 8.3 / 15.1 & +6 / +19 / +38 \% \\
+PSM en línea (Wilks 59) & 0.010 & 13.1 & +28 \% \\
+Pérdida esperada, $\rho$ = 10 / 100 / 1000 & 0.028 / 0.023 / 0.012 & 0.2 / 1.9 / 10.0 & +0 / +4 / +23 \% \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item \textbf{Las cuatro familias caen sobre la misma frontera riesgo–pre-enfriamiento.} Para un mismo nivel de riesgo piden el mismo pre-enfriamiento. Ninguna es más eficiente: sólo cambia el parámetro con que se recorre la frontera ($\alpha$, $\beta$, $\rho$ o el tamaño de la muestra de Wilks).
+\item \textbf{Equivalencias aproximadas:} CVaR$_{0.95}$ $\approx$ cuantil $\alpha$ $\approx$ 0.015; Wilks 59 $\approx$ $\alpha$ = 0.01, porque el máximo de 59 sorteos es, en promedio, un cuantil $\approx$ 0.98, con dispersión entre consultas.
+\item \textbf{Costo computacional:} las cotas (cuantil, CVaR, Wilks) agregan una simulación del ROM y una restricción por paso (\textasciitilde{}25 s por corrida de 481 consultas). La pérdida esperada agrega 26$\times$40 variables al QP (\textasciitilde{}85 s por corrida, 0.18 s por consulta). Las cuatro siguen en tiempo real.
+\item \textbf{Recomendación:} la cota con cuantil (\S{}8.14). Es la más simple, su parámetro es una probabilidad interpretable ($\alpha$) y su garantía se verificó (\S{}8.16). El CVaR conviene si el equipo prefiere controlar la severidad de la cola en vez de su probabilidad. Wilks agrega ruido entre consultas sin ganar eficiencia.
+\item \textbf{El resultado de Homem-de-Mello se cumple aquí de forma exacta:} con la estructura aditiva y monótona en $D$, la decisión estocástica es la de N2 determinista con un único escenario de falla $D^*$. El pronóstico «orientado a la decisión» es simplemente elegir $D^*$, es decir, el margen.
+\end{itemize}
+
+\textbf{Qué cambiaría esta conclusión:}
+
+\begin{enumerate}
+\item Si la falla redujera el caudal en lugar de anularlo (falla parcial), $\Delta$T dependería de $u$ y la reducción ya no sería exacta.
+\item Si se modelara la falla dentro del horizonte de 13 s, con la decisión de recuperación en juego.
+\item Con un ROM que no capture el calentamiento sin ACS. Aquí coincide con el HRM ($\approx$ 0.3 K/s).
+\end{enumerate}
+
 \medskip
 \section*{9. Decisiones abiertas}
 \addcontentsline{toc}{section}{9. Decisiones abiertas}

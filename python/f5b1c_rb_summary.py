@@ -17,7 +17,7 @@ by = defaultdict(dict)
 for r in rows:
     by[r["case"]][r["seed"]] = r
 ref = by["N2"]
-seeds = sorted(set.intersection(*[set(v) for v in by.values()]))
+seeds_all = sorted(set(ref))
 f = lambda r, k: float(r[k])
 
 
@@ -26,21 +26,24 @@ def ci(x):
     return x.mean(), 1.96 * x.std(ddof=1) / np.sqrt(len(x))
 
 
-order = ["N2", "N2_risk_a0.1", "N2_risk_a0.05", "N2_risk_a0.02", "N2_risk_a0.01", "PID", "PI"]
-print(f"{len(seeds)} realisations with every case\n")
-print(f"{'case':16s} {'P(cross|fail)':>16s} {'ratio vs N2 (paired)':>22s} {'P(cross)/240s':>14s} "
+order = ["N2", "N2_risk_a0.1", "N2_risk_a0.05", "N2_risk_a0.02", "N2_risk_a0.01",
+         "N2_cvar_b0.9", "N2_cvar_b0.95", "N2_cvar_b0.98", "N2_wilks59",
+         "N2_exp_r10", "N2_exp_r100", "N2_exp_r1000", "PID", "PI"]
+# each case is paired with N2 on its own seeds (the formulations of §8.17 ran on 12 seeds)
+print(f"{'case':16s} {'n':>3s} {'P(cross|fail)':>16s} {'ratio vs N2 (paired)':>22s} {'P(cross)/240s':>14s} "
       f"{'tau mean':>8s} {'tau min':>8s} {'ISE/ISE(N2)':>11s} {'mass':>6s} {'mean dev':>8s}")
 out = []
 for case in [c for c in order if c in by]:
     S = by[case]
+    seeds = sorted(set(S) & set(ref))
     pc = np.array([f(S[s], "p_cross_cond") for s in seeds]); p0 = np.array([f(ref[s], "p_cross_cond") for s in seeds])
     m, h = ci(pc); lr = np.log(pc / p0); rm, rh = ci(lr)
     pu = np.mean([f(S[s], "p_cross") for s in seeds])
     ise = np.mean([f(S[s], "ise") for s in seeds]) / np.mean([f(ref[s], "ise") for s in seeds])
-    print(f"{case:16s} {m:8.4f} ± {h:.4f} {np.exp(rm):8.3f} [{np.exp(rm - rh):.3f}, {np.exp(rm + rh):.3f}] "
+    print(f"{case:16s} {len(seeds):3d} {m:8.4f} ± {h:.4f} {np.exp(rm):8.3f} [{np.exp(rm - rh):.3f}, {np.exp(rm + rh):.3f}] "
           f"{pu:14.5f} {np.mean([f(S[s], 'tau_mean') for s in seeds]):8.1f} {np.mean([f(S[s], 'tau_min') for s in seeds]):8.1f} "
           f"{ise:11.2f} {np.mean([f(S[s], 'mass') for s in seeds]):6.0f} {np.mean([f(S[s], 'mean_dev') for s in seeds]):8.2f}")
-    out.append(dict(case=case, p_cond=m, p_cond_ci=h, ratio=np.exp(rm), ratio_lo=np.exp(rm - rh), ratio_hi=np.exp(rm + rh),
+    out.append(dict(case=case, n=len(seeds), p_cond=m, p_cond_ci=h, ratio=np.exp(rm), ratio_lo=np.exp(rm - rh), ratio_hi=np.exp(rm + rh),
                     p_uncond=pu, ise_ratio=ise, mass=np.mean([f(S[s], "mass") for s in seeds]),
                     mean_dev=np.mean([f(S[s], "mean_dev") for s in seeds])))
 with open(os.path.join(ROOT, "results", "f5b1c_rb_risk", "summary.csv"), "w", newline="") as fh:
