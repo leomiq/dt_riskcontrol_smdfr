@@ -219,6 +219,9 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   - The thesis PID (`ctrl = :PID`, `matlab/pid_controller.m`), replayed without the archived
     loop's extrapolation artefact, over-cools and never settles in the 0.30 K band. N2 has a
     2–50× lower IAE and settles in 3–14 s.
+- **Housekeeping (17 Nov).** F1b.4 (node-by-node HRM check in Simulink) is skipped: the
+  HRM steady-state temperature profiles were compared with Simulink, and the Julia replica
+  reproduces the archived run to 1e-6 K. Open decisions 1–5 and 7 are marked resolved.
 - **F5b, rest of step 3.ii (17 Nov, plan §8.17).**
   - Risk modes in `ClosedLoop.jl`: CVaR (exact reduction of the Rockafellar–Uryasev SAA),
     online Wilks-59 PSM, and an expected-excess penalty.

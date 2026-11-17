@@ -842,7 +842,7 @@ entradas archivadas.
 | **F1b.1** Ecuaciones del HRM | Extraer las 25 funciones y su cableado del `.slx`, y trazar cada término a su bloque, como en F0 | leo_acer | Ecuaciones escritas, con las diferencias frente al ROM explicadas |
 | **F1b.2** Réplica `ode1be` | `julia/SMDFRHRM.jl`, con una iteración de Newton y entradas en $t_{n+1}$ como en F1 (unos 50 estados: 13 de cinética, 36 térmicos e inventario), más la lógica del ACS. Fuga del archivo o del modelo de Park | leo_acer | Corre de 0 a 1180 s |
 | **F1b.3** Validación contra el archivo | Repetición de lazo abierto con la corriente y el estado del ACS archivados | leo_acer | Error de la PCT máxima ≤ 0.01 K en las ventanas de consulta y ≤ 0.1 K en toda la corrida; $T_{e,c}$ del nodo 12 igual |
-| **F1b.4** Confirmación con todos los estados | Registro de los 12 nodos en Simulink en varias consultas, incluida una corrida con falla del ACS | leo_asus (cuando esté disponible) | Error de estado ≈ precisión de máquina, como en F1 |
+| **F1b.4** Confirmación con todos los estados | Registro de los 12 nodos en Simulink en varias consultas, incluida una corrida con falla del ACS. *Saltada (17-11-2026, decisión del usuario):* el HRM se considera validado. Sus perfiles de temperatura en estado estacionario se compararon con el modelo de Simulink y, por lo tanto, con la réplica en Julia, que además reproduce la corrida archivada con un error de $10^{-6}$ K (F1b.3). | — | — |
 | **F4.5** Robustez en lazo abierto | Consultas nuevas generadas con la réplica del HRM, sin `build_query_from_archive.m`. Tres configuraciones del actuador (archivada; kg/s con rampa dura de 5 kg/s por paso; ampliada) para tener óptimos interiores. Perturbaciones del estado inicial, fuga severa ($B=15$) y estadística de los solvers. **Desajuste ROM–HRM**: re-simular en la réplica del HRM las acciones del NLP | leo_acer | N1/N2/N3 coinciden en $u_0$ en casi todas las consultas y el error ROM–HRM está medido |
 | **F5a.0** Banco de lazo cerrado | Interfaz `Plant` intercambiable (réplica del ROM, réplica del HRM y, después, Simulink). Controladores N1, N2 (iteración de tiempo real: un QP por consulta, relinealizado sobre la predicción desplazada) y N3 con arranque en caliente. Inicialización del ROM desde el HRM como en `DET_2`. Variante con costo $L_1$ para no cerrar la vía de §7.1 | leo_acer | Con la planta ROM y un pronóstico perfecto, la primera consulta reproduce el óptimo de lazo abierto |
 | **F5a.1** Lazo cerrado sobre el HRM | Las 61 consultas con planta HRM en Julia, pronóstico BiLSTM y MPC *offset-free* (estimación de la perturbación de salida). Líneas base: el lazo LJ archivado y el PID | leo_acer | Métricas listadas abajo para cada variante |
@@ -940,8 +940,7 @@ Inport extrapola linealmente el último paso: $u(t_k)=2u_{k-1}-u_{k-2}$.
   `tw_max_V2P_trajectory`. Debe reconstruirse con la réplica a partir de la serie de control
   aplicada (columna `pct_all_inputs_known` de `validation_1180_queries.csv`).
 
-**Estado.** F1b.1–F1b.3 cerrados. F1b.4 (todos los estados y una falla del ACS) queda para
-leo_asus. El siguiente paso es F4.5: construir consultas desde la réplica del HRM con la
+**Estado.** F1b.1–F1b.3 cerrados. F1b.4 (todos los estados y una falla del ACS) se saltó: *Saltada (17-11-2026, decisión del usuario):* el HRM se considera validado. Sus perfiles de temperatura en estado estacionario se compararon con el modelo de Simulink y, por lo tanto, con la réplica en Julia, que además reproduce la corrida archivada con un error de $10^{-6}$ K (F1b.3). El siguiente paso es F4.5: construir consultas desde la réplica del HRM con la
 inicialización del ROM de `DET_2`, verificarlas contra las consultas de F1 y medir el
 desajuste ROM–HRM.
 
@@ -1413,11 +1412,12 @@ realizaciones cada una, más los pasos 1–3. Las diferencias pareadas se inform
 
 | Paso | Qué | Máquina | Criterio de cierre |
 |---|---|---|---|
-| **F5b.1a** Capacidad y rampa | Barrido $\dot m_{\max}$ × rampa, N2+sesgo vs PI limitado | leo_acer | Mapa de regímenes |
-| **F5b.0** Gemelo | Caudal medido del ACS; filtro de Kalman de tendencia lineal; ruido y saltos | leo_acer | Cobertura de $\Sigma_L$ y efecto en el lazo |
+| **F5b.1a** Capacidad y rampa | Barrido $\dot m_{\max}$ × rampa, N2+sesgo vs PI limitado — hecho, §8.13 | leo_acer | Mapa de regímenes |
+| **F5b.0** Gemelo | Caudal medido del ACS; filtro de Kalman de tendencia lineal; ruido y saltos — hecho, §8.13 | leo_acer | Cobertura de $\Sigma_L$ y efecto en el lazo |
 | **F5b.1b0** Peso del DSM como en la tesis | Barrido de $\lambda_{\rm dsm}$ (0–10⁶) en la realización archivada, la familia nominal y la DET acelerada; N2+DSM vs el PID de la tesis con sus métricas (IAE, tiempo en alcanzar y asentarse, error estacionario…) — hecho, §8.15 | leo_acer | Tabla de métricas de la tesis |
 | **F5b.1b** Márgenes deterministas | N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ — hecho, §8.13 | leo_acer | Frontera margen–costo |
-| **F5b.1c** Riesgo probabilístico | CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) | leo_acer → Olab | Frontera costo–riesgo pareada |
+| **F5b.1c** Riesgo probabilístico | CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) — hecho con fallas totales, §8.14–8.17 (estimador de Rao–Blackwell, §8.16) | leo_acer | Frontera costo–riesgo pareada |
+| **F5b.1d** Fallas parciales del ACS | Caudal entregado $\eta\,u$ con $\eta$ incierto dentro del horizonte: el riesgo multiplica a la decisión y deja de ser un margen fijo (§8.18) | leo_acer | Frontera costo–riesgo por formulación |
 | **F5b.2** Campaña | Todo lo anterior, ≥ 100 realizaciones por familia | Olab | IC al 95 % |
 
 ### 8.13 Resultados de los pasos 1, 2 y 3.i (16-11-2026)
@@ -1655,7 +1655,8 @@ Figura: `docs/figures/fig_f5b_risk_frontier.pdf`.
    llevar la PCT a 1220 K sin ACS. Es un estimador de Rao–Blackwell: usa la distribución
    conocida de $D$ en lugar de sortearla.
 2. *Versión incondicional* de la cota, que descuenta la probabilidad de que no haya falla
-   (cono exponencial), y el CVaR por SAA sobre escenarios de falla.
+   (cono exponencial), y el CVaR por SAA sobre escenarios de falla. *El CVaR se hizo en §8.17;
+   la versión incondicional sigue pendiente (tasa de cruce de todo el transitorio en el costo).*
 3. *PSM en línea* (Wilks 59) con horizonte de riesgo ≥ $q_{1-\alpha}(D)$.
 4. Confirmar con el equipo la aceleración (λ×10⁵, μ×10⁴) y el α objetivo. Con las tasas
    reales, toda falla dura días y ningún controlador evita los 1220 K: la capa de riesgo sólo
@@ -1777,7 +1778,7 @@ en la 251 y es reanudable; comparación pareada con N2):
 **Implicación.** La cota de riesgo es un control explícito y calibrado: α fija el riesgo
 condicional y el pre-enfriamiento es su precio. Elegir α es una decisión del equipo (§9,
 decisión 12). Este estimador es también el criterio para comparar las demás formulaciones
-del paso 3.ii (CVaR, cota incondicional, PSM en línea).
+del paso 3.ii (CVaR, PSM en línea, pérdida esperada; §8.17).
 
 ### 8.17 Resto del paso 3.ii: CVaR, PSM en línea, escenario orientado a la decisión y pérdida esperada (17-11-2026)
 
@@ -1793,7 +1794,7 @@ término. El segundo depende de $D$ y del estado, pero no de $u$ dentro del hori
 | 1. CVaR$_\beta$ por SAA (Rockafellar–Uryasev) | $\hat y_k+d\le1220-\mathrm{CVaR}_\beta[\Delta T(D)]$. Es exacto: el CVaR es invariante a traslaciones, así que la restricción RU con escenarios $\hat y_k+d+\Delta T(D_s)$ equivale a esa cota | media de la cola |
 | 4. PSM en línea (Wilks, 59 corridas) | $\hat y_k+d\le1220-\Delta T(\max_{s\le59}D_s)$, con un sorteo nuevo en cada consulta | cuantil aleatorio 95/95 |
 | 3. Escenario orientado a la decisión (Homem-de-Mello et al., 2026) | Existe y es explícito: cada cota equivale a resolver N2 determinista con el escenario $D^*$ tal que $\Delta T(D^*)$ es su margen | — |
-| Pérdida esperada (versión «incondicional») | $\rho\,\mathbb E_D[(\hat y_k+d+\Delta T(D)-1220)_+]$ en el costo. Es convexa, se aproxima por SAA sobre 40 cuantiles de $D$ y **no** se reduce a una cota | penalización suave |
+| Pérdida esperada | $\rho\,\mathbb E_D[(\hat y_k+d+\Delta T(D)-1220)_+]$ en el costo, condicional a una falla que empieza ahora (ρ absorbe la probabilidad de falla; *no* es la versión incondicional). Es convexa, se aproxima por SAA sobre 40 cuantiles de $D$ y **no** se reduce a una cota | penalización suave |
 
 Implementación: modos `:cvar`, `:wilks` y `:expected` de `risk` en `julia/ClosedLoop.jl`, sobre
 200 o 40 cuantiles estratificados de $D$. Las duraciones se truncan en 400 s, porque una falla
@@ -1843,10 +1844,15 @@ memoria y son reanudables; figura `docs/figures/fig_f5b_risk_formulations.pdf`):
 
 1. **ROM o HRM como restricción**: el ROM (16 estados) es suficiente para empezar; el HRM
    de 12 nodos multiplica los estados TH por 12 y elimina la corrección $p_4$.
+   *Resuelta: ROM, con el HRM como planta (F5a) y corrección de sesgo; desajuste ≤ 0.12 K.*
 2. **Herramienta**: JuMP + Ipopt (Julia), CasADi (Python/MATLAB) o fmincon. Ver §6.
+   *Resuelta: Julia con JuMP, Ipopt (N3) y Clarabel (N1/N2).*
 3. **PJA y pared cuasiestática**: reducen la rigidez, pero hay que medir su error.
+   *Resuelta: no hicieron falta; el ROM completo se resuelve en tiempo real.*
 4. **Corrección de la PCT**: mantener $p_4$, reconectar la BiLSTM o ambas.
+   *Resuelta (con el usuario): $p_4$ con corrección de sesgo offset-free; la BiLSTM no entra en N2.*
 5. **Norma del seguimiento**: cuadrática (P0) o $L_1$ (compatible con el teorema de §7.1).
+   *Resuelta en la práctica: cuadrática (P0) en N1–N3.*
 6. **Cota del actuador en unidades físicas** (§8.3): la cota en amperios (56.75 o 56.90 A)
    **no tiene significado físico**. El ECM es el de una bomba principal y la ventana de
    0.06 A es un artefacto de usar el pie de su curva. La decisión es de caudal:
@@ -1861,6 +1867,7 @@ memoria y son reanudables; figura `docs/figures/fig_f5b_risk_formulations.pdf`):
    diferenciación automática y JuMP. El pronóstico BiLSTM puede pasarse como datos desde
    Python o cargarse en ONNX. Queda por confirmar si Olab tiene MATLAB: si no lo tiene, la
    réplica del HRM es la única planta posible allí.
+   *Resuelta: Julia (`julia/SMDFRHRM.jl`).*
 8. **Límite de seguridad del margen** (§8.11–8.12): el DSM y $U_y$ usan 1244 K, pero el DET
    termina en 1220 K. Hay que decidir con el equipo qué límite normaliza el DSM y el PSM.
 9. **PI+DSM** (§8.12, paso 3.i): cómo dar al PI un margen equivalente para una comparación

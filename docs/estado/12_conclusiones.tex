@@ -89,8 +89,9 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
         evidencia de optimalidad local reproducible.
   \item El Monte Carlo tiene 6 realizaciones nominales/estresadas y 14 extremas. Bastan para
         las comparaciones pareadas con intervalos estrechos, no para estimar colas.
-  \item La réplica del HRM se validó contra una sola realización archivada y en las salidas
-        que usa el lazo. La validación nodo a nodo y con falla del ACS queda para leo\_asus.
+  \item La réplica del HRM se validó contra la realización archivada (error de $10^{-6}$~K) y
+        sus perfiles de temperatura en estado estacionario coinciden con los de Simulink. No se
+        comparó nodo a nodo durante una falla del ACS.
   \item El pronóstico de fuga en el lazo es perfecto o tiene un sesgo constante; el ensamble
         BiLSTM todavía no está en el lazo.
   \item La certificación vale para P0 sobre el ROM. No dice nada sobre el desajuste entre el
@@ -112,6 +113,4 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
   \item \textbf{Confirmar con el equipo} la capacidad del ACS, la aceleración de las tasas de
         falla y el $\alpha$ objetivo.
   \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).
-  \item \textbf{Validación nodo a nodo del HRM} y corrida con falla del ACS en Simulink
-        (leo\_asus).
 \end{enumerate}
