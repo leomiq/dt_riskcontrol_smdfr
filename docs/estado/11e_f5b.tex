@@ -157,6 +157,15 @@ Rao--Blackwell). Caen sobre la misma frontera: ninguna pide menos pre-enfriamien
 mismo riesgo.}
 \end{figure}
 
+\paragraph{Fallas parciales.} Si una falla saca sólo parte del ACS (la planta recibe $\eta\,u$),
+la incertidumbre multiplica a la decisión y el CVaR o la pérdida esperada con escenarios dentro
+del horizonte ya no se reducen a una cota. Se supuso un ACS de 4 trenes, con
+$\eta\in\{0.75,0.5,0.25,0\}$ y probabilidades $\{0.4,0.3,0.2,0.1\}$. Resultado: las fallas parciales
+casi no agregan riesgo. Con caudal parcial la PCT sube más lento, y la probabilidad de que la
+falla dure más que ese tiempo cae exponencialmente. El riesgo de N2 queda en 0.0026, dominado
+por el 10\,\% de fallas totales. Las formulaciones con escenarios quedan inactivas, y una cota
+que conoce $\eta$ equivale a la de falla total con $\alpha$ reescalado ($\alpha_\eta\approx0.1\,\alpha$).
+
 \takeaway{La cota de riesgo cumple su garantía: $P(\text{cruce}\mid\text{falla})\le\alpha$. Reducir
 el riesgo a la mitad cuesta trabajar 7.5~K bajo la consigna y un 17\,\% más de masa, y elegir
 $\alpha$ es una decisión del equipo. Contra el mismo criterio, el PID de la tesis es un 5\,\% más

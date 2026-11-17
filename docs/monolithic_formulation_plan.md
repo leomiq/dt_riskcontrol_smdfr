@@ -1417,7 +1417,7 @@ realizaciones cada una, más los pasos 1–3. Las diferencias pareadas se inform
 | **F5b.1b0** Peso del DSM como en la tesis | Barrido de $\lambda_{\rm dsm}$ (0–10⁶) en la realización archivada, la familia nominal y la DET acelerada; N2+DSM vs el PID de la tesis con sus métricas (IAE, tiempo en alcanzar y asentarse, error estacionario…) — hecho, §8.15 | leo_acer | Tabla de métricas de la tesis |
 | **F5b.1b** Márgenes deterministas | N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ — hecho, §8.13 | leo_acer | Frontera margen–costo |
 | **F5b.1c** Riesgo probabilístico | CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) — hecho con fallas totales, §8.14–8.17 (estimador de Rao–Blackwell, §8.16) | leo_acer | Frontera costo–riesgo pareada |
-| **F5b.1d** Fallas parciales del ACS | Caudal entregado $\eta\,u$ con $\eta$ incierto dentro del horizonte: el riesgo multiplica a la decisión y deja de ser un margen fijo (§8.18) | leo_acer | Frontera costo–riesgo por formulación |
+| **F5b.1d** Fallas parciales del ACS | Caudal entregado $\eta\,u$ con $\eta$ incierto dentro del horizonte: el riesgo multiplica a la decisión y deja de ser un margen fijo — hecho, §8.18: casi no agregan riesgo; la cota de falla total con α reescalado basta | leo_acer | Frontera costo–riesgo por formulación |
 | **F5b.2** Campaña | Todo lo anterior, ≥ 100 realizaciones por familia | Olab | IC al 95 % |
 
 ### 8.13 Resultados de los pasos 1, 2 y 3.i (16-11-2026)
@@ -1837,6 +1837,66 @@ memoria y son reanudables; figura `docs/figures/fig_f5b_risk_formulations.pdf`):
 2. Si se modelara la falla dentro del horizonte de 13 s, con la decisión de recuperación en
    juego.
 3. Con un ROM que no capture el calentamiento sin ACS. Aquí coincide con el HRM (≈ 0.3 K/s).
+
+### 8.18 Fallas parciales del ACS dentro del horizonte (F5b.1d, 17-11-2026)
+
+**Por qué podían cambiar la conclusión de §8.17.** Con una falla total, la decisión no importa
+durante la falla y todas las formulaciones se reducen a un margen. Con una falla parcial de
+severidad $\eta$, la planta recibe $\eta\,u$: la incertidumbre **multiplica a la decisión**.
+Dentro del horizonte, para una falla que empieza en el paso $j$,
+$\hat y_k(u)=y_{0,k}+\sum_{i<j}G_{k,i}u_i+\eta\sum_{i\ge j}G_{k,i}u_i$, y el exceso ya no es
+«predicción sin falla + constante». Esto da formulaciones que no se reducen a una cota.
+
+**Modelo de falla parcial (supuesto, a confirmar con el equipo; el DET no tiene fallas
+parciales).** Los instantes y las duraciones salen de la familia DET acelerada (§8.14). Cada
+falla saca de 1 a 4 de 4 trenes paralelos: $\eta\in\{0.75,0.5,0.25,0\}$ con probabilidades
+$\{0.4,0.3,0.2,0.1\}$. Durante la falla, N2 empuja al máximo y la planta recibe
+$\eta\,\dot m_{\max}$.
+
+**Formulaciones** (modos de `risk` en `julia/ClosedLoop.jl`; experimento
+`julia/f5b1d_partial.jl`):
+
+- **Cota de falla total** (§8.14, α = 0.02): supone $\eta=0$.
+- **Cota con η** (`:var_eta`): $U=1220-m$, con $\sum_\eta p_\eta P(\Delta T_\eta(D)>m)=\alpha$, donde
+  $\Delta T_\eta$ es el calentamiento con caudal $\eta\,\dot m_{\max}$ (ROM).
+- **CVaR con escenarios dentro del horizonte** (`:scen_cvar`) y **pérdida esperada con
+  escenarios** (`:scen_exp`). Los escenarios combinan inicio $j\in\{1,6,\dots,26\}$, $\eta$ y $D$
+  en 10 cuantiles; el exceso es afín en $u$ con pendiente que depende del escenario
+  (Rockafellar–Uryasev, o una bisagra en el costo). **No** se reducen a una cota.
+
+**Evaluación.** Rao–Blackwell (§8.16) generalizado a severidades:
+$\sum_\eta p_\eta\,S(\tau_\eta(x_t))$, donde $\tau_\eta$ es el tiempo del HRM hasta 1220 K con caudal
+$\eta\,\dot m_{\max}$. Una falla que no cruza en 400 s cuenta como «no cruza».
+
+**Resultados** (40 kg/s, rampa 5, semillas 201–204; los casos con escenarios, en la semilla 201
+con 40 y 30 kg/s; `results/f5b1d_partial/`):
+
+| Caso | P(cruce dada una falla) | K bajo $y_{\rm ref}$ |
+|---|---|---|
+| N2+sesgo | 0.0026 (0.0015–0.0036) | 0.0 |
+| Cota de falla total, α = 0.02 | 0.0014 | 6.2 |
+| Cota con η, α = 0.002 | 0.0014 (igual a la anterior, diferencia ≤ 0.02 K) | 6.2 |
+| Cota con η, α = 0.05 y 0.01 | = N2 (inactiva) | 0.0 |
+| CVaR con escenarios, β = 0.90 y 0.98 (40 y 30 kg/s) | = N2 (inactivo) | 0.0 |
+| Pérdida esperada con escenarios, ρ = 100 (30 kg/s) | = N2 (inactiva) | 0.0 |
+
+- **Las fallas parciales casi no agregan riesgo.** Con caudal parcial la PCT sube a
+  $\approx\dot T_0\,(1-\eta\dot m_{\max}/\text{fuga})$, así que tarda más en llegar a 1220 K. Como la
+  duración es exponencial (media 46 s), $P(D>\tau_\eta)$ cae exponencialmente con ese retraso.
+  Para $\eta=0.25$ a 30 kg/s, τ pasa de ~160 a ~256 s y su peso baja a ~12 %. Para $\eta\ge0.5$,
+  a cero. El riesgo lo dominan las fallas totales: P(cruce | falla) ≈ 0.1 × 0.031.
+- **Por eso, una cota con η equivale a la de falla total con α reescalado**
+  ($\alpha_\eta\approx p_{\eta=0}\,\alpha_{\rm total}$). Con α = 0.002 reproduce exactamente la cota
+  total de α = 0.02.
+- **Las formulaciones con escenarios dentro del horizonte no cambian nada.** El pico llega al
+  final de la falla, casi siempre después de los 13 s del horizonte. La parte
+  multiplicativa dentro del horizonte pesa poco frente al calentamiento posterior, y el
+  riesgo de N2 ya está bajo sus umbrales.
+- **Conclusión:** con el modelo de fallas del DET (duraciones exponenciales), la cota de falla
+  total sigue siendo la formulación relevante. Basta fijar su α pensando en la fracción de
+  fallas que son totales. La estructura multiplicativa importaría con duraciones de cola
+  pesada, con fallas parciales severas y frecuentes, o con capacidad muy por debajo de la
+  fuga, donde N2 ya está saturado (§8.13).
 
 ---
 

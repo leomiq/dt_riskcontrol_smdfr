@@ -219,6 +219,14 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   - The thesis PID (`ctrl = :PID`, `matlab/pid_controller.m`), replayed without the archived
     loop's extrapolation artefact, over-cools and never settles in the 0.30 K band. N2 has a
     2–50× lower IAE and settles in 3–14 s.
+- **F5b.1d, partial ACS failures (17 Nov, plan §8.18).**
+  - Model: the plant receives η·u, with 4 ACS trains (η ∈ {0.75, 0.5, 0.25, 0}, assumed)
+    and DET-accelerated timing. Scenario CVaR and expected excess inside the horizon are
+    genuine (non-bound) formulations (`julia/f5b1d_partial.jl`).
+  - Result: partial failures add almost no risk. Heating is slower, so P(D > τ) drops
+    exponentially. N2's P(cross | failure) is 0.0026, dominated by total failures.
+  - The scenario formulations stay inactive, and an η-aware bound equals the
+    total-failure bound with a rescaled α.
 - **Housekeeping (17 Nov).** F1b.4 (node-by-node HRM check in Simulink) is skipped: the
   HRM steady-state temperature profiles were compared with Simulink, and the Julia replica
   reproduces the archived run to 1e-6 K. Open decisions 1–5 and 7 are marked resolved.

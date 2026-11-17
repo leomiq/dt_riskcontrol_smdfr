@@ -192,6 +192,29 @@ function solve_qp(c, C, act)
         @constraint(md, [k = 1:K, i = 1:nq], y[k] + c.d + c.exp_dT[i] - c.U_lim <= w[k, i])
         obj = @expression(md, obj + c.rho / nq * sum(w))
     end
+    if get(c, :scen, nothing) !== nothing          # F5b.1d: scenarios (j, η, D) inside the horizon
+        sc = c.scen                                 # excess_s = a_s·u + b_s (affine in u, η multiplies u)
+        A = zeros(0, K); bsc = Float64[]; wsc = Float64[]
+        for j in sc.J, (ie, η) in enumerate(sc.etas), D in sc.Dq
+            ks = min(K, j + ceil(Int, D / h))       # end of the failure, or the horizon end
+            Drem = max(D - (ks - j + 1) * h, 0.0)  # failure time left after step ks
+            e = [i < j ? 1.0 : η for i in 1:K]; e[ks+1:end] .= 0
+            A = vcat(A, (C.G[ks, :] .* e)')
+            push!(bsc, C.y0[ks] + c.d + (Drem > 0 ? dT_at(sc.curves[ie], Drem) : 0.0) - 1220.0)
+            push!(wsc, sc.peta[ie] / (length(sc.J) * length(sc.Dq)))
+        end
+        nsc = length(bsc)
+        z = @variable(md, [1:nsc], lower_bound = 0)
+        if sc.kind == :cvar                         # CVaR_β(excess) ≤ 0, soft (ℓ1)
+            tv = @variable(md); vv = @variable(md, lower_bound = 0)
+            @constraint(md, [i = 1:nsc], z[i] >= sum(A[i, j] * u[j] for j in 1:K) + bsc[i] - tv)
+            @constraint(md, tv + sum(wsc[i] * z[i] for i in 1:nsc) / (1 - sc.beta) <= vv)
+            obj = @expression(md, obj + sc.lam * vv)
+        else                                        # ρ E[(excess)₊]
+            @constraint(md, [i = 1:nsc], z[i] >= sum(A[i, j] * u[j] for j in 1:K) + bsc[i])
+            obj = @expression(md, obj + sc.rho * sum(wsc[i] * z[i] for i in 1:nsc))
+        end
+    end
     if act.ramp == :soft
         s = @variable(md, [1:K-1], lower_bound = 0)
         @constraint(md, [k = 1:K-1], u[k+1] - u[k] <= F4Lib.dm_lim + s[k])
@@ -239,24 +262,25 @@ end
 """
     heatup_curve(c, yhat_now, tmax)
 
-Heat-up of the PCT if the ACS failed now and stayed off: the ROM (ACS = 0, leak held at its
+Heat-up of the PCT if the ACS failed now and stayed off (or, with `acs` > 0, delivered that
+constant flow: partial failure, F5b.1d): the ROM (ACS = 0, leak held at its
 current value) from the query state, ΔT(t) = max_{s ≤ t} ŷ_noACS(s) − ŷ_now on t = 0:Δt:tmax
 (non-decreasing; it includes the instantaneous p₄ jump when the flow drops). If the ROM breaks
 down (inventory exhausted) the last rate is extrapolated. Shared by every risk formulation of
 F5b.1c (plan §8.14, §8.17): under the additive model PCT_peak = PCT(t_f) + ΔT(D), the duration
 D enters only through ΔT.
 """
-function heatup_curve(c, yhat_now, tmax)
+function heatup_curve(c, yhat_now, tmax; acs = 0.0)
     n = ceil(Int, tmax / h)
     X = nothing; nok = n
     while X === nothing && nok >= 4
         X = try
-            R4.simulate(c.x_init, fill(c.leak0, nok + 1), zeros(nok + 1), h, c.p; scheme = :ode1be, input_at = :next)
+            R4.simulate(c.x_init, fill(c.leak0, nok + 1), fill(acs, nok + 1), h, c.p; scheme = :ode1be, input_at = :next)
         catch err
             err isa DomainError || rethrow(); nok ÷= 2; nothing
         end
     end
-    y = [R4.output(X[i, :], c.leak0, 0.0, c.p) for i in axes(X, 1)]
+    y = [R4.output(X[i, :], c.leak0, acs, c.p) for i in axes(X, 1)]
     dT = accumulate(max, y) .- yhat_now
     if nok < n
         r = max((y[end] - y[end-1]) / h, 0.0)
@@ -310,7 +334,8 @@ Closed loop from t_start over `n` queries. Returns a NamedTuple of per-query log
 Plant perturbations the MPC does not know about (F5a.2):
   `eta`   ACS efficiency: the plant receives η·ṁ for a commanded ṁ (degraded ACS);
   `fail`  (t_a, t_b), or a vector of such windows (F5b.1c, from the DET component Markov
-          chains): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
+          chains): the ACS delivers nothing for t_a < t ≤ t_b (forced failure); a window
+          (t_a, t_b, η) is a PARTIAL failure (F5b.1d): the ACS delivers η·ṁ (η = 0: total);
   `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
   `audit(c, L, act, prev, dec)` optional callback after each MPC decision (same query data).
 `ctrl = :PI` leaves the plant to the DET's own PI (active_mpc = 0); `fail` applies to it
@@ -342,7 +367,16 @@ penalty `lam` [1/K] on the slack). Other formulations (plan §8.17), all on `hea
                                       (online 95/95 PSM);
   `(mode = :expected, rho, Dq)`       cost ρ/N Σ_k Σ_i (ŷ_k + d + ΔT(D_i) − 1220)₊ (expected
                                       excess given a failure now; convex, no bound).
-  `Dcap` (400 s) caps D: a failure longer than that crosses 1220 K whatever the controller. for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
+  `Dcap` (400 s) caps D: a failure longer than that crosses 1220 K whatever the controller.
+Partial failures (F5b.1d, plan §8.18; severities `etas` with probabilities `peta`, the ACS then
+delivers η·`mmax` at most):
+  `(mode = :var_eta, alpha, etas, peta, dist, mmax, lam)`  U = 1220 − m with
+                                      Σ_η p_η P(ΔT_η(D) > m) = α (η-aware margin; still a bound);
+  `(mode = :scen_cvar | :scen_exp, J, etas, peta, Dq, mmax, beta | rho, lam)`  scenarios
+                                      (failure start j ∈ J inside the horizon, η, D): the
+                                      delivered flow is η·u from j on, so the excess is affine in
+                                      u with a scenario-dependent slope (not a bound); CVaR_β of
+                                      the excess (Rockafellar–Uryasev) or ρ·E[excess₊]. for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
 `log.ubound` keeps U_α per query (NaN without `risk`).
 `ctrl = :PID` is the thesis PID (`matlab/pid_controller.m`, used in
 `DET_scheduler_v1_perc_online.m` and `run_phase2c_full_loop.m`): on e = y_ref − PCT(τ),
@@ -382,13 +416,16 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         filt = LeakKF(ymeas(t_kf); par..., thr = forecast == :kalman ? kf_thr : Inf)
     end
     acs_meas = measured_acs ? (t -> hist[t][2].m_last) : nothing
-    fails = fail === nothing ? Tuple{Float64,Float64}[] : fail isa Tuple ? [fail] : fail
+    fails = fail === nothing ? Tuple{Float64,Float64,Float64}[] : fail isa Tuple ? [fail] : fail
+    fails = [length(f) == 2 ? (f[1], f[2], 0.0) : (f[1], f[2], f[3]) for f in fails]   # (t_a, t_b, η)
     leak_meas = leak_noise > 0 ? ymeas : nothing
     for k in 1:n
         t_q = B.t_start + (k - 1) * h; τ = t_q - h
         x, Lg, pct_now = hist[τ]
         xH10, L10, _ = hist[t_q-DELAY]
-        failed = any(a < t_q <= b for (a, b) in fails)
+        eta_f = minimum((e for (a, b, e) in fails if a < t_q <= b); init = 1.0)   # 1: no failure
+        failed = eta_f <= 0.0
+        ctrl == :PI && 0 < eta_f < 1 && error("partial failures are not implemented for the DET PI")
         if ctrl == :PI                       # the DET's own PI drives the pump (no twin needed)
             T = vcat(T, t_q); U = vcat(U, [0.0 0.0]); Up = vcat(Up, failed ? [56.0 1.0] : [0.0 0.0])
             s = try
@@ -441,6 +478,19 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
                 elseif mode == :wilks                         # 95/95 Wilks: max of 59 fresh draws
                     Dm = maximum(failure_sample(wrng, risk.dist) for _ in 1:get(risk, :n, 59))
                     ub = 1220.0 - dT_at(curve, min(Dm, Dcap))
+                elseif mode == :var_eta                       # quantile of the joint (η, D) margin
+                    curves = [heatup_curve(c, yhat_now, Dcap; acs = e * risk.mmax) for e in risk.etas]
+                    pexc(m) = sum(pe * (let i = findfirst(>=(m), cv); i === nothing ? 0.0 :
+                                  failure_surv((i - 1) * h, risk.dist) end) for (pe, cv) in zip(risk.peta, curves))
+                    lo, hi = 0.0, maximum(maximum.(curves))
+                    for _ in 1:60; m = (lo + hi) / 2; pexc(m) > risk.alpha ? (lo = m) : (hi = m); end
+                    ub = 1220.0 - hi
+                elseif mode in (:scen_cvar, :scen_exp)        # in-horizon partial-failure scenarios
+                    curves = [heatup_curve(c, yhat_now, Dcap; acs = e * risk.mmax) for e in risk.etas]
+                    c = (; c..., scen = (J = risk.J, etas = risk.etas, peta = risk.peta,
+                         Dq = [min(D, Dcap) for D in risk.Dq], curves,
+                         kind = mode == :scen_cvar ? :cvar : :exp, beta = get(risk, :beta, 0.95),
+                         rho = get(risk, :rho, 0.0), lam = get(risk, :lam, 1e3)))
                 elseif mode == :expected                      # ρ E[(peak − 1220)₊], no bound
                     c = (; c..., exp_dT = [dT_at(curve, min(D, Dcap)) for D in risk.Dq], rho = risk.rho,
                          U_lim = 1220.0)
@@ -448,7 +498,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
                     error("risk mode $mode")
                 end
             end
-            mode == :expected || (c = (; c..., ubound = ub, lam_r = risk.lam))
+            mode in (:expected, :scen_cvar, :scen_exp) || (c = (; c..., ubound = ub, lam_r = risk.lam))
         end
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)
@@ -471,7 +521,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             dec = (m = fill(m1, K), status = "-", time = 0.0)
         end
         u1 = m1 > 0 ? F4Lib.massflow_to_current(m1) : 56.0                  # 56 A: pump off
-        mp = failed ? 0.0 : eta * m1                                         # real flow
+        mp = failed ? 0.0 : eta_f * eta * m1                                 # real flow
         up = mp > 0 ? F4Lib.massflow_to_current(mp) : 56.0
         T = vcat(T, t_q); U = vcat(U, [u1 1.0]); Up = vcat(Up, [up 1.0])
         s = try
@@ -521,10 +571,12 @@ Time τ for the PCT of the HRM (the plant) to exceed `U` if the ACS is off from 
 failed: zero flow, whatever the PI or the MPC ask), starting from the plant state `x` and DET
 logic `logic` at `t`. Simulated in chunks of `chunk` s up to `t_cap` (returns `t_cap` if not
 reached) or until the inventory is exhausted (returns the time reached). Used by the
-Rao–Blackwell risk estimator of F5b.1c (plan §8.16).
+Rao–Blackwell risk estimator of F5b.1c (plan §8.16). `flow` > 0: partial failure, the ACS
+delivers that constant flow (F5b.1d; the plant capacity and ramp still apply).
 """
-function time_to_limit(pH, x, logic, t; U = 1220.0, t_cap = 600.0, chunk = 50.0)
-    ext = ExtInput([t, t + t_cap + chunk], [56.0 1.0; 56.0 1.0])     # 56 A: zero flow
+function time_to_limit(pH, x, logic, t; U = 1220.0, t_cap = 600.0, chunk = 50.0, flow = 0.0)
+    cur = flow > 0 ? F4Lib.massflow_to_current(flow) : 56.0          # 56 A: zero flow
+    ext = ExtInput([t, t + t_cap + chunk], [cur 1.0; cur 1.0])
     t0 = t; xx = x; L = logic
     while t0 < t + t_cap
         s = try
@@ -534,6 +586,9 @@ function time_to_limit(pH, x, logic, t; U = 1220.0, t_cap = 600.0, chunk = 50.0)
         end
         i = findfirst(>(U), s.pct)
         i === nothing || return s.t[i] - t
+        # partial failure: if the PCT is already falling with a constant flow it will not cross
+        # (the leak of Park's law only shrinks with time, so the net cooling only grows)
+        flow > 0 && s.pct[end] < s.pct[1] - 0.5 && return t_cap
         t0 += chunk; xx = s.x; L = s.logic
     end
     t_cap

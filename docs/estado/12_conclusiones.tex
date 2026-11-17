@@ -47,6 +47,8 @@
         CVaR, el PSM en línea de Wilks y el escenario orientado a la decisión se reducen a una
         cota sobre la PCT, y la pérdida esperada cae sobre la misma frontera. Ninguna es más
         eficiente; la cota con cuantil es la más simple y su garantía está verificada.
+        Con fallas parciales (la planta recibe $\eta\,u$) tampoco cambia: casi no agregan
+        riesgo, y una cota que conoce $\eta$ equivale a la de falla total con $\alpha$ reescalado.
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -108,8 +110,8 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
 \begin{enumerate}
   \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
         medida (sección~\ref{sec:f5b}).
-  \item \textbf{Fallas parciales del ACS} (caudal reducido en vez de nulo): ahí el calentamiento
-        depende de la decisión y las formulaciones de riesgo dejan de coincidir.
+  \item \textbf{Confirmar el modelo de fallas parciales} (trenes del ACS y probabilidad de cada
+        severidad); con duraciones de cola pesada la estructura multiplicativa sí importaría.
   \item \textbf{Confirmar con el equipo} la capacidad del ACS, la aceleración de las tasas de
         falla y el $\alpha$ objetivo.
   \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).
