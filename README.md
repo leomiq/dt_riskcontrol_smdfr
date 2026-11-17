@@ -207,6 +207,18 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     margin is its 1144 K setpoint.
   - Step 3.ii needs a failure family where free decisions and risk coexist (open decision
     11).
+- **F5b, step 3.i.0: thesis DSM weight sweep, N2+DSM vs the thesis PID (17 Nov, plan
+  §8.15).**
+  - Sweep: λ_dsm from 0 to 1e6 with U = 1244 or 1220 K, on the archived realisation (thesis
+    grid), 20 nominal realisations and the DET-accelerated family; archived and widened pump
+    (`julia/f5b1b0_dsm_lambda.jl`). Comparison uses the thesis indices: IAE, reach and
+    settling time, steady-state error, overshoot, peak PCT, total variation.
+  - The DSM weight does not change N2's trajectory. Its threshold is a 0.15 K band above the
+    setpoint, and N2 already tracks inside it. In the thesis the term fired because of the
+    sub-optimal LJ and prediction mismatch.
+  - The thesis PID (`ctrl = :PID`, `matlab/pid_controller.m`), replayed without the archived
+    loop's extrapolation artefact, over-cools and never settles in the 0.30 K band. N2 has a
+    2–50× lower IAE and settles in 3–14 s.
 - **F5b, step 3.ii: risk bound on N2 against DET-like failures (16 Nov, plan §8.14).**
   - ACS failures now follow the DET model: 5 components in series, each an up ⇄ down Markov
     chain. The rates are accelerated (λ×1e5, μ×1e4) as in the commented importance-sampling

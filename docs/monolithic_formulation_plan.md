@@ -1415,7 +1415,8 @@ realizaciones cada una, más los pasos 1–3. Las diferencias pareadas se inform
 |---|---|---|---|
 | **F5b.1a** Capacidad y rampa | Barrido $\dot m_{\max}$ × rampa, N2+sesgo vs PI limitado | leo_acer | Mapa de regímenes |
 | **F5b.0** Gemelo | Caudal medido del ACS; filtro de Kalman de tendencia lineal; ruido y saltos | leo_acer | Cobertura de $\Sigma_L$ y efecto en el lazo |
-| **F5b.1b** Márgenes deterministas | N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ | leo_acer | Frontera margen–costo |
+| **F5b.1b0** Peso del DSM como en la tesis | Barrido de $\lambda_{\rm dsm}$ (0–10⁶) en la realización archivada, la familia nominal y la DET acelerada; N2+DSM vs el PID de la tesis con sus métricas (IAE, tiempo en alcanzar y asentarse, error estacionario…) — hecho, §8.15 | leo_acer | Tabla de métricas de la tesis |
+| **F5b.1b** Márgenes deterministas | N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ — hecho, §8.13 | leo_acer | Frontera margen–costo |
 | **F5b.1c** Riesgo probabilístico | CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) | leo_acer → Olab | Frontera costo–riesgo pareada |
 | **F5b.2** Campaña | Todo lo anterior, ≥ 100 realizaciones por familia | Olab | IC al 95 % |
 
@@ -1659,6 +1660,75 @@ Figura: `docs/figures/fig_f5b_risk_frontier.pdf`.
 4. Confirmar con el equipo la aceleración (λ×10⁵, μ×10⁴) y el α objetivo. Con las tasas
    reales, toda falla dura días y ningún controlador evita los 1220 K: la capa de riesgo sólo
    tiene sentido si las reparaciones son rápidas (minutos).
+
+### 8.15 Paso 3.i.0: barrido de $\lambda_{\rm dsm}$ como en la tesis, N2+DSM frente al PID (17-11-2026)
+
+**Por qué se agrega.** En la tesis, con metaheurísticas, el peso del DSM sí cambió la
+trayectoria cuando la bomba tenía holgura. Con $u_{\max}=56.90$ A, $\lambda=10^6$ sobre-enfrió
+1.6 K, y $\lambda=10^4$ fue el ajuste final (`results/results_penalty_saturation`,
+`results/results_retuned_lambda1e4`). El paso 3.i (§8.13) sólo probó la familia extrema;
+aquí se repite el barrido en los escenarios de la tesis, contra el PID de la tesis y con sus
+métricas.
+
+**Diseño** (`julia/f5b1b0_dsm_lambda.jl`; tabla en `python/f5b1b0_table.py`).
+
+- Penalización de la tesis: $\lambda_{\rm dsm}\sum_k[\mathrm{DSM}_k-0.00238]_+^2$, con
+  $\lambda_{\rm dsm}\in\{0,10^2,10^3,10^4,10^5,10^6\}$ y $U\in\{1244,1220\}$ K.
+- Conjuntos:
+  - (A) la realización archivada: grilla de la tesis (61 consultas desde 1160 s) y extendida
+    (241);
+  - (B) 20 realizaciones nominales (121 consultas);
+  - (C) la familia DET acelerada (§8.14, 40 kg/s, 481 consultas).
+  En (A) y (B), bomba archivada (12.9 kg/s) o ampliada (56.90 A ≈ 43.6 kg/s), con rampa blanda
+  como en la tesis y la planta limitada a la misma capacidad.
+- Controladores:
+  - N2+sesgo, sin DSM y con DSM;
+  - **el PID de la tesis** (`matlab/pid_controller.m`, nuevo `ctrl = :PID`): incremental,
+    $K_p=-0.5$, $K_i=-0.4$ A/K, consigna $y_{\rm ref}$, 56.68–100 A y 60 A/s; con la misma
+    capacidad y sin límite;
+  - el PI interno del DET (consigna 1144 K), como referencia.
+- Métricas de la tesis (`thesis_metrics`, de `calculate_performance_metrics.m`): IAE; tiempo
+  en alcanzar y en asentarse en la banda de 0.30 K; error estacionario; sobrepaso mínimo;
+  PCT pico; margen; variación total del caudal entregado; masa.
+
+**Resultados.**
+
+| Escenario | N2 (IAE; alcanza/asienta) | Mejor N2+DSM vs N2 | PID de la tesis (IAE; asienta) | PI del DET (IAE) |
+|---|---|---|---|---|
+| Archivada, grilla de la tesis, bomba 12.9 kg/s | 15.6 K·s; 13.5 / 13.5 s | Idéntico | 27.6 K·s; nunca | 88.2 K·s |
+| Archivada, grilla de la tesis, bomba 43.6 kg/s | 3.7 K·s; 3.0 / 3.0 s | Idéntico (VT +0.3 %) | 99.6 K·s; nunca | 88.2 K·s |
+| Nominal (20), bomba 12.9 kg/s | 13.4 K·s; 11.9 / 11.9 s | Idéntico | 92.7 K·s; 0/20 se asientan | 210.9 K·s |
+| Nominal (20), bomba 43.6 kg/s | 3.5 K·s; 2.9 / 2.9 s | ΔIAE ≤ +0.08 K·s | 177.5 K·s; 0/20 | 210.9 K·s |
+| DET acelerada (9, con fallas), 40 kg/s | 577 K·s; 12.1 / 62.6 s (2/9 no se asientan) | PCT pico idéntica; ΔIAE ≤ +1.2 K·s, VT +17 % | 1163 K·s; 8/9 no se asientan; pico +2.1 K | 3009 K·s; 1/9 llega a 1220 K |
+
+(DET acelerada: semillas 201–209. Las semillas 210–230 quedan pendientes y se completan con
+`julia/f5b1b0_dsm_lambda.jl detacc`, que retoma desde donde quedó.)
+
+Las tablas completas, con las métricas de la tesis y la familia DET acelerada, están en el
+reporte de estado (sección «Paso 3.i.0», `docs/estado/11g_dsm_lambda_tabla.tex`).
+
+- **El peso del DSM no cambia la trayectoria de N2** en ningún escenario ni con ningún
+  $\lambda_{\rm dsm}$ o $U$. El umbral 0.00238 es una banda de 0.15 K sobre la consigna. N2
+  resuelve su QP al óptimo y, con la corrección de sesgo, predice bien la planta, así que la
+  PCT predicha queda dentro de la banda salvo en el transitorio inicial, cuando el actuador ya
+  está en la cota (el hallazgo 1 de la tesis).
+- **En la tesis el DSM se activaba por dos razones que N2 no tiene:** el LJ subóptimo (hasta
+  +18 933 % de brecha, corregido después) y una predicción (ROM + BiLSTM) que se separaba de
+  la planta. Cuando la predicción dice que la PCT sube, el DSM empuja a enfriar más, y así
+  sobre-enfrió.
+- **El PID de la tesis, reproducido en la réplica, no repite el IAE archivado** (17.8 K·s).
+  En el lazo archivado, su integrador partió cargado al revés por el artefacto de
+  extrapolación (§8.7: PCT espuria de 1163.5 K a los 1161 s) y quedó 6 pasos en el mínimo. Sin
+  el artefacto, la misma ley actúa con toda la capacidad (ganancia efectiva ≈ 100 kg/s por K),
+  sobre-enfría hasta 1174.5 K, apaga la bomba ~100 s y nunca se asienta en la banda de 0.30 K
+  (`docs/figures/fig_f5b_dsm_lambda_archived.pdf`).
+- **N2 (con o sin DSM) gana al PID en todas las métricas de la tesis:** IAE entre 2 y 50
+  veces menor, se asienta en 3–14 s y tiene error estacionario de 0.01 K.
+
+**Implicación.** Para que un margen determinista cambie la decisión de N2 hay que pedir más
+que «no pasar la consigna». Las opciones son un umbral bajo la consigna, que equivale a
+correrla, o un margen ligado a un evento, como la cota de riesgo de §8.14, que es la que sí
+cambió el resultado.
 
 ---
 

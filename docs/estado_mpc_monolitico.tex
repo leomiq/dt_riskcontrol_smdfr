@@ -93,7 +93,12 @@ completos sin MATLAB. Sobre esa planta:
   \item en los escenarios del modelo la PCT no pasa de 1185~K, así que una capa de riesgo no
         tendría nada que controlar; en escenarios extremos el resultado lo decide la
         capacidad del actuador y no el optimizador, lo que define dónde debe trabajar la capa
-        de riesgo.
+        de riesgo;
+  \item el pico de PCT lo fija la duración de las fallas del ACS. Ni el pronóstico de fuga
+        ni el margen DSM de la tesis (con cualquier peso $\lambda_{\rm dsm}$) cambian la
+        trayectoria de N2, que gana al PID de la tesis en todas sus métricas. Con fallas
+        generadas como en el DET, una cota de riesgo en N2 baja la peor PCT de 1218.5 a
+        1212~K y, con $\alpha=0.05$, casi sin costo.
 \end{itemize}
 \end{abstract}
 

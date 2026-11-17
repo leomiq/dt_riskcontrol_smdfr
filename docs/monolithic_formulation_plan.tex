@@ -1263,7 +1263,8 @@ Hay que ubicar el régimen intermedio y corregir lo que el gemelo no sabe. Sólo
 \endhead
 \textbf{F5b.1a} Capacidad y rampa & Barrido $\dot m_{\max}$ $\times$ rampa, N2+sesgo vs PI limitado & leo\_acer & Mapa de regímenes \\
 \textbf{F5b.0} Gemelo & Caudal medido del ACS; filtro de Kalman de tendencia lineal; ruido y saltos & leo\_acer & Cobertura de $\Sigma_L$ y efecto en el lazo \\
-\textbf{F5b.1b} Márgenes deterministas & N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ & leo\_acer & Frontera margen–costo \\
+\textbf{F5b.1b0} Peso del DSM como en la tesis & Barrido de $\lambda_{\rm dsm}$ (0–10$^{6}$) en la realización archivada, la familia nominal y la DET acelerada; N2+DSM vs el PID de la tesis con sus métricas (IAE, tiempo en alcanzar y asentarse, error estacionario\ldots{}) — hecho, \S{}8.15 & leo\_acer & Tabla de métricas de la tesis \\
+\textbf{F5b.1b} Márgenes deterministas & N2+DSM vs PI+DSM, normalización 1244/1220 K, barrido de $\tau$ y $\lambda_s$ — hecho, \S{}8.13 & leo\_acer & Frontera margen–costo \\
 \textbf{F5b.1c} Riesgo probabilístico & CVaR (SAA), back-off, pronóstico orientado a la decisión y PSM en línea (Wilks 59) & leo\_acer $\to$ Olab & Frontera costo–riesgo pareada \\
 \textbf{F5b.2} Campaña & Todo lo anterior, $\ge$ 100 realizaciones por familia & Olab & IC al 95 \% \\
 \bottomrule
@@ -1432,6 +1433,58 @@ PI del DET & 7/60 (IC 95 \%: 6–22 \%) & 1208.6 K & 1220.1 K & +20.1 $\pm$ 1.4 
 \item \emph{PSM en línea} (Wilks 59) con horizonte de riesgo $\ge$ $q_{1-\alpha}(D)$.
 \item Confirmar con el equipo la aceleración ($\lambda$$\times$10$^{5}$, μ$\times$10$^{4}$) y el $\alpha$ objetivo. Con las tasas reales, toda falla dura días y ningún controlador evita los 1220 K: la capa de riesgo sólo tiene sentido si las reparaciones son rápidas (minutos).
 \end{enumerate}
+
+\subsection*{8.15 Paso 3.i.0: barrido de $\lambda_{\rm dsm}$ como en la tesis, N2+DSM frente al PID (17-11-2026)}
+\addcontentsline{toc}{subsection}{8.15 Paso 3.i.0: barrido de $\lambda_{\rm dsm}$ como en la tesis, N2+DSM frente al PID (17-11-2026)}
+\textbf{Por qué se agrega.} En la tesis, con metaheurísticas, el peso del DSM sí cambió la trayectoria cuando la bomba tenía holgura. Con $u_{\max}=56.90$ A, $\lambda=10^6$ sobre-enfrió 1.6 K, y $\lambda=10^4$ fue el ajuste final (\code{results/results\_penalty\_saturation}, \code{results/results\_retuned\_lambda1e4}). El paso 3.i (\S{}8.13) sólo probó la familia extrema; aquí se repite el barrido en los escenarios de la tesis, contra el PID de la tesis y con sus métricas.
+
+\textbf{Diseño} (\code{julia/f5b1b0\_dsm\_lambda.jl}; tabla en \code{python/f5b1b0\_table.py}).
+
+\begin{itemize}
+\item Penalización de la tesis: $\lambda_{\rm dsm}\sum_k[\mathrm{DSM}_k-0.00238]_+^2$, con $\lambda_{\rm dsm}\in\{0,10^2,10^3,10^4,10^5,10^6\}$ y $U\in\{1244,1220\}$ K.
+\item Conjuntos:
+\begin{itemize}
+\item (A) la realización archivada: grilla de la tesis (61 consultas desde 1160 s) y extendida (241);
+\item (B) 20 realizaciones nominales (121 consultas);
+\item (C) la familia DET acelerada (\S{}8.14, 40 kg/s, 481 consultas). En (A) y (B), bomba archivada (12.9 kg/s) o ampliada (56.90 A $\approx$ 43.6 kg/s), con rampa blanda como en la tesis y la planta limitada a la misma capacidad.
+\end{itemize}
+\item Controladores:
+\begin{itemize}
+\item N2+sesgo, sin DSM y con DSM;
+\item \textbf{el PID de la tesis} (\code{matlab/pid\_controller.m}, nuevo \code{ctrl = :PID}): incremental, $K_p=-0.5$, $K_i=-0.4$ A/K, consigna $y_{\rm ref}$, 56.68–100 A y 60 A/s; con la misma capacidad y sin límite;
+\item el PI interno del DET (consigna 1144 K), como referencia.
+\end{itemize}
+\item Métricas de la tesis (\code{thesis\_metrics}, de \code{calculate\_performance\_metrics.m}): IAE; tiempo en alcanzar y en asentarse en la banda de 0.30 K; error estacionario; sobrepaso mínimo; PCT pico; margen; variación total del caudal entregado; masa.
+\end{itemize}
+
+\textbf{Resultados.}
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYYY@{}}
+\toprule
+\textbf{Escenario} & \textbf{N2 (IAE; alcanza/asienta)} & \textbf{Mejor N2+DSM vs N2} & \textbf{PID de la tesis (IAE; asienta)} & \textbf{PI del DET (IAE)} \\
+\midrule
+\endhead
+Archivada, grilla de la tesis, bomba 12.9 kg/s & 15.6 K·s; 13.5 / 13.5 s & Idéntico & 27.6 K·s; nunca & 88.2 K·s \\
+Archivada, grilla de la tesis, bomba 43.6 kg/s & 3.7 K·s; 3.0 / 3.0 s & Idéntico (VT +0.3 \%) & 99.6 K·s; nunca & 88.2 K·s \\
+Nominal (20), bomba 12.9 kg/s & 13.4 K·s; 11.9 / 11.9 s & Idéntico & 92.7 K·s; 0/20 se asientan & 210.9 K·s \\
+Nominal (20), bomba 43.6 kg/s & 3.5 K·s; 2.9 / 2.9 s & $\Delta$IAE $\le$ +0.08 K·s & 177.5 K·s; 0/20 & 210.9 K·s \\
+DET acelerada (9, con fallas), 40 kg/s & 577 K·s; 12.1 / 62.6 s (2/9 no se asientan) & PCT pico idéntica; $\Delta$IAE $\le$ +1.2 K·s, VT +17 \% & 1163 K·s; 8/9 no se asientan; pico +2.1 K & 3009 K·s; 1/9 llega a 1220 K \\
+\bottomrule
+\end{xltabular}}
+
+(DET acelerada: semillas 201–209. Las semillas 210–230 quedan pendientes y se completan con \code{julia/f5b1b0\_dsm\_lambda.jl detacc}, que retoma desde donde quedó.)
+
+Las tablas completas, con las métricas de la tesis y la familia DET acelerada, están en el reporte de estado (sección «Paso 3.i.0», \code{docs/estado/11g\_dsm\_lambda\_tabla.tex}).
+
+\begin{itemize}
+\item \textbf{El peso del DSM no cambia la trayectoria de N2} en ningún escenario ni con ningún $\lambda_{\rm dsm}$ o $U$. El umbral 0.00238 es una banda de 0.15 K sobre la consigna. N2 resuelve su QP al óptimo y, con la corrección de sesgo, predice bien la planta, así que la PCT predicha queda dentro de la banda salvo en el transitorio inicial, cuando el actuador ya está en la cota (el hallazgo 1 de la tesis).
+\item \textbf{En la tesis el DSM se activaba por dos razones que N2 no tiene:} el LJ subóptimo (hasta +18 933 \% de brecha, corregido después) y una predicción (ROM + BiLSTM) que se separaba de la planta. Cuando la predicción dice que la PCT sube, el DSM empuja a enfriar más, y así sobre-enfrió.
+\item \textbf{El PID de la tesis, reproducido en la réplica, no repite el IAE archivado} (17.8 K·s). En el lazo archivado, su integrador partió cargado al revés por el artefacto de extrapolación (\S{}8.7: PCT espuria de 1163.5 K a los 1161 s) y quedó 6 pasos en el mínimo. Sin el artefacto, la misma ley actúa con toda la capacidad (ganancia efectiva $\approx$ 100 kg/s por K), sobre-enfría hasta 1174.5 K, apaga la bomba \textasciitilde{}100 s y nunca se asienta en la banda de 0.30 K (\code{docs/figures/fig\_f5b\_dsm\_lambda\_archived.pdf}).
+\item \textbf{N2 (con o sin DSM) gana al PID en todas las métricas de la tesis:} IAE entre 2 y 50 veces menor, se asienta en 3–14 s y tiene error estacionario de 0.01 K.
+\end{itemize}
+
+\textbf{Implicación.} Para que un margen determinista cambie la decisión de N2 hay que pedir más que «no pasar la consigna». Las opciones son un umbral bajo la consigna, que equivale a correrla, o un margen ligado a un evento, como la cota de riesgo de \S{}8.14, que es la que sí cambió el resultado.
 
 \medskip
 \section*{9. Decisiones abiertas}

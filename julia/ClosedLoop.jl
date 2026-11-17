@@ -26,7 +26,7 @@ include(joinpath(@__DIR__, "HRMQueries.jl"))
 include(joinpath(@__DIR__, "F4Lib.jl"))
 using .HRMQueries, .F4Lib, MAT, JuMP, Clarabel, ForwardDiff, LinearAlgebra, Statistics, Random
 
-export Bench, setup, run_loop, metrics, ACT_ARCH, ACT_PHYS, act_cap
+export Bench, setup, run_loop, metrics, thesis_metrics, ACT_ARCH, ACT_PHYS, act_cap
 
 const ROOT = joinpath(@__DIR__, "..")
 const h = 0.5
@@ -61,7 +61,7 @@ For a new realisation the MPC starts `lead` s after the DET logic activates the 
 archived loop: activation 1143 s, first query 1160 s); returns `nothing` if the ACS is never
 demanded before `t_max`.
 """
-function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
+function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0, cap = nothing)
     ref = matread(joinpath(ROOT, "results", "f1_rom_replica", "rom_reference_1180.mat"))
     ub = ref["u_bounds"]
     act_arch = (name = :arch, m_lo = current_to_massflow(minimum(ub[:, 1])),
@@ -71,6 +71,8 @@ function setup(; t_start = 1160.0, pH = nothing, lead = 17.0, t_max = 2500.0)
         arc = matread(joinpath(ROOT, "results", "f1b_hrm_replica", "archive_1180.mat"))
         cs = arc["control_series"]
         pH = hrm_params(A = arc["sampled_A"], B = arc["sampled_B"], mdot_c_drift = arc["sampled_mdot_c_drift"])
+        # F5b.1b0: archived realisation on a finite-capacity plant (`cap = (acs_max, acs_ramp)`)
+        cap === nothing || (pH = with_params(pH; acs_max = cap.acs_max, acs_ramp = cap.acs_ramp))
     else
         # activation time: the ACS capacity acts only after the activation, so detect it on the
         # unlimited plant (a capped PI may exhaust the inventory before t_max)
@@ -290,11 +292,18 @@ the thesis form of `matlab/fitness_cost_dsm.m`).
 `risk = (tau, lam)` adds the risk-adjusted soft bound ŷ_k + d ≤ U_α (`risk_bound`, exact ℓ1
 penalty `lam` [1/K] on the slack) for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
 `log.ubound` keeps U_α per query (NaN without `risk`).
+`ctrl = :PID` is the thesis PID (`matlab/pid_controller.m`, used in
+`DET_scheduler_v1_perc_online.m` and `run_phase2c_full_loop.m`): on e = y_ref − PCT(τ),
+u_k = u_{k−1} + K_p e + I_k, I_k = I_{k−1} + K_i e Δt (K_p = −0.5, K_i = −0.4 A/K), clamped
+to [56.68, 100] A and rate-limited to 60 A/s from u_{k−1} (u_0 = 0, as in the thesis); the
+current goes to the pump map and the plant (capacity, η and failures apply as to the MPC).
+`ctrl = :PI` is the DET's own PI (setpoint 1144 K), a different controller.
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
                   fail = nothing, fbias = 0.0, audit = nothing, measured_acs = false,
                   leak_noise = 0.0, noise_seed = 1, forecast = :oracle, kf = nothing, kf_thr = 5.0, eta_pi = false,
-                  dsm = nothing, pi_setpoint = nothing, risk = nothing)
+                  dsm = nothing, pi_setpoint = nothing, risk = nothing,
+                  pid = (Kp = -0.5, Ki = -0.4, I_min = 56.68, I_max = 100.0, dI_max = 60.0))
     pH = B.pH; hist = copy(B.hist)
     pPI = with_params(pH; acs_eta = eta_pi ? eta : 1.0,
                       pct_setpoint = pi_setpoint === nothing ? pH.pct_setpoint : pi_setpoint)
@@ -302,6 +311,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     T = B.cs[2:last, 1]; U = B.cs[2:last, 2:3]          # commanded inport series (grows)
     Up = copy(U)                                        # what the plant actually receives
     m_applied = 0.0; prev = nothing
+    pid_u = 0.0; pid_I = 0.0                            # thesis PID state
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
            m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], breakdown = [false], limit = [false])
@@ -373,8 +383,16 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             end
             m1 = dec.m[1]; prev = dec.m
         else
-            m1 = ctrl == :zero ? 0.0 : ctrl == :max ? act.m_hi :
-                 ctrl == :LJ ? current_to_massflow(B.cs[findfirst(==(t_q), B.cs[:, 1]), 2]) : error("ctrl")
+            if ctrl == :PID
+                e = B.y_ref - pct_now
+                pid_I += pid.Ki * e * h
+                uu = clamp(pid_u + pid.Kp * e + pid_I, pid.I_min, pid.I_max)
+                pid_u = pid_u + sign(uu - pid_u) * min(abs(uu - pid_u), pid.dI_max * h)
+                m1 = current_to_massflow(pid_u)
+            else
+                m1 = ctrl == :zero ? 0.0 : ctrl == :max ? act.m_hi :
+                     ctrl == :LJ ? current_to_massflow(B.cs[findfirst(==(t_q), B.cs[:, 1]), 2]) : error("ctrl")
+            end
             dec = (m = fill(m1, K), status = "-", time = 0.0)
         end
         u1 = m1 > 0 ? F4Lib.massflow_to_current(m1) : 56.0                  # 56 A: pump off
@@ -419,6 +437,37 @@ function metrics(lg, y_ref)
      ramp_max = maximum(abs.(diff(vcat(0.0, lg.m)))),
      t_p50 = sort(lg.time)[cld(length(lg.time), 2)], t_p99 = sort(lg.time)[ceil(Int, 0.99 * length(lg.time))],
      t_max = maximum(lg.time), fails = count(s -> !(s in OK_STATUS), lg.status))
+end
+
+"""
+    thesis_metrics(lg, y_ref; tol = 0.30, U = 1244.0, t0 = lg.t_q[1])
+
+Performance indices of the thesis (`matlab/calculate_performance_metrics.m`,
+`python/compile_thesis_kpis.py`), on the per-query PCT and the commanded flow [kg/s]
+(the thesis used the current [A]; flows are comparable across actuators). e = y_ref − PCT.
+  min_safety_margin  min(U − PCT)                   reach_time    first t with |e| ≤ tol
+  min_overshoot      min(PCT − y_ref)               settling_time t after which |e| stays ≤ tol
+  max_abs_dev_pt     max|PCT − y_ref|, without the first two samples (activation transient)
+  steady_state_error mean e over the last 20 %      IAE, cumulative_error  trapz over t
+  peak_PCT, final_PCT, total_variation Σ|Δṁ| of the commanded flow (tv_plant: of the flow the
+  plant received, which differs when a PID asks beyond capacity), max_control_rate, coolant mass,
+  runtime_median. Times are measured from `t0` (the first query); Inf if never reached.
+"""
+function thesis_metrics(lg, y_ref; tol = 0.30, U = 1244.0, t0 = lg.t_q[1])
+    t = lg.t_q .- t0; pct = lg.pct; e = y_ref .- pct; m = lg.m
+    trapz(x, y) = sum((x[2:end] .- x[1:end-1]) .* (y[2:end] .+ y[1:end-1]) ./ 2)
+    inb = abs.(e) .<= tol
+    reach = findfirst(inb); out = findlast(.!inb)
+    settle = reach === nothing ? Inf : out === nothing ? t[reach] : out < length(t) ? t[out+1] : Inf
+    du = diff(vcat(0.0, m))
+    (; min_safety_margin = minimum(U .- pct), margin_1220 = 1220 - maximum(pct),
+     min_overshoot = minimum(pct .- y_ref), max_abs_dev_pt = maximum(abs.(pct[min(3, end):end] .- y_ref)),
+     reach_time = reach === nothing ? Inf : t[reach], settling_time = settle,
+     steady_state_error = sum(e[round(Int, 0.8 * length(e)):end]) / length(e[round(Int, 0.8 * length(e)):end]),
+     IAE = trapz(t, abs.(e)), cumulative_error = trapz(t, e), peak_PCT = maximum(pct), final_PCT = pct[end],
+     total_variation = sum(abs.(du)), max_control_rate = maximum(abs.(du)) / h,
+     tv_plant = sum(abs.(diff(vcat(0.0, lg.m_plant)))),
+     coolant_mass = h * sum(lg.m_plant), runtime_median = sort(lg.time)[cld(length(lg.time), 2)])
 end
 
 end # module

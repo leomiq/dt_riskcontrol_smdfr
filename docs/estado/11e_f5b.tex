@@ -1,0 +1,113 @@
+%======================================================================
+\section{Capacidad, gemelo, márgenes y riesgo (F5b)}\label{sec:f5b}
+%======================================================================
+\paragraph{Qué se busca.} F5a.3 dejó una pregunta abierta: con la caja archivada el MPC
+siempre satura, y con el actuador físico el límite de 1220~K queda lejos. En ninguno de los
+dos casos una capa de riesgo puede cambiar una decisión. Esta sección recorre la ruta del
+plan (§8.12--8.15) en cuatro pasos:
+\begin{enumerate}
+  \item ubicar la capacidad del ACS en la que el MPC tiene decisiones libres y hay riesgo;
+  \item corregir lo que el gemelo no sabe: el caudal real del ACS y el pronóstico de fuga;
+  \item agregar márgenes: primero deterministas (DSM) y después probabilísticos;
+  \item medir todo con las métricas de la tesis y contra el PID de la tesis.
+\end{enumerate}
+Cambio en la planta: la capacidad del ACS (\code{acs\_max}), su rampa (\code{acs\_ramp}) y su
+eficiencia $\eta$ (\code{acs\_eta}) son ahora parámetros de la réplica del HRM, y limitan por
+igual a quien mueva la bomba.
+
+%----------------------------------------------------------------------
+\subsection{Paso 1: mapa de capacidad}
+%----------------------------------------------------------------------
+Familia extrema (14 realizaciones), $\dot m_{\max}\in\{15,\dots,70\}$~kg/s y rampas de
+2.5--10~kg/s por paso; N2+sesgo frente al PI del DET con la misma capacidad y la misma $\eta$
+(\code{julia/f5b1a\_capacity\_sweep.jl}).
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_capacity_map.pdf}
+\caption{Mapa de capacidad (rampa 5~kg/s por paso). Con $\le20$~kg/s, N2 está siempre en la
+cota y llega a 1220~K en 3--6 de 14 realizaciones; el PI, en 6--10. Con $\ge40$~kg/s, N2
+decide en el interior el 28--60\,\% de las veces y no hay riesgo.}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_peak_at_failure.pdf}
+\caption{De dónde sale el pico: la PCT máxima llega siempre al final de la falla del ACS, y
+crece con su duración ($\approx0.3$~K/s, $r=0.86$).}
+\end{figure}
+
+\takeaway{El régimen «decisión libre y con riesgo» está vacío en la familia extrema. Donde
+hay riesgo, el actuador ya está saturado; donde hay capacidad libre, las fallas de 30--90~s no
+alcanzan a llevar la PCT a 1220~K. La única palanca de una capa de riesgo es pre-enfriar
+antes de una falla posible.}
+
+%----------------------------------------------------------------------
+\subsection{Paso 2: lo que el gemelo no sabe}
+%----------------------------------------------------------------------
+\begin{itemize}
+  \item \textbf{Pronóstico de fuga sin la ley de Park.} Un filtro de Kalman de tendencia
+        lineal local (nivel y pendiente), con intervención ante saltos de la rotura, es 5--10
+        veces más preciso que la persistencia con ruido de medición y tiene la cobertura
+        calibrada (\code{python/f5b0\_leak\_forecast.py}). Sin la intervención, no se
+        recupera de un salto.
+  \item \textbf{En lazo cerrado no importa.} El pronosticador y el caudal medido del ACS
+        cambian las decisiones (hasta 4~kg/s), pero no la PCT: las diferencias pareadas son
+        $0.00\pm0.00$~K en 14 realizaciones, con y sin saltos. La inercia térmica filtra las
+        diferencias de caudal y la corrección de sesgo absorbe el resto.
+\end{itemize}
+
+%----------------------------------------------------------------------
+\subsection{Paso 3.i: márgenes deterministas (DSM) en la familia extrema}
+%----------------------------------------------------------------------
+N2+DSM con $U\in\{1244,1220\}$~K, $\tau\in\{0.00238, 0.1, 0.25\}$ y
+$\lambda_s\in\{10^3,10^4,10^5\}$ no cambia la PCT máxima en más de 0.002~K. El DSM se
+activa cuando la PCT predicha supera la consigna, y eso ocurre durante la falla y después de
+ella, cuando N2 ya está en la cota. El PI del DET con la consigna de N2 no inyecta nada: su
+margen \emph{es} su consigna de 1144~K.
+
+\input{estado/11f_dsm_lambda}
+
+%----------------------------------------------------------------------
+\subsection{Paso 3.ii: fallas como en el DET y una cota de riesgo}
+%----------------------------------------------------------------------
+\paragraph{El modelo de fallas del DET.} El ACS tiene 5 componentes en serie, y cada uno es
+una cadena de Markov operativo $\leftrightarrow$ fallado, con tasas $\lambda_i$ y $\mu_i$
+(\code{msfcn\_indirectps\_hrm\_c.c}, \code{MCDET\_conferencepaper\_database.mat}). Con las
+tasas reales, una falla en 240~s tiene probabilidad $\approx4\cdot10^{-6}$ y dura días. Se
+usa la opción acelerada que el propio modelo trae comentada ($\lambda\times10^5$,
+$\mu\times10^4$): las fallas llegan a razón de $1.6\cdot10^{-3}$~s$^{-1}$ y duran según una
+mezcla de exponenciales (mediana 29~s, 5.7\,\% más de 130~s). Las realizaciones se
+condicionan a que haya al menos una falla en la ventana del MPC.
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.62\linewidth]{figures/fig_f5b_failure_duration.pdf}
+\caption{Duración de una falla. La familia extrema de F5a.3 nunca pasaba de 90~s; la del DET
+tiene cola, y en esa cola está el riesgo de llegar a 1220~K.}
+\end{figure}
+
+\paragraph{La cota de riesgo.} Si el ACS falla ahora y la falla dura $q_{1-\alpha}(D)$, el ROM
+predice un calentamiento $\Delta T$. N2 mantiene $\hat y_k+d\le1220-\Delta T$, con holgura
+penalizada en norma $\ell_1$ exacta: sigue siendo un QP. Así
+$P(\mathrm{PCT}_{\rm pico}>1220\mid\text{falla ahora})\le\alpha$.
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}Y r r r r r@{}}\toprule
+Caso (60 realizaciones) & Llegan a 1220~K & Peor PCT & $\Delta$ PCT máx.\ vs N2 & ISE / ISE(N2) & Masa extra\\\midrule
+N2+sesgo & 0 & 1218.5~K & --- & 1.00 & ---\\
+N2+cota, $\alpha=0.05$ & 0 & 1212.0~K & $-1.1\pm0.6$~K & 0.81 & +2\,\%\\
+N2+cota, $\alpha=0.02$ & 0 & 1212.0~K & $-4.0\pm1.3$~K & 2.58 & +17\,\%\\
+N2+cota, $\alpha=0.01$ & 0 & 1212.0~K & $-5.0\pm1.6$~K & 6.45 & +33\,\%\\
+PI del DET & 7 & 1220.1~K & $+20.1\pm1.4$~K & 8.8 & +19\,\%\\\bottomrule
+\end{tabularx}
+\caption{Cota de riesgo con fallas como en el DET (40~kg/s, rampa 5).}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_risk_frontier.pdf}
+\caption{Frontera costo--riesgo de la cota. $\alpha=0.05$ baja la peor PCT 6.5~K y reduce el
+ISE; con $\alpha\le0.02$ se paga con pre-enfriamiento.}
+\end{figure}
+
+\takeaway{Con fallas como en el DET, la cota de riesgo compra margen donde importa (la peor
+realización baja de 1218.5 a 1212~K) y con $\alpha=0.05$ lo hace casi gratis. Ninguna variante
+de N2 cruzó 1220~K en 60 realizaciones, así que comparar probabilidades de cruce exige un
+estimador de menor varianza (plan §8.14).}

@@ -169,3 +169,23 @@ for x, y, (case, lab, _) in zip(ms, y_mean, order):
 ax[1].set(title="Pre-enfriamiento vs PCT máx. media", xlim=(-14, 3), xlabel=r"desvío medio de la PCT respecto de $y_{\rm ref}$ [K]",
           ylabel="K")
 save(fig, "fig_f5b_risk_frontier")
+
+# ---- Fig 5: step 3.i.0, archived realisation, widened pump: N2, N2+DSM, thesis PID, DET PI -----
+tj = load(os.path.join(RES, "f5b1b0_dsm_lambda", "traj_archived.csv"))
+fig, ax = plt.subplots(1, 2, figsize=(W, 2.6), layout="constrained")
+spec = [("N2", BLUE, "-", "N2+sesgo"), ("N2_DSM_U1220_l1000000", BLUE, (0, (1, 1.5)), r"N2+DSM, $\lambda$=10$^6$"),
+        ("PID", ORANGE, "-", "PID de la tesis"), ("PI", MUTED, (0, (4, 2)), "PI del DET")]
+for case, col, ls, lab in spec:
+    q = sel(tj, (tj["act"] == "wide") & (tj["case"] == case) & (tj["n_req"] == 241))
+    t = q["t"] - 1160.0
+    ax[0].plot(t, q["pct"], color=col, ls=ls, label=lab, lw=1.3)
+    ax[1].plot(t, np.clip(q["m_plant"], 0.1, None), color=col, ls=ls, label=lab, lw=1.3)
+ax[0].axhline(Y_REF, color=INK2, lw=0.8, ls=":")
+ax[0].text(120, Y_REF + 0.3, r"$y_{\rm ref}$", ha="right", va="bottom", fontsize=7, color=INK2)
+ax[0].set(title="PCT (realización archivada, bomba 43.6 kg/s)", xlabel="t desde 1160 s [s]", ylabel="K",
+          ylim=(1165, 1192))
+ax[1].set_yscale("log")
+ax[1].set(title="Caudal entregado", xlabel="t desde 1160 s [s]", ylabel="kg/s (log)")
+h_, l_ = ax[0].get_legend_handles_labels()
+fig.legend(h_, l_, loc="outside lower center", ncol=4)
+save(fig, "fig_f5b_dsm_lambda_archived")

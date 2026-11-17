@@ -1,0 +1,63 @@
+%----------------------------------------------------------------------
+\subsection{Paso 3.i.0: el peso del DSM, como en la tesis, frente al PID}\label{sec:dsm-lambda}
+%----------------------------------------------------------------------
+\paragraph{Qué se prueba.} En la tesis, con metaheurísticas (LJ), el término
+$\lambda_{\rm dsm}\sum_k[\mathrm{DSM}_k-0.00238]_+^2$ con
+$\mathrm{DSM}_k=(\hat y_k-y_{\rm ref})/(U-y_{\rm ref})$ \emph{sí} cambió la trayectoria cuando la
+bomba tenía holgura ($u_{\max}=56.90$~A $\approx43.6$~kg/s). Con $\lambda=10^6$ sobre-enfrió
+1.6~K, y $\lambda=10^4$ fue el ajuste final (\code{results/results\_penalty\_saturation},
+\code{results/results\_retuned\_lambda1e4}). Aquí se repite el barrido con N2+sesgo, con
+$\lambda_{\rm dsm}\in\{0,10^2,\dots,10^6\}$ y $U\in\{1244,1220\}$~K, en los mismos escenarios
+de la tesis. Se compara con el PID de la tesis (\code{matlab/pid\_controller.m}: $K_p=-0.5$,
+$K_i=-0.4$~A/K, consigna $y_{\rm ref}$, 56.68--100~A, 60~A/s) y con el PI interno del DET. Las
+métricas son las de la tesis (\code{calculate\_performance\_metrics.m}), con una banda de 0.30~K
+(\code{julia/f5b1b0\_dsm\_lambda.jl}).
+
+\paragraph{Conjuntos.} (A) La realización archivada, con la grilla de la tesis (61 consultas
+desde 1160~s) y una extendida de 241 consultas. (B) 20 realizaciones de la familia nominal,
+121 consultas cada una. En ambos, bomba archivada (12.9~kg/s) o ampliada (43.6~kg/s), con
+rampa blanda como en la tesis y la planta limitada a la misma capacidad. (C) 9 realizaciones de
+la familia DET acelerada (semillas 201--209), a 40~kg/s y en 481 consultas. Con fallas, el
+DSM tampoco cambia el pico (la PCT máxima es idéntica) y sólo agrega variación del control. El
+PID duplica el IAE de N2, sube el pico 2.1~K y se asienta en 1 de 9 realizaciones.
+
+\input{estado/11g_dsm_lambda_tabla}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_dsm_lambda_archived.pdf}
+\caption{Realización archivada con bomba ampliada. N2 y N2+DSM ($\lambda=10^6$) son
+indistinguibles: llegan a la consigna en 3~s. El PID de la tesis satura 13~s, sobre-enfría
+hasta 1174.5~K y deja la bomba apagada $\sim$100~s, hasta que la PCT vuelve a pasar la
+consigna. El PI del DET recién inyecta a los 118~s.}
+\end{figure}
+
+\paragraph{Por qué el DSM no mueve a N2 y sí movía al lazo de la tesis.}
+\begin{enumerate}
+  \item \textbf{El umbral es una banda de 0.15~K sobre la consigna.} Con $\tau=0.00238$, el
+        término sólo actúa si la PCT predicha supera $y_{\rm ref}+0.15$~K. N2 resuelve su QP
+        al óptimo y, con la corrección de sesgo, su predicción coincide con la planta. Por eso
+        la PCT predicha queda dentro de esa banda salvo en el transitorio inicial, y ahí el
+        actuador ya está en la cota (el mismo hallazgo 1 de la tesis).
+  \item \textbf{En la tesis el término se activaba por razones que N2 no tiene.} LJ devolvía
+        acciones subóptimas (hasta +18\,933\,\% de brecha, corregido después), y la
+        predicción del lazo archivado (ROM + BiLSTM) se separaba de la planta. Cuando la
+        predicción dice que la PCT sube, el DSM empuja a enfriar más: así sobre-enfrió.
+  \item \textbf{Cambiar $U$ de 1244 a 1220~K} sólo reescala la banda (0.15~K pasa a
+        0.10~K): no cambia nada.
+\end{enumerate}
+
+\paragraph{N2 frente al PID de la tesis.} En la tesis, el PID archivado tenía el mejor IAE
+(17.8~K$\cdot$s frente a 36.5 del LJ). Su integrador había partido cargado al revés por
+el artefacto de extrapolación del lazo archivado (§\ref{sec:extremos}: una caída espuria de
+la PCT a 1163.5~K a los 1161~s), y eso lo mantuvo en el mínimo durante los primeros 6
+pasos. En la réplica, sin el artefacto, la misma ley reacciona con toda la capacidad, ya que
+su ganancia efectiva es $\approx100$~kg/s por K. Sobre-enfría y nunca se asienta en la banda
+de 0.30~K. N2 llega a la consigna en 3~s (bomba ampliada) o 12~s (archivada) y queda ahí, con
+un IAE entre 2 veces menor (bomba archivada, grilla de la tesis) y 50 veces menor (familia
+nominal, bomba ampliada).
+
+\takeaway{El peso del DSM no cambia la trayectoria de N2 en ningún escenario, porque N2 ya
+sigue la consigna con más precisión que la banda de 0.15~K del DSM. Para que el margen actúe
+hay que pedir más que «no pasar la consigna»: un umbral bajo la consigna (que equivale a
+correrla) o un margen ligado a un evento, como la cota de riesgo del paso 3.ii. Frente al PID
+de la tesis, N2+DSM gana en todas las métricas de la tesis.}
