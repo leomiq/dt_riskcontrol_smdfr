@@ -1479,7 +1479,7 @@ decide.)
   intervención ($|\nu|/\sqrt S>5$: el salto se absorbe en el nivel) lo arregla, salvo los saltos
   menores que $5\sqrt S$.
 - *En lazo cerrado* (`julia/f5b0_closed_loop.jl`, 40 kg/s, rampa 5; 14 realizaciones con
-  σ ∈ {0.1, 0.3} kg/s, sin y con saltos de la rotura). El caudal medido del ACS y el
+  $\sigma\in\{0.1, 0.3\}$ kg/s, sin y con saltos de la rotura). El caudal medido del ACS y el
   pronosticador **no cambian el resultado**: las diferencias pareadas de PCT máxima e ISE
   frente al oráculo son 0.00 ± 0.00 en los 16 casos. Los saltos endurecen la planta
   (+0.6 K de PCT máxima media, +26 % de ISE), pero por igual con todos los pronosticadores. Las decisiones sí cambian, hasta 1.2 kg/s
@@ -1515,6 +1515,150 @@ la restricción probabilística $P(\mathrm{PCT}_{\rm pico}>1220)\le\alpha$ da
 $y_{\rm ref}^{\rm riesgo}=\min\{y_{\rm ref},\,1220-\dot T\,q_{1-\alpha}(D)\}$. N2 sigue siendo un QP:
 el riesgo entra como dato. El CVaR por SAA y el PSM en línea con un horizonte largo son sus
 versiones no paramétricas.
+
+### 8.14 Paso 3.ii: fallas del ACS como en el DET y cota de riesgo en N2
+
+**Decisión (16-11-2026).** Para la capa de riesgo, las fallas del ACS se generan con una
+**tasa de fallas y una distribución de duración**, como en el DET (decisión abierta 11,
+opción (b)). Este apartado explica en qué se diferencia de la familia extrema usada hasta
+ahora.
+
+**Cómo modela el DET las fallas del ACS.** Fuentes:
+`matlab/mex_sources/msfcn_indirectps_hrm_c.c`,
+`matlab/simulation_core_dualfluid_FI3_sim_hrm_extract_MCDET.m` y
+`models/MCDET_conferencepaper_database.mat`.
+
+- El ACS (PS1) tiene **5 componentes en serie**: el sistema falla si falla cualquiera de
+  ellos (`failed_states`: los cortes mínimos son de orden 1).
+- Cada componente es una **cadena de Markov de dos estados** (operativo ↔ fallado), con tasa
+  de falla $\lambda_i$ y tasa de reparación $\mu_i$. Los tiempos de permanencia son
+  exponenciales: la S-función sortea $-\ln(U)/\lambda$.
+- Con las tasas reales, $\sum\lambda_i=1.6\cdot10^{-8}$ s⁻¹ (una falla cada ~2 años) y las
+  reparaciones tardan de 18 h a 3 años. En un transitorio de 240 s,
+  $P(\text{falla})\approx4\cdot10^{-6}$. Si ocurre, dura todo el transitorio y ningún
+  controlador puede evitar los 1220 K.
+- Por eso el propio modelo trae, comentada, una opción de **muestreo por importancia** con
+  tasas aceleradas: $\lambda\times10^5$ y $\mu\times10^4$. Esa es la que se usa aquí.
+
+**La familia «DET acelerada».** Con $\lambda_i\times10^5$ y $\mu_i\times10^4$:
+
+| Componente | $\lambda_i$ [1/s] | Peso $\lambda_i/\sum\lambda$ | Duración media $1/\mu_i$ |
+|---|---|---|---|
+| 1 | 7.2·10⁻⁴ | 0.451 | 46 s |
+| 2 | 7.2·10⁻⁴ | 0.451 | 46 s |
+| 3 | 7.9·10⁻⁵ | 0.050 | 25 s |
+| 4 | 7.4·10⁻⁵ | 0.046 | 6.5 s |
+| 5 | 3.2·10⁻⁶ | 0.002 | 2.9 h |
+
+- **Cuándo falla.** Las fallas del sistema llegan como un proceso de Poisson de tasa
+  $\sum\lambda_i=1.6\cdot10^{-3}$ s⁻¹ (una cada 625 s en promedio). En los 240 s de la
+  ventana del MPC, $P(\ge1\text{ falla})=0.32$. Pueden ocurrir en cualquier instante, y
+  también dos o más.
+- **Cuánto dura.** Una falla dura lo que tarda en repararse el componente que falló. Su
+  duración $D$ es una **mezcla de exponenciales**:
+  $P(D>t)=\sum_i w_i\,e^{-\mu_i t}$, con $w_i=\lambda_i/\sum\lambda$. La mediana es 29 s, la
+  media 64 s y $P(D>130\text{ s})=0.057$. Los cuantiles son $q_{0.90}=103$ s,
+  $q_{0.95}=136$ s, $q_{0.98}=182$ s y $q_{0.99}=219$ s
+  (`docs/figures/fig_f5b_failure_duration.pdf`).
+- **Sin memoria.** Una falla que ya lleva 60 s tiene la misma distribución de lo que le falta
+  que una recién empezada (dentro de cada componente). Mirar cuánto lleva caído el ACS no
+  ayuda a predecir cuándo vuelve.
+- **Condicionamiento.** Las cadenas arrancan con todo operativo en la activación del ACS.
+  Para tener potencia estadística, cada realización se **condiciona a que al menos una falla
+  empiece en la ventana del MPC** (muestreo por rechazo), igual que el DET ramifica en el
+  evento de falla. La tasa por transitorio es $P(\text{condición})\times P(\text{cruce}\mid\text{condición})$.
+- Fuga de la familia extrema ($A$, $B$, $d$, adelanto de U(0, 17) s). Sin $\eta$ y sin sesgo
+  de pronóstico, porque el DET no los tiene. Capacidad 40 kg/s y rampa 5 kg/s por paso (§8.13).
+
+**Diferencias con la familia extrema de F5a.3.**
+
+| Aspecto | Familia extrema (F5a.3, §8.11) | DET acelerada (§8.14) |
+|---|---|---|
+| Cuántas fallas | Exactamente 1 por realización | 0, 1 o más: proceso de Poisson; se condiciona a ≥ 1 |
+| Cuándo empieza | U(5, 20) s después de la 1.ª consulta | En cualquier instante (Poisson), también en la fase aguda |
+| Duración | U(30, 90) s: acotada, nunca > 90 s | Mezcla de exponenciales: mediana 29 s, cola larga, 6 % > 130 s |
+| Origen | Diseñada a mano para estresar el lazo | Las cadenas de Markov de los 5 componentes del DET, con tasas aceleradas |
+| Otras perturbaciones | $\eta\sim$U(0.6, 0.9), sesgo de pronóstico | Ninguna |
+| ¿Llega a 1220 K desde $y_{\rm ref}$? | No: hace falta $D\approx130$–150 s | Sí, en la cola: P(D > 130 s) = 5.7 % |
+| Probabilidad | 1, implícita | Explícita: tasa de fallas × distribución de la duración |
+
+Lo esencial es que la familia nueva tiene **cola**: hay fallas lo bastante largas para
+llegar a 1220 K, con una probabilidad conocida. Ese es el riesgo que una capa probabilística
+puede gestionar. En la familia antigua no había.
+
+**La cota de riesgo en N2 (`risk_bound` en `julia/ClosedLoop.jl`).**
+
+1. *Restricción probabilística.* La PCT pico de una falla que empieza ahora y dura $D$ es
+   $\mathrm{PCT}_{\rm pico}=\mathrm{PCT}(t_f)+\Delta T(D)$: el ACS no actúa durante la falla, y
+   el pico llega al final (§8.13). Queremos
+   $P(\mathrm{PCT}_{\rm pico}>1220\mid\text{falla ahora})\le\alpha$. Como $\Delta T$ crece con $D$,
+   basta $\mathrm{PCT}(t_f)\le U_\alpha:=1220-\Delta T(q_{1-\alpha}(D))$.
+2. *Calentamiento predicho.* En cada consulta, el ROM simula «el ACS falla ahora y la fuga
+   sigue» durante $q_{1-\alpha}(D)$ segundos. Así obtiene $\Delta T$, incluido el salto de $p_4$
+   al cortarse el caudal. Esto da ≈ 0.3 K/s, igual que lo medido en la réplica del HRM.
+3. *En el QP.* Se agrega $\hat y_k+d\le U_\alpha+v_k$ con $v_k\ge0$ y
+   $\lambda_r\sum v_k^2$ en el costo ($\lambda_r=10^4$). La restricción es lineal y blanda:
+   N2 sigue siendo un QP convexo, y $U_\alpha$ entra como dato.
+4. *Lectura.* Es un **back-off** derivado del proceso de fallas, no del error de pronóstico.
+   N2 mantiene la PCT bajo $U_\alpha$ para que una falla de duración $q_{1-\alpha}$ no alcance
+   1220 K. Valores típicos: $U_\alpha\approx1191$, 1180, 1168 y 1157 K para
+   $\alpha=0.10$, 0.05, 0.02 y 0.01. Cuanto más pequeño es $\alpha$, más pre-enfría,
+   y más masa y error de seguimiento cuesta.
+5. *Limitaciones.* La restricción es condicional a que la falla empiece ahora, así que es
+   conservadora: no descuenta la probabilidad de que no haya falla. Una versión
+   incondicional penalizaría la tasa de cruces
+   $\sum\lambda_i\sum_k P(D>\tau_k(u))$. Es convexa, pero requiere un cono exponencial.
+   Queda como paso siguiente, junto con el CVaR por SAA y el PSM en línea.
+
+`julia/f5b1c_risk.jl`: semillas 201–260; casos N2, N2+cota con
+$\alpha\in\{0.10,0.05,0.02,0.01\}$ y el PI del DET. Resumen en `python/f5b1c_risk_summary.py`.
+
+**Resultados (60 realizaciones condicionadas a ≥ 1 falla; 40 kg/s, rampa 5).**
+Figura: `docs/figures/fig_f5b_risk_frontier.pdf`.
+
+| Caso | Llegan a 1220 K | PCT máx. media | Peor | Δ PCT máx. vs N2 (pareado) | ISE / ISE(N2) | Masa extra | Desvío medio de $y_{\rm ref}$ |
+|---|---|---|---|---|---|---|---|
+| N2+sesgo | 0/60 | 1188.5 K | 1218.5 K | — | 1.00 | — | +1.8 K |
+| N2+cota, α = 0.10 ($U_\alpha\approx1191$ K) | 0/60 | 1188.5 K | 1218.5 K | −0.00 ± 0.01 K | 1.00 | 0 % | +1.7 K |
+| N2+cota, α = 0.05 ($U_\alpha\approx1181$ K) | 0/60 | 1187.4 K | 1212.0 K | −1.1 ± 0.6 K | 0.81 | +2 % | +0.7 K |
+| N2+cota, α = 0.02 ($U_\alpha\approx1169$ K) | 0/60 | 1184.5 K | 1212.0 K | −4.0 ± 1.3 K | 2.58 | +17 % | −5.4 K |
+| N2+cota, α = 0.01 ($U_\alpha\approx1159$ K) | 0/60 | 1183.5 K | 1212.0 K | −5.0 ± 1.6 K | 6.45 | +33 % | −10.6 K |
+| PI del DET | 7/60 (IC 95 %: 6–22 %) | 1208.6 K | 1220.1 K | +20.1 ± 1.4 K | 8.8 | +19 % | +10.6 K |
+
+- **Ninguna versión de N2 llega a 1220 K** en las 60 realizaciones; el PI llega en 7. Con 60
+  realizaciones, $P(\text{cruce}\mid\text{falla})$ de N2 queda acotada por 6 % (IC al 95 %); la tasa
+  por transitorio, con la aceleración usada, por 0.30 × 0.06 ≈ 1.8 %.
+  Comparar probabilidades de cruce entre las variantes de N2 requiere más muestras o un
+  estimador de menor varianza (ver abajo).
+- **Lo que la cota sí cambia es el margen.** Con α ≤ 0.05, la peor PCT baja de 1218.5 a
+  1212.0 K. Es la realización 208: fuga de 24.7 kg/s y una falla de 118 s. La cota la
+  mantiene bajo $U_\alpha$ antes de la falla, y eso compra 6.5 K de margen.
+- **α = 0.05 sale «gratis».** Baja la PCT máxima 1.1 K, sube la masa 2 % y *reduce* el ISE
+  19 %. $U_\alpha\approx1181$ K está casi en la consigna, así que el pre-enfriamiento es mínimo y
+  acorta el sobrepaso después de las fallas, que es lo que domina el ISE.
+- **Con α ≤ 0.02 se paga.** El MPC trabaja 5–11 K bajo la consigna: el ISE sube 2.6–6.5
+  veces y la masa 17–33 %, para bajar la PCT máxima media 4–5 K. En el 45–55 % de las
+  consultas, la cota no se puede cumplir: el actuador ya está al máximo.
+- **Corrección hecha en el camino.** En una primera corrida, la holgura de la cota era
+  cuadrática ($\lambda_r=10^4$). Con cotas inalcanzables (α = 0.01 y fugas de 25 kg/s,
+  $U_\alpha\approx1090$ K), el QP quedaba mal escalado: Clarabel falló en 11 corridas y una llegó a
+  1220 K por aplicar un plan inválido. Ahora la holgura usa una penalización $\ell_1$ exacta
+  ($\lambda_r=10^3$ K⁻¹), y si el QP no termina en un óptimo se aplica el plan anterior
+  desplazado. Resultado: 0 fallas del solver.
+
+**Qué falta en el paso 3.ii.**
+
+1. *Estimador de riesgo de baja varianza.* En lugar de contar cruces, integrar a lo largo de
+   cada trayectoria la tasa de cruce
+   $\sum\lambda_i\,P(D>\tau_{1220}(x_t))$, donde $\tau_{1220}(x_t)$ es el tiempo que el ROM tarda en
+   llevar la PCT a 1220 K sin ACS. Es un estimador de Rao–Blackwell: usa la distribución
+   conocida de $D$ en lugar de sortearla.
+2. *Versión incondicional* de la cota, que descuenta la probabilidad de que no haya falla
+   (cono exponencial), y el CVaR por SAA sobre escenarios de falla.
+3. *PSM en línea* (Wilks 59) con horizonte de riesgo ≥ $q_{1-\alpha}(D)$.
+4. Confirmar con el equipo la aceleración (λ×10⁵, μ×10⁴) y el α objetivo. Con las tasas
+   reales, toda falla dura días y ningún controlador evita los 1220 K: la capa de riesgo sólo
+   tiene sentido si las reparaciones son rápidas (minutos).
 
 ---
 
@@ -1554,3 +1698,5 @@ versiones no paramétricas.
     Opciones: (a) fallas más largas, hasta ~180 s; (b) una tasa de fallas y una distribución
     de su duración, con fallas posibles en cualquier instante, que es la versión del DET;
     (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo.
+    *Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas (λ×10⁵, μ×10⁴), §8.14.*
+    Queda por confirmar con el equipo si esa aceleración es la representativa.

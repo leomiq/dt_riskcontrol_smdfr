@@ -179,6 +179,11 @@ function solve_qp(c, C, act)
         @constraint(md, [k = 1:K], (y[k] - c.y_ref) / den - z.thr <= q[k])
         obj = @expression(md, obj + z.lam * sum(q .^ 2))
     end
+    if get(c, :ubound, nothing) !== nothing       # F5b.1c: ŷ_k + d ≤ U_α (soft, exact ℓ1 penalty:
+        v = @variable(md, [1:K], lower_bound = 0)  # = hard bound when reachable, least total
+        @constraint(md, [k = 1:K], y[k] + c.d - c.ubound <= v[k])   # violation when not; a
+        obj = @expression(md, obj + c.lam_r * sum(v))                # quadratic slack with an
+    end                                                              # unreachable U_α broke Clarabel
     if act.ramp == :soft
         s = @variable(md, [1:K-1], lower_bound = 0)
         @constraint(md, [k = 1:K-1], u[k+1] - u[k] <= F4Lib.dm_lim + s[k])
@@ -222,6 +227,33 @@ function decide(ctrl, c, L, act, prev)
     error("unknown controller $ctrl")
 end
 
+# ---------------------------------------------------------------- risk bound (F5b.1c)
+"""
+    risk_bound(c, yhat_now, tau; U_lim = 1220.0)
+
+Risk-adjusted upper bound of the PCT (plan §8.14). If the ACS failed now and stayed off for
+`tau` = q₁₋α(D) seconds, the ROM (ACS = 0, leak held at its current value) predicts a heat-up
+ΔT = max_{t ≤ tau} ŷ_noACS(t) − ŷ_now (it includes the instantaneous p₄ jump when the flow
+drops). Then P(PCT_peak > U_lim | failure starting now) ≤ α holds if the bias-corrected PCT
+stays below U_α = U_lim − ΔT. Returns (U = U_α, dT = ΔT). If the ROM breaks down (inventory
+exhausted) before `tau`, the heat-up up to that point is used with the last rate extrapolated.
+"""
+function risk_bound(c, yhat_now, tau; U_lim = 1220.0)
+    n = ceil(Int, tau / h)
+    X = nothing; nok = n
+    while X === nothing && nok >= 4
+        X = try
+            R4.simulate(c.x_init, fill(c.leak0, nok + 1), zeros(nok + 1), h, c.p; scheme = :ode1be, input_at = :next)
+        catch err
+            err isa DomainError || rethrow(); nok ÷= 2; nothing
+        end
+    end
+    y = [R4.output(X[i, :], c.leak0, 0.0, c.p) for i in axes(X, 1)]
+    dT = maximum(y) - yhat_now
+    nok < n && (dT += (y[end] - y[end-1]) / h * (n - nok) * h)
+    (U = U_lim - dT, dT = dT)
+end
+
 # ---------------------------------------------------------------- the loop
 """
     run_loop(B, ctrl; n = 61, act = B.act_arch, bias = false, eta = 1.0, fail = nothing,
@@ -230,7 +262,8 @@ end
 Closed loop from t_start over `n` queries. Returns a NamedTuple of per-query logs.
 Plant perturbations the MPC does not know about (F5a.2):
   `eta`   ACS efficiency: the plant receives η·ṁ for a commanded ṁ (degraded ACS);
-  `fail`  (t_a, t_b): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
+  `fail`  (t_a, t_b), or a vector of such windows (F5b.1c, from the DET component Markov
+          chains): the ACS delivers nothing for t_a < t ≤ t_b (forced failure);
   `fbias` constant error of the leak forecast [kg/s] (ŷ uses ṁ_leak + fbias).
   `audit(c, L, act, prev, dec)` optional callback after each MPC decision (same query data).
 `ctrl = :PI` leaves the plant to the DET's own PI (active_mpc = 0); `fail` applies to it
@@ -254,11 +287,14 @@ What the twin knows (F5b.0, plan §8.12 step 2):
 `dsm = (lam, thr, U)` adds to the N1/N2 QP the margin penalty λ_s Σ [DSM_k − τ]₊² with
 DSM_k = (ŷ_k − y_ref)/(U − y_ref) on the bias-corrected prediction (F5b.1b, plan §8.12 step 3.i;
 the thesis form of `matlab/fitness_cost_dsm.m`).
+`risk = (tau, lam)` adds the risk-adjusted soft bound ŷ_k + d ≤ U_α (`risk_bound`, exact ℓ1
+penalty `lam` [1/K] on the slack) for a failure of length `tau` = q₁₋α(D) (F5b.1c, plan §8.14).
+`log.ubound` keeps U_α per query (NaN without `risk`).
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
                   fail = nothing, fbias = 0.0, audit = nothing, measured_acs = false,
                   leak_noise = 0.0, noise_seed = 1, forecast = :oracle, kf = nothing, kf_thr = 5.0, eta_pi = false,
-                  dsm = nothing, pi_setpoint = nothing)
+                  dsm = nothing, pi_setpoint = nothing, risk = nothing)
     pH = B.pH; hist = copy(B.hist)
     pPI = with_params(pH; acs_eta = eta_pi ? eta : 1.0,
                       pct_setpoint = pi_setpoint === nothing ? pH.pct_setpoint : pi_setpoint)
@@ -268,7 +304,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     m_applied = 0.0; prev = nothing
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
-           m_plan = Vector{Float64}[], ferr = Float64[], breakdown = [false], limit = [false])
+           m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], breakdown = [false], limit = [false])
     # leak measurements and forecaster
     tb = B.t_start - KF_BURN - DELAY - h
     nz = randn(Random.Xoshiro(noise_seed), round(Int, (B.t_start + n * h - tb) / h) + 2)
@@ -280,12 +316,13 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         filt = LeakKF(ymeas(t_kf); par..., thr = forecast == :kalman ? kf_thr : Inf)
     end
     acs_meas = measured_acs ? (t -> hist[t][2].m_last) : nothing
+    fails = fail === nothing ? Tuple{Float64,Float64}[] : fail isa Tuple ? [fail] : fail
     leak_meas = leak_noise > 0 ? ymeas : nothing
     for k in 1:n
         t_q = B.t_start + (k - 1) * h; τ = t_q - h
         x, Lg, pct_now = hist[τ]
         xH10, L10, _ = hist[t_q-DELAY]
-        failed = fail !== nothing && fail[1] < t_q <= fail[2]
+        failed = any(a < t_q <= b for (a, b) in fails)
         if ctrl == :PI                       # the DET's own PI drives the pump (no twin needed)
             T = vcat(T, t_q); U = vcat(U, [0.0 0.0]); Up = vcat(Up, failed ? [56.0 1.0] : [0.0 0.0])
             s = try
@@ -297,7 +334,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, s.acs[end])
             push!(log.m_plant, s.acs[end]); push!(log.u, s.current[end]); push!(log.yhat_now, NaN)
             push!(log.d, NaN); push!(log.time, 0.0); push!(log.status, "-"); push!(log.m_plan, [s.acs[end]])
-            push!(log.ferr, NaN)
+            push!(log.ferr, NaN); push!(log.ubound, NaN)
             s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
             continue
         end
@@ -323,9 +360,17 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         c = (; p = B.pR4, h, K, S = max.(abs.(w.x_init), 1.0), x_init = w.x_init,
              leak0 = w.leak_warm[end], y_ref = bias ? B.y_ref - d : B.y_ref, m_prev = m_applied,
              d = bias ? d : 0.0, dsm)
+        ub = NaN
+        if risk !== nothing
+            ub = risk_bound(c, yhat_now, risk.tau).U
+            c = (; c..., ubound = ub, lam_r = risk.lam)
+        end
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)
             audit === nothing || audit(c, L, act, prev, dec)
+            if !(dec.status in OK_STATUS) && prev !== nothing   # fallback: shifted previous plan
+                dec = (m = clamp.(vcat(prev[2:end], prev[end]), act.m_lo, act.m_hi), status = dec.status, time = dec.time)
+            end
             m1 = dec.m[1]; prev = dec.m
         else
             m1 = ctrl == :zero ? 0.0 : ctrl == :max ? act.m_hi :
@@ -355,6 +400,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         push!(log.u, u1)
         push!(log.yhat_now, yhat_now); push!(log.d, d); push!(log.time, dec.time)
         push!(log.status, dec.status); push!(log.m_plan, dec.m); push!(log.ferr, maximum(abs.(L .- Ltrue)))
+        push!(log.ubound, ub)
         s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
     end
     log

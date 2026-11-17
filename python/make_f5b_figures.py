@@ -120,3 +120,52 @@ ax[1].text(t["t"].max(), Y_REF + 0.5, r"$y_{\rm ref}$", ha="right", va="bottom",
 ax[1].text(fs + flen / 2, t["pct"].max() + 0.5, "falla del ACS", ha="center", va="bottom", fontsize=7, color=INK2)
 ax[1].set(title="Semilla 101: el pico llega al final de la falla", xlabel="t desde la activación [s]", ylabel="PCT [K]")
 save(fig, "fig_f5b_peak_at_failure")
+
+# ---- Fig 3: failure-length survival P(D > t), F5a.3 extreme family vs DET-accelerated ------
+import scipy.io as sio
+db = sio.loadmat(os.path.join(ROOT, "models", "MCDET_conferencepaper_database.mat"))
+lam = db["Lambda_t"].ravel() * 1e5; mu = db["Mu_t"].ravel() * 1e4; w = lam / lam.sum()
+tt = np.linspace(0, 300, 601)
+s_det = np.array([(w * np.exp(-mu * t)).sum() for t in tt])
+s_old = np.clip((90 - tt) / 60, 0, 1)
+fig, ax = plt.subplots(1, 1, figsize=(W * 0.62, 2.4), constrained_layout=True)
+ax.axvspan(130, 150, color=GRID, alpha=0.7, lw=0)
+ax.text(140, 0.86, "D que lleva de\n" r"$y_{\rm ref}$ a 1220 K", ha="center", va="center", fontsize=7, color=INK2)
+ax.plot(tt, s_old, color=ORANGE, ls=(0, (4, 2)), label="F5a.3: una falla, D ~ U(30, 90) s")
+ax.plot(tt, s_det, color=BLUE, label="DET acelerada: mezcla de exponenciales")
+for a, q in ((0.05, 136.3), (0.01, 219.0)):
+    ax.plot([q], [a], "o", color=BLUE, ms=4)
+    ax.text(q + 4, a + 0.02, f"$q_{{{1 - a:.2f}}}$ = {q:.0f} s", fontsize=7, color=INK2, va="bottom")
+ax.set(xlabel="duración de la falla t [s]", ylabel="P(D > t)", xlim=(0, 300), ylim=(0, 1.02),
+       title="Duración de una falla del ACS")
+ax.legend(loc="center right", bbox_to_anchor=(1.0, 0.45))
+save(fig, "fig_f5b_failure_duration")
+
+# ---- Fig 4: cost-risk frontier of the risk bound (F5b.1c, DET-accelerated failures) ---------
+rk = load(os.path.join(RES, "f5b1c_risk", "runs.csv"))
+order = [("N2", "N2+sesgo", None), ("N2_risk_a0.1", "", 0.10), ("N2_risk_a0.05", r"$\alpha$=0.05", 0.05),
+         ("N2_risk_a0.02", r"$\alpha$=0.02", 0.02), ("N2_risk_a0.01", r"$\alpha$=0.01", 0.01)]
+base = sel(rk, rk["case"] == "N2"); bseed = {s: i for i, s in enumerate(base["seed"])}
+fig, ax = plt.subplots(1, 2, figsize=(W, 2.4), constrained_layout=True)
+xs, y_mean, y_worst, ms = [], [], [], []
+for case, lab, a in order:
+    q = sel(rk, rk["case"] == case)
+    idx = [bseed[s] for s in q["seed"]]
+    xs.append(np.mean(q["mass_plant"] - base["mass_plant"][idx]))
+    y_mean.append(np.mean(q["pct_max"])); y_worst.append(np.max(q["pct_max"]))
+    ms.append(np.mean(q["mean_dev"]))
+ax[0].plot(xs, y_mean, color=BLUE, marker="o", ms=4, label="media")
+ax[0].plot(xs, y_worst, color=BLUE, marker="o", ms=4, mfc="white", ls=(0, (3, 2)), label="peor")
+for x, y, (case, lab, _) in zip(xs, y_worst, order):
+    lab = r"N2 y $\alpha$=0.10" if case == "N2" else lab
+    ax[0].text(x + 25, y - 1.0, lab, fontsize=6.5, color=INK2, ha="left", va="top")
+ax[0].axhline(1220, color=MUTED, lw=0.9, ls=(0, (4, 2)))
+ax[0].set(title="PCT máxima vs masa extra", xlabel="masa extra inyectada vs N2 [kg]", ylabel="K")
+ax[0].legend(loc="center right")
+ax[1].plot(ms, y_mean, color=BLUE, marker="o", ms=4)
+for x, y, (case, lab, _) in zip(ms, y_mean, order):
+    lab = r"N2 y $\alpha$=0.10" if case == "N2" else lab
+    ax[1].text(x - 0.3, y, lab, fontsize=6.5, color=INK2, ha="right", va="center")
+ax[1].set(title="Pre-enfriamiento vs PCT máx. media", xlim=(-14, 3), xlabel=r"desvío medio de la PCT respecto de $y_{\rm ref}$ [K]",
+          ylabel="K")
+save(fig, "fig_f5b_risk_frontier")

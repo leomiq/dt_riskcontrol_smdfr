@@ -207,6 +207,18 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     margin is its 1144 K setpoint.
   - Step 3.ii needs a failure family where free decisions and risk coexist (open decision
     11).
+- **F5b, step 3.ii: risk bound on N2 against DET-like failures (16 Nov, plan §8.14).**
+  - ACS failures now follow the DET model: 5 components in series, each an up ⇄ down Markov
+    chain. The rates are accelerated (λ×1e5, μ×1e4) as in the commented importance-sampling
+    option of the model workspace. Failure lengths are a mixture of exponentials: median
+    29 s, P(D > 130 s) = 5.7 %.
+  - N2 gets a risk bound: ŷ ≤ 1220 − ΔT(q₁₋α(D)), where ΔT is the ROM heat-up with the ACS
+    off. The bound is soft with an exact ℓ1 penalty, so N2 stays a QP
+    (`julia/f5b1c_risk.jl`, 60 realisations conditioned on a failure).
+  - No N2 variant reached 1220 K; the DET PI did in 7 of 60.
+  - With α ≤ 0.05 the worst-case PCT drops from 1218.5 K to 1212.0 K. α = 0.05 is almost
+    free (ISE −19 %, mass +2 %). α = 0.01 lowers the mean PCT max by 5 K at 6.5× ISE and
+    +33 % mass.
 - **Next steps (plan §8.12).**
   1. Sweep the actuator capacity (m_max 15–50 kg/s) and the ramp, comparing N2 with
      the DET PI at the same capacity.
