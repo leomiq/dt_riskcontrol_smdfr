@@ -1486,6 +1486,42 @@ Las tablas completas, con las métricas de la tesis y la familia DET acelerada, 
 
 \textbf{Implicación.} Para que un margen determinista cambie la decisión de N2 hay que pedir más que «no pasar la consigna». Las opciones son un umbral bajo la consigna, que equivale a correrla, o un margen ligado a un evento, como la cota de riesgo de \S{}8.14, que es la que sí cambió el resultado.
 
+\subsection*{8.16 Estimador de riesgo de baja varianza (Rao–Blackwell) y frontera costo–riesgo (17-11-2026)}
+\addcontentsline{toc}{subsection}{8.16 Estimador de riesgo de baja varianza (Rao–Blackwell) y frontera costo–riesgo (17-11-2026)}
+\textbf{Problema.} En \S{}8.14 ninguna variante de N2 cruzó 1220 K en 60 realizaciones. Contar cruces sólo acotaba la probabilidad bajo 6 \% y no permitía comparar variantes.
+
+\textbf{Idea.} No sortear la duración de la falla, sino integrarla con su distribución conocida. Para la \textbf{primera} falla del sistema (proceso de Poisson de tasa $\lambda=\sum\lambda_i$, \S{}8.14) que empieza en $t$, sobre la trayectoria sin fallas $x_t$ de cada controlador: $$P(\text{cruce})=\int_0^T\lambda e^{-\lambda t}\,S\big(\tau(x_t)\big)\,dt,\qquad S(\tau)=P(D>\tau)=\sum_i w_i e^{-\mu_i\tau}.$$ Aquí $\textbackslash{}tau(x\_t)$ es lo que tarda **el HRM** (la planta, no el ROM) en pasar 1220 K con el ACS apagado desde $x\_t$ (\code{time\_to\_limit}). Es exacto para la primera falla e ignora las siguientes, que son de segundo orden. La versión condicionada a una falla en $[0, 220]$ s se compara con §8.14. Implementación: \code{julia/f5b1c\_rb\_risk.jl}, con $\textbackslash{}tau$ evaluado cada 5 s; resumen en \code{python/f5b1c\_rb\_summary.py}; figura \code{docs/figures/fig\_f5b\_rb\_risk.pdf}.
+
+\textbf{Validación.} Para el PI del DET, el estimador da $0.119\pm0.016$; el conteo directo de \S{}8.14 había dado 7/60 = 0.117. Para N2 da $0.031\pm0.004$, compatible con 0/60.
+
+\textbf{Resultados} (50 realizaciones, semillas 201–250; la corrida se detuvo por falta de memoria en la 251 y es reanudable; comparación pareada con N2):
+
+{\footnotesize
+\begin{xltabular}{\linewidth}{@{}YYYYY@{}}
+\toprule
+\textbf{Caso} & \textbf{P(cruce dada una falla)} & \textbf{Cociente vs N2 (IC 95 \%)} & \textbf{K bajo $y_{\rm ref}$ (sin fallas)} & \textbf{Masa} \\
+\midrule
+\endhead
+N2+sesgo & 0.031 $\pm$ 0.004 & 1 & $-$0.1 & 3717 kg \\
+N2+cota, $\alpha$ = 0.10 & 0.031 $\pm$ 0.004 & 1.00 & $-$0.1 & 3717 kg \\
+N2+cota, $\alpha$ = 0.05 & 0.027 $\pm$ 0.002 & 0.91 [0.87, 0.95] & 1.1 & +2 \% \\
+N2+cota, $\alpha$ = 0.02 & 0.015 $\pm$ 0.001 & 0.53 [0.50, 0.57] & 7.5 & +17 \% \\
+N2+cota, $\alpha$ = 0.01 & 0.011 $\pm$ 0.001 & 0.37 [0.35, 0.39] & 12.9 & +32 \% \\
+PID de la tesis & 0.033 $\pm$ 0.004 & 1.05 [1.03, 1.06] & 0.1 & +1 \% \\
+PI del DET & 0.119 $\pm$ 0.016 & 3.78 [3.76, 3.80] & $-$6.8 & +48 \% \\
+\bottomrule
+\end{xltabular}}
+
+\begin{itemize}
+\item \textbf{La cota cumple su garantía nominal.} P(cruce | falla) queda bajo $\alpha$ en cada caso: 0.027 $\le$ 0.05, 0.015 $\le$ 0.02 y 0.011 $\approx$ 0.01. Con $\alpha$ = 0.10 no hace nada, porque N2 ya está en 0.031.
+\item \textbf{Hay un piso de 0.002:} el 0.2 \% de las fallas (componente 5, 2.9 h de reparación) es permanente en la escala del transitorio, y ningún controlador lo evita.
+\item \textbf{El precio es pre-enfriar.} Bajar el riesgo a la mitad ($\alpha$ = 0.02) cuesta trabajar 7.5 K bajo la consigna y 17 \% más de masa. Bajarlo a un tercio ($\alpha$ = 0.01) cuesta 12.9 K y 32 \%.
+\item \textbf{El PID de la tesis es 5 \% más riesgoso que N2,} y el PI del DET casi 4 veces más.
+\item \textbf{Por transitorio de 240 s con tasas aceleradas,} N2 tiene P $\approx$ 1.0 \% y N2+cota $\alpha$ = 0.01, P $\approx$ 0.34 \%. Con las tasas reales, toda falla dura días y $P\approx P(\text{falla})\approx3.8\cdot10^{-6}$ para cualquier controlador.
+\end{itemize}
+
+\textbf{Implicación.} La cota de riesgo es un control explícito y calibrado: $\alpha$ fija el riesgo condicional y el pre-enfriamiento es su precio. Elegir $\alpha$ es una decisión del equipo (\S{}9, decisión 12). Este estimador es también el criterio para comparar las demás formulaciones del paso 3.ii (CVaR, cota incondicional, PSM en línea).
+
 \medskip
 \section*{9. Decisiones abiertas}
 \addcontentsline{toc}{section}{9. Decisiones abiertas}
@@ -1501,6 +1537,7 @@ Las tablas completas, con las métricas de la tesis y la familia DET acelerada, 
 \item \textbf{PI+DSM} (\S{}8.12, paso 3.i): cómo dar al PI un margen equivalente para una comparación justa con N2+DSM. \emph{Propuesta tras \S{}8.13:} no formularlo. El margen del PI es su consigna (1144 K); con la consigna de N2 no inyecta. Se compara el PI tal cual (DET) con la misma capacidad y $\eta$.
 \item \textbf{PSM en línea} (\S{}8.12, paso 3.ii.4): horizonte de riesgo, validez de Wilks cuando el plan depende de la muestra, y si se itera hasta cumplir. \emph{Tras \S{}8.13:} el horizonte de riesgo debe cubrir la falla completa ($\ge$ 100 s).
 \item \textbf{Familia para la capa de riesgo} (\S{}8.13): con fallas de 30–90 s y $\ge$ 40 kg/s no hay riesgo, y con $\le$ 20 kg/s no hay decisión libre. Hay que elegir una familia donde coincidan. Opciones: (a) fallas más largas, hasta \textasciitilde{}180 s; (b) una tasa de fallas y una distribución de su duración, con fallas posibles en cualquier instante, que es la versión del DET; (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo. \emph{Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas ($\lambda$$\times$10$^{5}$, μ$\times$10$^{4}$), \S{}8.14.} Queda por confirmar con el equipo si esa aceleración es la representativa.
+\item \textbf{Nivel de riesgo $\alpha$} (\S{}8.16): la cota cumple P(cruce | falla) $\le$ $\alpha$. Bajar de 0.031 (N2) a 0.015 cuesta pre-enfriar 7.5 K y 17 \% más de masa; a 0.011, 12.9 K y 32 \%. Elegir $\alpha$ con el equipo, junto con la aceleración de las tasas (decisión 11).
 \end{enumerate}
 
 \end{document}

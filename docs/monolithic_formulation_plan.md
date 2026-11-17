@@ -1730,6 +1730,55 @@ que «no pasar la consigna». Las opciones son un umbral bajo la consigna, que e
 correrla, o un margen ligado a un evento, como la cota de riesgo de §8.14, que es la que sí
 cambió el resultado.
 
+### 8.16 Estimador de riesgo de baja varianza (Rao–Blackwell) y frontera costo–riesgo (17-11-2026)
+
+**Problema.** En §8.14 ninguna variante de N2 cruzó 1220 K en 60 realizaciones. Contar
+cruces sólo acotaba la probabilidad bajo 6 % y no permitía comparar variantes.
+
+**Idea.** No sortear la duración de la falla, sino integrarla con su distribución conocida.
+Para la **primera** falla del sistema (proceso de Poisson de tasa $\lambda=\sum\lambda_i$, §8.14)
+que empieza en $t$, sobre la trayectoria sin fallas $x_t$ de cada controlador:
+$$P(\text{cruce})=\int_0^T\lambda e^{-\lambda t}\,S\big(\tau(x_t)\big)\,dt,\qquad
+S(\tau)=P(D>\tau)=\sum_i w_i e^{-\mu_i\tau}.$$
+Aquí $\tau(x_t)$ es lo que tarda **el HRM** (la planta, no el ROM) en pasar 1220 K con el ACS
+apagado desde $x_t$ (`time_to_limit`). Es exacto para la primera falla e ignora las
+siguientes, que son de segundo orden. La versión condicionada a una falla en $[0, 220]$ s se
+compara con §8.14. Implementación: `julia/f5b1c_rb_risk.jl`, con $\tau$ evaluado cada 5 s;
+resumen en `python/f5b1c_rb_summary.py`; figura `docs/figures/fig_f5b_rb_risk.pdf`.
+
+**Validación.** Para el PI del DET, el estimador da $0.119\pm0.016$; el conteo directo de
+§8.14 había dado 7/60 = 0.117. Para N2 da $0.031\pm0.004$, compatible con 0/60.
+
+**Resultados** (50 realizaciones, semillas 201–250; la corrida se detuvo por falta de memoria
+en la 251 y es reanudable; comparación pareada con N2):
+
+| Caso | P(cruce dada una falla) | Cociente vs N2 (IC 95 %) | K bajo $y_{\rm ref}$ (sin fallas) | Masa |
+|---|---|---|---|---|
+| N2+sesgo | 0.031 ± 0.004 | 1 | −0.1 | 3717 kg |
+| N2+cota, α = 0.10 | 0.031 ± 0.004 | 1.00 | −0.1 | 3717 kg |
+| N2+cota, α = 0.05 | 0.027 ± 0.002 | 0.91 [0.87, 0.95] | 1.1 | +2 % |
+| N2+cota, α = 0.02 | 0.015 ± 0.001 | 0.53 [0.50, 0.57] | 7.5 | +17 % |
+| N2+cota, α = 0.01 | 0.011 ± 0.001 | 0.37 [0.35, 0.39] | 12.9 | +32 % |
+| PID de la tesis | 0.033 ± 0.004 | 1.05 [1.03, 1.06] | 0.1 | +1 % |
+| PI del DET | 0.119 ± 0.016 | 3.78 [3.76, 3.80] | −6.8 | +48 % |
+
+- **La cota cumple su garantía nominal.** P(cruce | falla) queda bajo α en cada caso:
+  0.027 ≤ 0.05, 0.015 ≤ 0.02 y 0.011 ≈ 0.01. Con α = 0.10 no hace nada, porque N2 ya está en
+  0.031.
+- **Hay un piso de 0.002:** el 0.2 % de las fallas (componente 5, 2.9 h de reparación) es
+  permanente en la escala del transitorio, y ningún controlador lo evita.
+- **El precio es pre-enfriar.** Bajar el riesgo a la mitad (α = 0.02) cuesta trabajar 7.5 K
+  bajo la consigna y 17 % más de masa. Bajarlo a un tercio (α = 0.01) cuesta 12.9 K y 32 %.
+- **El PID de la tesis es 5 % más riesgoso que N2,** y el PI del DET casi 4 veces más.
+- **Por transitorio de 240 s con tasas aceleradas,** N2 tiene P ≈ 1.0 % y N2+cota
+  α = 0.01, P ≈ 0.34 %. Con las tasas reales, toda falla dura días y
+  $P\approx P(\text{falla})\approx3.8\cdot10^{-6}$ para cualquier controlador.
+
+**Implicación.** La cota de riesgo es un control explícito y calibrado: α fija el riesgo
+condicional y el pre-enfriamiento es su precio. Elegir α es una decisión del equipo (§9,
+decisión 12). Este estimador es también el criterio para comparar las demás formulaciones
+del paso 3.ii (CVaR, cota incondicional, PSM en línea).
+
 ---
 
 ## 9. Decisiones abiertas
@@ -1770,3 +1819,6 @@ cambió el resultado.
     (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo.
     *Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas (λ×10⁵, μ×10⁴), §8.14.*
     Queda por confirmar con el equipo si esa aceleración es la representativa.
+12. **Nivel de riesgo α** (§8.16): la cota cumple P(cruce | falla) ≤ α. Bajar de 0.031 (N2) a
+    0.015 cuesta pre-enfriar 7.5 K y 17 % más de masa; a 0.011, 12.9 K y 32 %. Elegir α con el
+    equipo, junto con la aceleración de las tasas (decisión 11).

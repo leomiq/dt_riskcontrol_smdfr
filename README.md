@@ -219,6 +219,13 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   - The thesis PID (`ctrl = :PID`, `matlab/pid_controller.m`), replayed without the archived
     loop's extrapolation artefact, over-cools and never settles in the 0.30 K band. N2 has a
     2–50× lower IAE and settles in 3–14 s.
+- **F5b, Rao–Blackwell risk estimator (17 Nov, plan §8.16).**
+  - The estimator integrates P(first failure at t) · P(D > τ(x_t)) along failure-free
+    trajectories, where τ is the HRM time to 1220 K with the ACS off
+    (`julia/f5b1c_rb_risk.jl`). On the DET PI it matches the direct count (0.119 vs 7/60).
+  - P(reach 1220 K | failure): 0.031 for N2. The risk bound meets its guarantee (≤ α):
+    0.015 at α = 0.02 (7.5 K pre-cooling, +17 % mass) and 0.011 at α = 0.01 (12.9 K, +32 %).
+  - The thesis PID is 5 % riskier than N2; the DET PI is 3.8× riskier.
 - **F5b, step 3.ii: risk bound on N2 against DET-like failures (16 Nov, plan §8.14).**
   - ACS failures now follow the DET model: 5 components in series, each an up ⇄ down Markov
     chain. The rates are accelerated (λ×1e5, μ×1e4) as in the commented importance-sampling

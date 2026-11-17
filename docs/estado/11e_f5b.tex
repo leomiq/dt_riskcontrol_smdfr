@@ -107,7 +107,40 @@ PI del DET & 7 & 1220.1~K & $+20.1\pm1.4$~K & 8.8 & +19\,\%\\\bottomrule
 ISE; con $\alpha\le0.02$ se paga con pre-enfriamiento.}
 \end{figure}
 
-\takeaway{Con fallas como en el DET, la cota de riesgo compra margen donde importa (la peor
-realización baja de 1218.5 a 1212~K) y con $\alpha=0.05$ lo hace casi gratis. Ninguna variante
-de N2 cruzó 1220~K en 60 realizaciones, así que comparar probabilidades de cruce exige un
-estimador de menor varianza (plan §8.14).}
+\paragraph{Cuánto riesgo queda: un estimador de Rao--Blackwell.} Ninguna variante de N2 cruzó
+1220~K en las 60 realizaciones, así que contar cruces no permite compararlas. En lugar de
+sortear la duración de la falla se integra con su distribución conocida. Para la primera
+falla, que empieza en $t$ sobre la trayectoria sin fallas de cada controlador,
+\[
+P(\text{cruce})=\int_0^T\lambda e^{-\lambda t}\,P\big(D>\tau(x_t)\big)\,dt ,
+\]
+donde $\tau(x_t)$ es lo que tarda el HRM en pasar 1220~K con el ACS apagado desde $x_t$
+(\code{julia/f5b1c\_rb\_risk.jl}). Validación: para el PI del DET da $0.119\pm0.016$, y el conteo
+directo había dado 7/60 = 0.117.
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}Y r r r r@{}}\toprule
+Caso (50 realizaciones) & $P(\text{cruce}\mid\text{falla})$ & Cociente vs N2 (IC 95\,\%) & K bajo $y_{\rm ref}$ & Masa\\\midrule
+N2+sesgo & $0.031\pm0.004$ & 1 & $-0.1$ & ---\\
+N2+cota, $\alpha=0.05$ & $0.027\pm0.002$ & 0.91 [0.87, 0.95] & 1.1 & +2\,\%\\
+N2+cota, $\alpha=0.02$ & $0.015\pm0.001$ & 0.53 [0.50, 0.57] & 7.5 & +17\,\%\\
+N2+cota, $\alpha=0.01$ & $0.011\pm0.001$ & 0.37 [0.35, 0.39] & 12.9 & +32\,\%\\
+PID de la tesis & $0.033\pm0.004$ & 1.05 [1.03, 1.06] & 0.1 & +1\,\%\\
+PI del DET & $0.119\pm0.016$ & 3.78 [3.76, 3.80] & $-6.8$ & +48\,\%\\\bottomrule
+\end{tabularx}
+\caption{Probabilidad de llegar a 1220~K dada una falla del ACS (tasas del DET aceleradas),
+estimada por Rao--Blackwell sobre las trayectorias sin fallas. «K bajo $y_{\rm ref}$»: desvío
+medio de la PCT bajo la consigna, que es el costo de pre-enfriar.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_rb_risk.pdf}
+\caption{Izquierda: frontera riesgo--pre-enfriamiento. Derecha: con $\alpha=0.01$, N2 mantiene el
+tiempo hasta 1220~K sobre $q_{0.99}(D)\approx219$~s; sin cota queda en $\approx160$~s, y el PI del
+DET baja hasta 45~s.}
+\end{figure}
+
+\takeaway{La cota de riesgo cumple su garantía: $P(\text{cruce}\mid\text{falla})\le\alpha$. Reducir
+el riesgo a la mitad cuesta trabajar 7.5~K bajo la consigna y un 17\,\% más de masa, y elegir
+$\alpha$ es una decisión del equipo. Contra el mismo criterio, el PID de la tesis es un 5\,\% más
+riesgoso que N2 y el PI del DET casi 4 veces más.}

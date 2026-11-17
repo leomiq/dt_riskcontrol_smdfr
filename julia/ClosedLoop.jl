@@ -26,7 +26,7 @@ include(joinpath(@__DIR__, "HRMQueries.jl"))
 include(joinpath(@__DIR__, "F4Lib.jl"))
 using .HRMQueries, .F4Lib, MAT, JuMP, Clarabel, ForwardDiff, LinearAlgebra, Statistics, Random
 
-export Bench, setup, run_loop, metrics, thesis_metrics, ACT_ARCH, ACT_PHYS, act_cap
+export Bench, setup, run_loop, metrics, thesis_metrics, time_to_limit, ACT_ARCH, ACT_PHYS, act_cap
 
 const ROOT = joinpath(@__DIR__, "..")
 const h = 0.5
@@ -298,12 +298,15 @@ u_k = u_{k−1} + K_p e + I_k, I_k = I_{k−1} + K_i e Δt (K_p = −0.5, K_i = 
 to [56.68, 100] A and rate-limited to 60 A/s from u_{k−1} (u_0 = 0, as in the thesis); the
 current goes to the pump map and the plant (capacity, η and failures apply as to the MPC).
 `ctrl = :PI` is the DET's own PI (setpoint 1144 K), a different controller.
+`keep_states = true` stores the plant state and DET logic after every query in `log.states`
+(for `time_to_limit`).
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
                   fail = nothing, fbias = 0.0, audit = nothing, measured_acs = false,
                   leak_noise = 0.0, noise_seed = 1, forecast = :oracle, kf = nothing, kf_thr = 5.0, eta_pi = false,
                   dsm = nothing, pi_setpoint = nothing, risk = nothing,
-                  pid = (Kp = -0.5, Ki = -0.4, I_min = 56.68, I_max = 100.0, dI_max = 60.0))
+                  pid = (Kp = -0.5, Ki = -0.4, I_min = 56.68, I_max = 100.0, dI_max = 60.0),
+                  keep_states = false)
     pH = B.pH; hist = copy(B.hist)
     pPI = with_params(pH; acs_eta = eta_pi ? eta : 1.0,
                       pct_setpoint = pi_setpoint === nothing ? pH.pct_setpoint : pi_setpoint)
@@ -314,7 +317,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     pid_u = 0.0; pid_I = 0.0                            # thesis PID state
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
-           m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], breakdown = [false], limit = [false])
+           m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], states = Any[], breakdown = [false], limit = [false])
     # leak measurements and forecaster
     tb = B.t_start - KF_BURN - DELAY - h
     nz = randn(Random.Xoshiro(noise_seed), round(Int, (B.t_start + n * h - tb) / h) + 2)
@@ -340,7 +343,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             catch err
                 err isa DomainError || rethrow(); log.breakdown[1] = true; break
             end
-            hist[t_q] = (s.x, s.logic, s.pct[end])
+            hist[t_q] = (s.x, s.logic, s.pct[end]); keep_states && push!(log.states, (s.x, s.logic))
             push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, s.acs[end])
             push!(log.m_plant, s.acs[end]); push!(log.u, s.current[end]); push!(log.yhat_now, NaN)
             push!(log.d, NaN); push!(log.time, 0.0); push!(log.status, "-"); push!(log.m_plan, [s.acs[end]])
@@ -412,7 +415,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             @assert abs(s.acs[end] - mp) <= 1e-6 * max(1.0, mp) "plant did not receive the intended flow"
         end
         mp = s.acs[end]
-        hist[t_q] = (s.x, s.logic, s.pct[end])
+        hist[t_q] = (s.x, s.logic, s.pct[end]); keep_states && push!(log.states, (s.x, s.logic))
         m_applied = m1
         push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, m1); push!(log.m_plant, mp)
         push!(log.u, u1)
@@ -437,6 +440,31 @@ function metrics(lg, y_ref)
      ramp_max = maximum(abs.(diff(vcat(0.0, lg.m)))),
      t_p50 = sort(lg.time)[cld(length(lg.time), 2)], t_p99 = sort(lg.time)[ceil(Int, 0.99 * length(lg.time))],
      t_max = maximum(lg.time), fails = count(s -> !(s in OK_STATUS), lg.status))
+end
+
+"""
+    time_to_limit(pH, x, logic, t; U = 1220.0, t_cap = 600.0, chunk = 50.0)
+
+Time τ for the PCT of the HRM (the plant) to exceed `U` if the ACS is off from `t` on (pump
+failed: zero flow, whatever the PI or the MPC ask), starting from the plant state `x` and DET
+logic `logic` at `t`. Simulated in chunks of `chunk` s up to `t_cap` (returns `t_cap` if not
+reached) or until the inventory is exhausted (returns the time reached). Used by the
+Rao–Blackwell risk estimator of F5b.1c (plan §8.16).
+"""
+function time_to_limit(pH, x, logic, t; U = 1220.0, t_cap = 600.0, chunk = 50.0)
+    ext = ExtInput([t, t + t_cap + chunk], [56.0 1.0; 56.0 1.0])     # 56 A: zero flow
+    t0 = t; xx = x; L = logic
+    while t0 < t + t_cap
+        s = try
+            SMDFRHRM.simulate(pH, ext, t0 + chunk; t0 = t0, x0 = xx, logic = L)
+        catch err
+            err isa DomainError || rethrow(); return t0 - t
+        end
+        i = findfirst(>(U), s.pct)
+        i === nothing || return s.t[i] - t
+        t0 += chunk; xx = s.x; L = s.logic
+    end
+    t_cap
 end
 
 """

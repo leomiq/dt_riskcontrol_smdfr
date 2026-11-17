@@ -189,3 +189,33 @@ ax[1].set(title="Caudal entregado", xlabel="t desde 1160 s [s]", ylabel="kg/s (l
 h_, l_ = ax[0].get_legend_handles_labels()
 fig.legend(h_, l_, loc="outside lower center", ncol=4)
 save(fig, "fig_f5b_dsm_lambda_archived")
+
+# ---- Fig 6: Rao-Blackwell risk vs cost (F5b.1c-RB) and time-to-limit along a trajectory -------
+sm = load(os.path.join(RES, "f5b1c_rb_risk", "summary.csv"))
+ta = load(os.path.join(RES, "f5b1c_rb_risk", "tau.csv"))
+lab_of = {"N2": "N2+sesgo", "N2_risk_a0.1": r"$\alpha$=0.10", "N2_risk_a0.05": r"$\alpha$=0.05",
+          "N2_risk_a0.02": r"$\alpha$=0.02", "N2_risk_a0.01": r"$\alpha$=0.01", "PID": "PID de la tesis", "PI": "PI del DET"}
+fig, ax = plt.subplots(1, 2, figsize=(W, 2.6), layout="constrained")
+n2 = [c.startswith("N2") for c in sm["case"]]
+ax[0].errorbar(-sm["mean_dev"][n2], sm["p_cond"][n2], yerr=sm["p_cond_ci"][n2], color=BLUE, marker="o", ms=4,
+               capsize=2, lw=1.3, label="N2 y cota de riesgo")
+for c, col, mk in (("PID", ORANGE, "s"), ("PI", MUTED, "D")):
+    k = list(sm["case"]).index(c)
+    ax[0].errorbar([-sm["mean_dev"][k]], [sm["p_cond"][k]], yerr=[sm["p_cond_ci"][k]], color=col, marker=mk, ms=4,
+                   capsize=2, ls="none", label=lab_of[c])
+for c, x, y in zip(sm["case"], -sm["mean_dev"], sm["p_cond"]):
+    if c.startswith("N2_risk") and c != "N2_risk_a0.1":
+        ax[0].text(x + 0.4, y + 0.004, lab_of[c], fontsize=6.5, color=INK2, va="bottom")
+ax[0].set(title="Riesgo vs pre-enfriamiento", xlabel=r"K bajo $y_{\rm ref}$ en promedio (sin fallas)",
+          ylabel="P(llegar a 1220 K | falla)")
+ax[0].legend(loc="upper right", fontsize=7)
+seed0 = ta["seed"][0]
+for c, col, ls in (("N2", BLUE, "-"), ("N2_risk_a0.01", BLUE, (0, (1, 1.5))), ("PI", MUTED, (0, (4, 2)))):
+    q = sel(ta, (ta["seed"] == seed0) & (ta["case"] == c))
+    ax[1].plot(q["t"], q["tau"], color=col, ls=ls, label=lab_of[c])
+ax[1].axhline(136.3, color=INK2, lw=0.8, ls=":")
+ax[1].text(240, 137.5, r"$q_{0.95}(D)$", ha="right", va="bottom", fontsize=7, color=INK2)
+ax[1].set(title=f"Tiempo hasta 1220 K si el ACS falla (semilla {seed0:.0f})", xlabel="t desde la 1.ª consulta [s]",
+          ylabel=r"$\tau(x_t)$ [s]")
+ax[1].legend(loc="lower right", fontsize=7)
+save(fig, "fig_f5b_rb_risk")

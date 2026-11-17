@@ -97,8 +97,9 @@ completos sin MATLAB. Sobre esa planta:
   \item el pico de PCT lo fija la duración de las fallas del ACS. Ni el pronóstico de fuga
         ni el margen DSM de la tesis (con cualquier peso $\lambda_{\rm dsm}$) cambian la
         trayectoria de N2, que gana al PID de la tesis en todas sus métricas. Con fallas
-        generadas como en el DET, una cota de riesgo en N2 baja la peor PCT de 1218.5 a
-        1212~K y, con $\alpha=0.05$, casi sin costo.
+        generadas como en el DET, una cota de riesgo en N2 cumple
+        $P(\text{cruce}\mid\text{falla})\le\alpha$: baja el riesgo de 0.031 a 0.011 con
+        $\alpha=0.01$, a cambio de pre-enfriar unos 13~K.
 \end{itemize}
 \end{abstract}
 

@@ -39,7 +39,10 @@
         sobre-enfría y nunca se asienta en la banda de 0.30~K.
   \item \textbf{¿Sirve una capa de riesgo?} Con fallas como en el DET (tasas aceleradas), una
         cota de riesgo en N2 baja la peor PCT de 1218.5 a 1212~K; con $\alpha=0.05$ el costo es
-        casi nulo. Ninguna variante de N2 cruzó 1220~K en 60 realizaciones; el PI del DET, en 7.
+        casi nulo. Con un estimador de Rao--Blackwell, validado contra el conteo directo,
+        $P(\text{cruce}\mid\text{falla})$ es 0.031 para N2 y la cota la lleva a $\le\alpha$
+        (0.015 con $\alpha=0.02$, 0.011 con $\alpha=0.01$). El precio es pre-enfriar 7.5--12.9~K.
+        El PID de la tesis es un 5\,\% más riesgoso que N2, y el PI del DET casi 4 veces más.
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -90,21 +93,19 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
         ROM y el HRM, ni sobre el reactor real.
   \item Las cotas del actuador siguen sin decidirse; se usan dos configuraciones de referencia.
   \item La brecha certificada es conservadora, sobre todo en 1161~s.
-  \item La capa de riesgo es una primera versión (cota condicional). Con 60 realizaciones no
-        se pueden comparar probabilidades de cruce entre variantes de N2; hace falta un
-        estimador de menor varianza.
+  \item La capa de riesgo es una primera versión (cota condicional a una falla que empieza
+        ahora). El estimador de riesgo considera sólo la primera falla de cada transitorio.
   \item Las tasas de falla del DET están aceleradas ($\lambda\times10^5$, $\mu\times10^4$); falta
         confirmar con el equipo qué aceleración es representativa.
 \end{itemize}
 
 \subsection{Próximos pasos, por prioridad}
 \begin{enumerate}
-  \item \textbf{Estimador de riesgo de baja varianza}: integrar a lo largo de cada trayectoria
-        la tasa de cruce $\sum\lambda_i\,P(D>\tau_{1220}(x_t))$, con la distribución conocida de
-        la duración, en lugar de contar cruces.
+  \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
+        medida (sección~\ref{sec:f5b}).
   \item \textbf{Completar la capa de riesgo (paso 3.ii)}: cota incondicional, CVaR por SAA sobre
         escenarios de falla, escenario orientado a la decisión (Homem-de-Mello) y PSM en línea
-        con horizonte $\ge q_{1-\alpha}(D)$.
+        con horizonte $\ge q_{1-\alpha}(D)$, todas medidas con el estimador de Rao--Blackwell.
   \item \textbf{Confirmar con el equipo} la capacidad del ACS, la aceleración de las tasas de
         falla y el $\alpha$ objetivo.
   \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).
