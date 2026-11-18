@@ -275,10 +275,15 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     the thesis PID in 1/50 (IAE 1185); the DET PI in 7/50 (IAE 3293).
   - Per-query optimality audit over 3150 closed-loop queries: N3 is within 2.5e-8 K RMS of
     the best plan found, N2 within 6e-4 K; a cold start never found anything better.
+- **Decisions (18 Nov, plan §10.3).** Scope: one paper. Failure duration, proposed from
+  the literature: repairs take days and operator recoveries tens of minutes, so no
+  controller can mitigate them and they belong to the PSA. The MPC protects against
+  interruptions recovered automatically by redundancy. Base case μ×1e4 (mean ≈ 46 s), read
+  as the automatic recovery time, with μ×3e3 and μ×3e4 as the sensitivity band.
 - **Next steps (plan §10).**
-  1. Confirm the failure-rate acceleration with the team (decision 11), then α, the
-     4-train model, the 1220 K limit and the ACS capacity.
-  2. Decide the scope: one paper or two.
+  1. Ask the team about the ACS redundancy and its flow-restoration time (fixes the base
+     case), α, the 4-train model and the 1220 K limit.
+  2. Write the manuscript.
 
   Tightening the certified gap (plan §8.5, step 4b.5) is postponed.
 

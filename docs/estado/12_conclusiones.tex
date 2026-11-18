@@ -122,12 +122,20 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
 \subsection{Próximos pasos, por prioridad}
 \begin{enumerate}
   \item \textbf{Confirmar con el equipo la aceleración de las reparaciones} (decisión 11): decide
-        en cuál de los tres regímenes cae la capa de riesgo (sección~\ref{sec:f6}).
+        en cuál de los tres regímenes cae la capa de riesgo (sección~\ref{sec:f6}). Propuesta
+        a partir de la literatura (plan §10.3): las reparaciones duran días y las
+        recuperaciones por el operador decenas de minutos, así que ningún controlador las
+        mitiga y quedan para el APS. El MPC protege contra interrupciones que se recuperan
+        solas por redundancia (arranque en 10--20~s más el restablecimiento del caudal). El
+        caso base es $\mu\times10^4$ (media $\approx46$~s). Falta el dato de la redundancia
+        del ACS del SMDFR.
+  \item \textbf{Alcance: un solo paper} (decidido el 18-11): formulación y certificación, lazo
+        cerrado con las métricas de la tesis, y capa de riesgo con las proposiciones y su
+        condición de aplicabilidad.
   \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
         medida con 50 realizaciones.
   \item \textbf{Confirmar el resto de los supuestos}: el modelo de 4 trenes con sus
         probabilidades, el límite de 1220~K y la capacidad y rampa del ACS. Según F6, estos
         dos últimos casi no cambian las conclusiones.
-  \item \textbf{Decidir el alcance}: un paper (formulación, lazo cerrado y riesgo) o dos
-        (formulación y certificación; capa de riesgo en lazo cerrado).
+  \item \textbf{Escribir el manuscrito.}
 \end{enumerate}

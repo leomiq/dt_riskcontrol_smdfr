@@ -1629,7 +1629,7 @@ Pérdida esperada con escenarios, $\rho$ = 100 (30 kg/s) & = N2 (inactiva) & 0.0
 \item \textbf{Límite de seguridad del margen} (\S{}8.11–8.12): el DSM y $U_y$ usan 1244 K, pero el DET termina en 1220 K. Hay que decidir con el equipo qué límite normaliza el DSM y el PSM.
 \item \textbf{PI+DSM} (\S{}8.12, paso 3.i): cómo dar al PI un margen equivalente para una comparación justa con N2+DSM. \emph{Propuesta tras \S{}8.13:} no formularlo. El margen del PI es su consigna (1144 K); con la consigna de N2 no inyecta. Se compara el PI tal cual (DET) con la misma capacidad y $\eta$.
 \item \textbf{PSM en línea} (\S{}8.12, paso 3.ii.4): horizonte de riesgo, validez de Wilks cuando el plan depende de la muestra, y si se itera hasta cumplir. \emph{Tras \S{}8.13:} el horizonte de riesgo debe cubrir la falla completa ($\ge$ 100 s).
-\item \textbf{Familia para la capa de riesgo} (\S{}8.13): con fallas de 30–90 s y $\ge$ 40 kg/s no hay riesgo, y con $\le$ 20 kg/s no hay decisión libre. Hay que elegir una familia donde coincidan. Opciones: (a) fallas más largas, hasta \textasciitilde{}180 s; (b) una tasa de fallas y una distribución de su duración, con fallas posibles en cualquier instante, que es la versión del DET; (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo. \emph{Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas ($\lambda$$\times$10$^{5}$, μ$\times$10$^{4}$), \S{}8.14.} Queda por confirmar con el equipo si esa aceleración es la representativa.
+\item \textbf{Familia para la capa de riesgo} (\S{}8.13): con fallas de 30–90 s y $\ge$ 40 kg/s no hay riesgo, y con $\le$ 20 kg/s no hay decisión libre. Hay que elegir una familia donde coincidan. Opciones: (a) fallas más largas, hasta \textasciitilde{}180 s; (b) una tasa de fallas y una distribución de su duración, con fallas posibles en cualquier instante, que es la versión del DET; (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo. \emph{Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas ($\lambda$$\times$10$^{5}$, μ$\times$10$^{4}$), \S{}8.14.} Queda por confirmar con el equipo si esa aceleración es la representativa. \emph{Propuesta (18-11-2026, \S{}10.3): según la literatura, la falla que el MPC puede mitigar es la que se recupera automáticamente por redundancia (de segundos a decenas de segundos). Caso base μ$\times$10$^{4}$ (media $\approx$ 46 s), con μ$\times$3·10$^{3}$ y μ$\times$3·10$^{4}$ como banda de sensibilidad. Las fallas que se terminan por reparación (días) o por acción del operador (decenas de minutos) quedan para el APS. Falta el dato del equipo: redundancia y tiempo de restablecimiento del caudal del ACS.}
 \item \textbf{Nivel de riesgo $\alpha$} (\S{}8.16): la cota cumple P(cruce | falla) $\le$ $\alpha$. Bajar de 0.031 (N2) a 0.015 cuesta pre-enfriar 7.5 K y 17 \% más de masa; a 0.011, 12.9 K y 32 \%. Elegir $\alpha$ con el equipo, junto con la aceleración de las tasas (decisión 11).
 \end{enumerate}
 
@@ -1765,5 +1765,38 @@ Familia nominal (escenario de la tesis): N1/N2/N3 tienen IAE 14.7 K·s con la bo
 \textbf{Auditoría de optimalidad por consulta} (3150 consultas en las tres familias). Como en el 53–85 \% de las consultas la consigna se sigue exactamente ($J_{\rm best}\approx10^{-12}$), la brecha relativa no sirve. Se usa el exceso en error RMS sobre el horizonte. N3: $\le$ 2.5·10$^{-8}$ K. N2: $\le$ 6·10$^{-4}$ K (brecha relativa $\le$ 0.03 \% donde $J_{\rm best}\ge1$). N1: $\le$ 7·10$^{-4}$ K, salvo en la familia extrema con actuador físico (hasta 0.33 K, 6 \%), porque N1 linealiza una sola vez y las jugadas son grandes. N3 con arranque en frío nunca encontró nada mejor (0 de 3150). Esto apoya en lazo cerrado lo que el certificado de F3c mostró en dos consultas.
 
 \textbf{Para el paper:} la conclusión central (una sola frontera, garantía calibrada, N2 $\approx$ óptimo en tiempo real) resiste 50 realizaciones, cinco capacidades y cuatro modelos de severidad. Lo que no resiste es una aceleración distinta de las reparaciones: el régimen útil de la capa de riesgo existe sólo si la duración de la falla es comparable, sin superarlo, al tiempo hasta 1220 K. Hay que presentarlo como la condición de aplicabilidad y confirmar μ con el equipo.
+
+\subsection*{10.3 Decisiones del 18-11-2026: duración de las fallas y alcance}
+\addcontentsline{toc}{subsection}{10.3 Decisiones del 18-11-2026: duración de las fallas y alcance}
+\textbf{Alcance: un solo paper} (decisión del usuario). Lleva la formulación monolítica con su certificación, el lazo cerrado sobre el HRM con las métricas de la tesis, y la capa de riesgo con las proposiciones de \S{}10.1 y la condición de aplicabilidad de \S{}10.2.
+
+\textbf{Duración de las fallas del ACS (decisión 11): propuesta basada en la literatura.}
+
+\emph{Qué dicen los datos.} Hay dos clases de «falla» con escalas de tiempo muy distintas:
+
+{\small
+\begin{xltabular}{\linewidth}{@{}YYY@{}}
+\toprule
+\textbf{Mecanismo que termina la falla} & \textbf{Escala de tiempo} & \textbf{Fuente} \\
+\midrule
+\endhead
+Reparación del componente & Días. Las tasas reales del DET dan medias de 129 h (componentes 1–2), 70 h, 18 h y 3.4 años. En sistemas de metal líquido, como el refrigerante de plomo del SMDFR, una bomba electromagnética tarda \textasciitilde{}33 días en repararse, un intercambiador 15–30 días y una válvula neumática 3 días & \code{models/MCDET\_conferencepaper\_database.mat}; Cadwallader (INL), datos de sistemas de sodio \\
+Recuperación por el operador (rearranque manual, realineación) & Decenas de minutos. Los APS usan probabilidades de no recuperación de 0.25–0.3 a los 30–40 min & NRC, Generic Issue 122 (Davis-Besse), con valores del APS de Oconee-3 y NUREG-1032 \\
+Recuperación automática por redundancia (arranque del tren de reserva, transferencia) & Segundos a decenas de segundos. Los equipos de reserva de emergencia deben arrancar y tomar carga en 10 s; 20 s es el valor por defecto en usos no críticos & NFPA 110; especificaciones UFGS \\
+\bottomrule
+\end{xltabular}}
+
+\emph{Consecuencia.} Ninguna capa de control puede mitigar una falla que se termina por reparación o por acción del operador. Son ≫ τ $\approx$ 165 s, y la PCT llega a 1220 K pase lo que pase: eso pertenece al APS (frecuencia $\times$ consecuencia), no al MPC. El MPC sólo puede proteger contra interrupciones que se \textbf{recuperan automáticamente}. Ahí la duración incluye el arranque del tren de reserva (10–20 s), la realineación de válvulas y el restablecimiento del caudal en el circuito (decenas de segundos).
+
+\emph{Propuesta.}
+
+\begin{enumerate}
+\item \textbf{Reinterpretar la aceleración.} «μ$\times$10$^{4}$» no es una tasa de reparación acelerada. Es la duración de una \textbf{recuperación automática por redundancia}, con los pesos de cada componente que da el DET ($w_i=\lambda_i/\sum\lambda$). Las medias quedan en 46 s (componentes 1–2), 25 s y 6.5 s: un arranque de 10–20 s más el restablecimiento del caudal. La quinta componente (2.9 h, peso 0.002) representa las fallas que \textbf{no} se recuperan automáticamente: es el piso de riesgo que ningún controlador evita.
+\item \textbf{Caso base μ$\times$10$^{4}$} (media $\approx$ 46 s), con la sensibilidad de \S{}10.2 como banda de incertidumbre: μ$\times$3·10$^{4}$ ($\approx$ 15 s, transferencia casi inmediata) y μ$\times$3·10$^{3}$ ($\approx$ 150 s, recuperación automática lenta). En el paper la variable se presenta directamente como el \textbf{tiempo medio de recuperación automática} $\bar t_{\rm rec}$, comparado con $\tau$: la capa de riesgo actúa cuando $\bar t_{\rm rec}\approx0.1$–0.5 $\tau$.
+\item \textbf{Fuera del alcance del MPC:} las fallas que requieren operador o reparación. En el paper se tratan en una frase, como frecuencia residual que va al APS.
+\item \textbf{A confirmar con el equipo:} si el ACS del SMDFR tiene trenes redundantes con arranque automático y cuánto tarda en restablecer el caudal. Ese dato fija $\bar t_{\rm rec}$. La tasa $\lambda$ ($\times$10$^{5}$) es sólo muestreo por importancia y no cambia los resultados condicionados a una falla.
+\end{enumerate}
+
+Fuentes: \href{https://www.nrc.gov/sr0933/section-3-new-generic-issues/issue-122-davis-besse-loss-all-feedwater-event-june-9-1985-short-term-actions-potential-inability}{GI-122, Davis-Besse}; \href{https://inldigitallibrary.inl.gov/sites/sti/sti/6760037.pdf}{INL, datos de falla y reparación de sistemas de metal líquido}; \href{https://www.cummins.com/sites/default/files/2019-04/FAQ_NFPA\%20110\%20Time\%20to\%20Readiness.pdf}{NFPA 110, arranque en 10 s}; \href{https://ufgscriteriadocreport.tpub.com/16263A/16263A0064.htm}{UFGS, 20 s por defecto}; \href{https://www.nrc.gov/reading-rm/doc-collections/nuregs/contract/cr6928/index}{NUREG/CR-6928}.
 
 \end{document}

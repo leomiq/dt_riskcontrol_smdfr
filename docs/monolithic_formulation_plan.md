@@ -1948,6 +1948,12 @@ con 40 y 30 kg/s; `results/f5b1d_partial/`):
     (c) una consigna más cercana al límite. La opción y la distribución las debe fijar el equipo.
     *Resuelta (16-11-2026): opción (b), con las tasas del DET aceleradas (λ×10⁵, μ×10⁴), §8.14.*
     Queda por confirmar con el equipo si esa aceleración es la representativa.
+    *Propuesta (18-11-2026, §10.3): según la literatura, la falla que el MPC puede mitigar es
+    la que se recupera automáticamente por redundancia (de segundos a decenas de segundos).
+    Caso base μ×10⁴ (media ≈ 46 s), con μ×3·10³ y μ×3·10⁴ como banda de sensibilidad. Las
+    fallas que se terminan por reparación (días) o por acción del operador (decenas de
+    minutos) quedan para el APS. Falta el dato del equipo: redundancia y tiempo de
+    restablecimiento del caudal del ACS.*
 12. **Nivel de riesgo α** (§8.16): la cota cumple P(cruce | falla) ≤ α. Bajar de 0.031 (N2) a
     0.015 cuesta pre-enfriar 7.5 K y 17 % más de masa; a 0.011, 12.9 K y 32 %. Elegir α con el
     equipo, junto con la aceleración de las tasas (decisión 11).
@@ -2138,3 +2144,52 @@ en tiempo real) resiste 50 realizaciones, cinco capacidades y cuatro modelos de 
 que no resiste es una aceleración distinta de las reparaciones: el régimen útil de la capa de
 riesgo existe sólo si la duración de la falla es comparable, sin superarlo, al tiempo hasta
 1220 K. Hay que presentarlo como la condición de aplicabilidad y confirmar μ con el equipo.
+
+### 10.3 Decisiones del 18-11-2026: duración de las fallas y alcance
+
+**Alcance: un solo paper** (decisión del usuario). Lleva la formulación monolítica con su
+certificación, el lazo cerrado sobre el HRM con las métricas de la tesis, y la capa de riesgo
+con las proposiciones de §10.1 y la condición de aplicabilidad de §10.2.
+
+**Duración de las fallas del ACS (decisión 11): propuesta basada en la literatura.**
+
+*Qué dicen los datos.* Hay dos clases de «falla» con escalas de tiempo muy distintas:
+
+| Mecanismo que termina la falla | Escala de tiempo | Fuente |
+|---|---|---|
+| Reparación del componente | Días. Las tasas reales del DET dan medias de 129 h (componentes 1–2), 70 h, 18 h y 3.4 años. En sistemas de metal líquido, como el refrigerante de plomo del SMDFR, una bomba electromagnética tarda ~33 días en repararse, un intercambiador 15–30 días y una válvula neumática 3 días | `models/MCDET_conferencepaper_database.mat`; Cadwallader (INL), datos de sistemas de sodio |
+| Recuperación por el operador (rearranque manual, realineación) | Decenas de minutos. Los APS usan probabilidades de no recuperación de 0.25–0.3 a los 30–40 min | NRC, Generic Issue 122 (Davis-Besse), con valores del APS de Oconee-3 y NUREG-1032 |
+| Recuperación automática por redundancia (arranque del tren de reserva, transferencia) | Segundos a decenas de segundos. Los equipos de reserva de emergencia deben arrancar y tomar carga en 10 s; 20 s es el valor por defecto en usos no críticos | NFPA 110; especificaciones UFGS |
+
+*Consecuencia.* Ninguna capa de control puede mitigar una falla que se termina por reparación
+o por acción del operador. Son ≫ τ ≈ 165 s, y la PCT llega a 1220 K pase lo que pase: eso
+pertenece al APS (frecuencia × consecuencia), no al MPC. El MPC sólo puede proteger contra
+interrupciones que se **recuperan automáticamente**. Ahí la duración incluye el arranque del
+tren de reserva (10–20 s), la realineación de válvulas y el restablecimiento del caudal en el
+circuito (decenas de segundos).
+
+*Propuesta.*
+
+1. **Reinterpretar la aceleración.** «μ×10⁴» no es una tasa de reparación acelerada. Es la
+   duración de una **recuperación automática por redundancia**, con los pesos de cada
+   componente que da el DET ($w_i=\lambda_i/\sum\lambda$). Las medias quedan en 46 s
+   (componentes 1–2), 25 s y 6.5 s: un arranque de 10–20 s más el restablecimiento del caudal.
+   La quinta componente (2.9 h, peso 0.002) representa las fallas que **no** se recuperan
+   automáticamente: es el piso de riesgo que ningún controlador evita.
+2. **Caso base μ×10⁴** (media ≈ 46 s), con la sensibilidad de §10.2 como banda de
+   incertidumbre: μ×3·10⁴ (≈ 15 s, transferencia casi inmediata) y μ×3·10³ (≈ 150 s,
+   recuperación automática lenta). En el paper la variable se presenta directamente como el
+   **tiempo medio de recuperación automática** $\bar t_{\rm rec}$, comparado con $\tau$:
+   la capa de riesgo actúa cuando $\bar t_{\rm rec}\approx0.1$–0.5 $\tau$.
+3. **Fuera del alcance del MPC:** las fallas que requieren operador o reparación. En el
+   paper se tratan en una frase, como frecuencia residual que va al APS.
+4. **A confirmar con el equipo:** si el ACS del SMDFR tiene trenes redundantes con arranque
+   automático y cuánto tarda en restablecer el caudal. Ese dato fija $\bar t_{\rm rec}$. La
+   tasa λ (×10⁵) es sólo muestreo por importancia y no cambia los resultados condicionados a
+   una falla.
+
+Fuentes: [GI-122, Davis-Besse](https://www.nrc.gov/sr0933/section-3-new-generic-issues/issue-122-davis-besse-loss-all-feedwater-event-june-9-1985-short-term-actions-potential-inability);
+[INL, datos de falla y reparación de sistemas de metal líquido](https://inldigitallibrary.inl.gov/sites/sti/sti/6760037.pdf);
+[NFPA 110, arranque en 10 s](https://www.cummins.com/sites/default/files/2019-04/FAQ_NFPA%20110%20Time%20to%20Readiness.pdf);
+[UFGS, 20 s por defecto](https://ufgscriteriadocreport.tpub.com/16263A/16263A0064.htm);
+[NUREG/CR-6928](https://www.nrc.gov/reading-rm/doc-collections/nuregs/contract/cr6928/index).
