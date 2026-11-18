@@ -1883,8 +1883,12 @@ con 40 y 30 kg/s; `results/f5b1d_partial/`):
 - **Las fallas parciales casi no agregan riesgo.** Con caudal parcial la PCT sube a
   $\approx\dot T_0\,(1-\eta\dot m_{\max}/\text{fuga})$, así que tarda más en llegar a 1220 K. Como la
   duración es exponencial (media 46 s), $P(D>\tau_\eta)$ cae exponencialmente con ese retraso.
-  Para $\eta=0.25$ a 30 kg/s, τ pasa de ~160 a ~256 s y su peso baja a ~12 %. Para $\eta\ge0.5$,
-  a cero. El riesgo lo dominan las fallas totales: P(cruce | falla) ≈ 0.1 × 0.031.
+  Medido en el HRM (`julia/f5b1d_tau_eta.jl`, figura `docs/figures/fig_f5b_partial_failures.pdf`;
+  semilla 201, fuga 14.9 kg/s, t = 120 s): con 30 kg/s, τ pasa de 160 s (η = 0) a 215.5 s
+  (η = 0.125) y 331 s (η = 0.25), y con η ≥ 0.375 la PCT no llega a 1220 K. La aproximación
+  $\tau_\eta\approx\tau_0/(1-\eta\dot m_{\max}/\text{fuga})$ da 214 y 322 s, dentro de un 7 %.
+  P(D > τ) cae de 0.031 a 0.010 y 0.0027. El riesgo lo dominan las fallas totales:
+  P(cruce | falla) ≈ 0.1 × 0.031.
 - **Por eso, una cota con η equivale a la de falla total con α reescalado**
   ($\alpha_\eta\approx p_{\eta=0}\,\alpha_{\rm total}$). Con α = 0.002 reproduce exactamente la cota
   total de α = 0.02.

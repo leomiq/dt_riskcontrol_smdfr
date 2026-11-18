@@ -166,6 +166,15 @@ falla dure más que ese tiempo cae exponencialmente. El riesgo de N2 queda en 0.
 por el 10\,\% de fallas totales. Las formulaciones con escenarios quedan inactivas, y una cota
 que conoce $\eta$ equivale a la de falla total con $\alpha$ reescalado ($\alpha_\eta\approx0.1\,\alpha$).
 
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f5b_partial_failures.pdf}
+\caption{Fallas parciales. Izquierda: tiempo hasta 1220~K en el HRM si el ACS entrega
+$\eta\,\dot m_{\rm max}$ (puntos); la aproximación $\tau_\eta\approx\tau_0/(1-\eta\,\dot m_{\rm max}/\mathrm{fuga})$
+(trazos) lo reproduce con un error menor que el 7~por ciento. Centro: probabilidad de que la falla dure más que
+$\tau_\eta$; con $\eta\ge0.375$ la PCT no llega a 1220~K. Derecha: por semilla, la cota que
+conoce $\eta$ con $\alpha=0.002$ coincide con la de falla total con $\alpha=0.02$.}
+\end{figure}
+
 \takeaway{La cota de riesgo cumple su garantía: $P(\text{cruce}\mid\text{falla})\le\alpha$. Reducir
 el riesgo a la mitad cuesta trabajar 7.5~K bajo la consigna y un 17\,\% más de masa, y elegir
 $\alpha$ es una decisión del equipo. Contra el mismo criterio, el PID de la tesis es un 5\,\% más

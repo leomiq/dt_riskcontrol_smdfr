@@ -243,3 +243,36 @@ ax.set(title=f"Formulaciones del paso 3.ii ({len(common)} realizaciones)",
        xlabel=r"K bajo $y_{\rm ref}$ en promedio (sin fallas)", ylabel="P(llegar a 1220 K | falla)")
 ax.legend(loc="upper right", fontsize=7)
 save(fig, "fig_f5b_risk_formulations")
+
+# ---- Fig 8: partial ACS failures (F5b.1d): why they add almost no risk -------------------------
+te = load(os.path.join(RES, "f5b1d_partial", "tau_eta.csv"))
+pr = load(os.path.join(RES, "f5b1d_partial", "runs.csv"))
+fig, ax = plt.subplots(1, 3, figsize=(W, 2.45), layout="constrained")
+ee = np.linspace(0, 0.9, 200)
+for mm, col, mk in ((30.0, ORANGE, "s"), (40.0, BLUE, "o")):
+    q = sel(te, (te["m_max"] == mm) & (te["t"] == 120))
+    tau0 = q["tau"][q["eta"] == 0][0]; lk = q["leak"][0]
+    fin = q["tau"] < 600
+    ax[0].plot(q["eta"][fin], q["tau"][fin], color=col, marker=mk, ms=4, ls="none", label=f"HRM, {mm:.0f} kg/s")
+    ax[0].plot(q["eta"][~fin], np.full((~fin).sum(), 600), color=col, marker=mk, ms=4, ls="none", mfc="white")
+    den = 1 - ee * mm / lk
+    ta = np.where(den > 0, tau0 / np.maximum(den, 1e-9), np.nan)
+    ax[0].plot(ee, np.minimum(ta, 600), color=col, lw=1, ls=(0, (3, 2)))
+    sv = np.array([(w * np.exp(-mu * t)).sum() if t < 600 else 0.0 for t in q["tau"]])
+    ax[1].semilogy(q["eta"], np.maximum(sv, 1e-6), color=col, marker=mk, ms=4, lw=1.3, label=f"{mm:.0f} kg/s")
+ax[0].text(0.62, 625, "no cruza en 600 s", ha="center", va="bottom", fontsize=6.5, color=INK2)
+ax[0].set(title="Tiempo hasta 1220 K", xlabel=r"severidad $\eta$ (fracción entregada)", ylabel=r"$\tau_\eta$ [s]",
+          ylim=(100, 690))
+ax[0].legend(loc="center right", fontsize=6.5)
+ax[1].set_ylim(1e-6, 1)
+ax[1].text(0.62, 4e-6, "no cruza", ha="center", va="bottom", fontsize=6.5, color=INK2)
+ax[1].set(title=r"P(la falla dura más que $\tau_\eta$)", xlabel=r"severidad $\eta$", ylabel="probabilidad (log)")
+ax[1].legend(loc="upper right", fontsize=6.5)
+for case, col, mk, lab in (("N2", MUTED, "D", "N2+sesgo"), ("N2_total_a0.02", BLUE, "o", r"falla total, $\alpha$=0.02"),
+                           ("N2_vareta_a0.002", ORANGE, "x", r"con $\eta$, $\alpha$=0.002")):
+    q = sel(pr, pr["case"] == case)
+    ax[2].plot(-q["mean_dev"], 1e3 * q["p_cross_cond"], color=col, marker=mk, ms=5 if mk != "x" else 6, ls="none",
+               mew=1.4, label=lab)
+ax[2].set(title="Cotas por semilla (40 kg/s)", xlabel=r"K bajo $y_{\rm ref}$", ylabel=r"P(cruce | falla) $\times10^3$")
+ax[2].legend(loc="upper right", fontsize=6.5)
+save(fig, "fig_f5b_partial_failures")
