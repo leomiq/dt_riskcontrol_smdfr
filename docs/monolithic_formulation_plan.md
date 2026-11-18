@@ -2004,3 +2004,137 @@ F1b.4 se saltó (§8.6, tabla F1b).
 explícito); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c;
 el PSM con todas las fuentes de incertidumbre; las semillas pendientes de 3.i.0
 (detacc 210–230), del estimador (251–260) y de las formulaciones (208–212).
+
+### 10.1 Avance del 18-11-2026: proposición escrita y campaña F6 en Olab
+
+**Punto 1, hecho.** La Proposición «Reducción a un margen» y la Proposición «Fallas
+parciales: margen con α reescalado», con sus demostraciones, están en el reporte de estado
+(`docs/estado/11h_proposicion.tex`, al final del capítulo F5b). Los supuestos son: (A1) pico
+aditivo, $Y_k(u,D)=y_k(u)+\Delta T(D)$, con $\Delta T$ independiente de $u$; (A2) $\Delta T$ no
+decreciente y continua (se cumple por construcción en `heatup_curve`, que es un máximo
+acumulado). Lo que se demuestra:
+
+- (a) Toda medida de riesgo invariante a traslaciones $\rho$ cumple
+  $\rho(Y_k)\le U\iff y_k\le U-\rho(\Delta T(D))$. La restricción probabilística es
+  exactamente la cota $U_\alpha$ de §8.14, por un lema de cuantiles de transformaciones
+  monótonas. La restricción RU del CVaR también se reduce a un margen.
+- (b) El escenario orientado a la decisión existe por el teorema del valor intermedio. Para el
+  VaR es $D^*=q_{1-\alpha}(D)$.
+- (c) Todas las formulaciones definen $\mathcal F(m)=\{u: y_k(u)\le U-m\}$: una sola frontera,
+  y el riesgo $S(\Delta T^{-1}(m))$ depende sólo de $m$.
+- Corolarios: Wilks 59 garantiza $P\le0.05$ con confianza $1-0.95^{59}=0.952$; la pérdida
+  esperada depende de $u$ sólo a través de $y_k$; y la garantía en lazo cerrado.
+- Fallas parciales: $G(m)=p_0(1+\varepsilon(m))S(\tau_0(m))$, así que la cota con η es exactamente
+  la de falla total con $\alpha'=\alpha/(p_0(1+\varepsilon))$. La cota
+  $\varepsilon\le\sum_{\eta>0}(p_\eta/p_0)(e^{-\mu_*\Delta_\eta}+w_{\rm lenta}/S(\tau_0))$ explica el
+  reescalado ×0.1 observado.
+
+**Puntos 2 y 3, en curso en Olab** (`julia/f6_campaign.jl` y `julia/F6Tasks.jl`; resultados en
+`results/f6_paper/`). El despachador es paralelo y reanudable: 24 workers con `nice`, una
+corrida por tarea, filas escritas al terminar cada corrida y tareas fallidas registradas en
+`<campaña>_errors.log`.
+
+| Campaña | Punto | Diseño | Corridas |
+|---|---|---|---|
+| `sens` | 2 | Semillas 201–250 × capacidad {30, 35, 40, 45, 50} kg/s × (N2, PI, PID + cota con α ∈ {0.05, 0.02, 0.01} y CVaR 0.95, cada una diseñada con μ× ∈ {3·10³, 10⁴, 3·10⁴}). Rao–Blackwell evaluado con los tres μ a la vez, así que también da la robustez a un μ mal especificado | 3750 |
+| `form` | 3 | 50 semillas, 40 kg/s: α = 0.1, CVaR 0.90/0.98, Wilks 59, pérdida esperada ρ ∈ {10, 100, 1000} | 350 |
+| `eta` | 2 | 50 semillas: N2, cota total α = 0.02, cota con η (α = 0.01) para 4 vectores $p_\eta$ (base, uniforme, pesimista, dos trenes), CVaR y pérdida esperada con escenarios. Riesgo con los 4 vectores a la vez | 400 |
+| `det` | 3 | 50 semillas con fallas DET reales en el lazo: N1/N2/N3+sesgo, cota α = 0.02, CVaR 0.95, Wilks, pérdida esperada ρ = 100, DSM de la tesis (λ = 10⁴), PI del DET y PID de la tesis | 500 |
+| `nom` | 3 | Familia nominal (escenario de la tesis), semillas impares 1–99, bomba archivada y 40 kg/s: N1/N2/N3, PID y PI; 121 consultas | 500 |
+| `ext` | 3 | Familia extrema de F5a.3, semillas 101–150: N2 (archivada y física), N1/N2/N3 físicas, N2 sin sesgo, PI y PID | 350 |
+
+Cada corrida guarda las **métricas de la tesis** (`thesis_metrics`, Tabla 10 del paper de
+control: margen mínimo de seguridad, sobrepaso mínimo, tiempo de asentamiento en 0.30 K, error
+estacionario, variación total del control, IAE, tiempo de cómputo por consulta) y las métricas
+de `metrics`. En las campañas con fallas (`det`, `nom`, `ext`), N1/N2/N3 sin capa de riesgo
+llevan además una **auditoría de optimalidad por consulta**, cada 20 consultas (10 en `nom`). La
+decisión del lazo, N1, N2, N3 con arranque en caliente y pulido, y N3 en frío se evalúan con el
+mismo costo P0 sobre el ROM ode1be; se reporta la brecha frente al mejor ($J/J_{\rm best}-1$).
+Es una cota *local* con multiarranque, no el certificado global de F3c. Llevar el certificado
+riguroso (4b) a las consultas del lazo con rampa dura sería un paso aparte.
+
+Instalación en Olab (no toca nada de otros usuarios): `~/Documents/leonardo_miqueles/` con
+Julia 1.10.10, porque la 1.10.4 no corre en el kernel 7.0 por `libopenlibm` con pila ejecutable.
+También un depósito de paquetes propio (`julia_depot`), git en un prefijo local de conda
+(`tools/gitenv`) y el repositorio clonado desde un *bundle*. `env.sh` fija las variables.
+
+### 10.2 Resultados de la campaña F6 (Olab, 18-11-2026)
+
+5850 corridas, 0 errores, 175 min con 24 workers. Las tablas completas están en
+`results/f6_paper/summary.md` (`python/f6_summary.py`). Cada resultado usa 50 realizaciones con
+números aleatorios comunes, y los intervalos son la media ± 1.96 e.e.
+
+**Sensibilidad a la aceleración de las reparaciones** (`sens`; Rao–Blackwell,
+P(cruce | falla); 40 kg/s):
+
+| Diseño \ μ verdadero | μ×3·10³ (falla media ≈ 150 s) | μ×10⁴ (≈ 46 s) | μ×3·10⁴ (≈ 15 s) |
+|---|---|---|---|
+| N2+sesgo | 0.324 ± 0.013 | 0.031 ± 0.004 | 0.0019 |
+| Cota α = 0.02 diseñada con el μ verdadero | 0.164 ($U_\alpha\approx1070$ K: inalcanzable) | **0.0155 ± 0.001** | 0.0019 (inactiva) |
+| Cota α = 0.02 diseñada con μ×10⁴ | 0.256 | 0.0155 | 0.0019 |
+| PID de la tesis | 0.322 | 0.033 | 0.0020 |
+| PI del DET | 0.451 | 0.119 | 0.012 |
+
+- **La capa de riesgo sólo tiene un régimen útil:** que la duración media de la falla sea
+  menor que el tiempo hasta 1220 K, pero no mucho menor (τ ≈ 165 s). Con μ×3·10³, $U_\alpha$ queda en
+  920–1070 K: el ACS se satura, pre-enfría 22 K (+42 % de masa) y baja el riesgo a la mitad,
+  pero no alcanza α. Con μ×3·10⁴, $U_\alpha\ge1200$ K: la cota no actúa y el riesgo es el piso de
+  la componente lenta (0.0019).
+- **Con μ×10⁴ la garantía se cumple** en todas las capacidades con α = 0.05 y 0.02. Con α = 0.01
+  queda en el límite: 0.0110 ± 0.0011 a 40 kg/s y 0.0138 a 30 kg/s, donde la cota no se puede
+  cumplir en la fase aguda.
+- **Error de especificación:** una cota diseñada con μ×10⁴ es conservadora si las reparaciones
+  son más rápidas (sin costo: queda inactiva). Si son más lentas, el riesgo sube y se pierde la
+  garantía (0.256 frente a α = 0.02). Por eso la aceleración (decisión 11) es el supuesto que
+  más hay que confirmar.
+- **La capacidad del ACS (30–50 kg/s) casi no cambia nada:** N2 queda en 0.031 y la cota con
+  α = 0.02 en 0.0147–0.0174, con un pre-enfriamiento de 6.6–7.7 K. Lo que fija el riesgo es la
+  duración de la falla, porque durante la falla el caudal es cero sea cual sea la capacidad.
+
+**Frontera de las formulaciones** (`form`, 50 realizaciones; antes había 7): todas caen sobre la
+misma curva riesgo–pre-enfriamiento, como predice la Proposición de §10.1.
+
+| Formulación | P(cruce dada una falla) | Pre-enfriamiento | Masa |
+|---|---|---|---|
+| N2 | 0.0312 | −0.1 K | — |
+| Pérdida esperada ρ = 100 / cuantil α = 0.05 | 0.026 / 0.027 | 1.8 / 1.1 K | +4 / +2 % |
+| CVaR 0.90 | 0.021 | 3.6 K | +8 % |
+| Cuantil α = 0.02 / CVaR 0.95 / pérdida esperada ρ = 1000 | 0.0155 / 0.0141 / 0.0137 | 7.4 / 8.6 / 9.4 K | +17 / +20 / +21 % |
+| Wilks 59 / cuantil α = 0.01 | 0.0110 / 0.0110 | 13.0 / 12.9 K | +29 / +32 % |
+| CVaR 0.98 | 0.0100 | 15.0 K | +38 % |
+
+**Probabilidades de severidad** (`eta`): el riesgo de N2 es, con tres cifras, $p_0\times0.031$
+para los cuatro vectores: 0.0033 (base, $p_0$ = 0.1), 0.0080 (uniforme, 0.25), 0.0094 (dos trenes,
+0.3) y 0.0127 (pesimista, 0.4). Las fallas parciales no aportan riesgo medible, así que
+$\varepsilon\approx0$ en la Proposición 15. La cota con η y α = 0.01 cumple su nivel con todos los
+vectores (0.0060–0.0072, y la base queda inactiva). El CVaR y la pérdida esperada con escenarios
+siguen inactivos (= N2).
+
+**Lazo cerrado con fallas del DET y métricas de la tesis** (`det`, 40 kg/s):
+
+| Controlador | Llegan a 1220 K | IAE [K·s] | Se asienta (0.30 K) | VT [kg/s] | DSM mín. (1244) | PCT pico |
+|---|---|---|---|---|---|---|
+| N1 = N2 = N3 (+sesgo) | 0/50 | 475 ± 220 | 60 % (mediana 83 s) | 136 | 54.9 K | 1189 K |
+| N2+DSM de la tesis | 0/50 | 475 (ΔIAE +0.05) | 60 % | 138 | 54.9 K | 1189 K |
+| N2+cota α = 0.02 / CVaR 0.95 / Wilks | 0/50 | 1689 / 1926 / 2806 | 0–2 % | 1480–1710 | 59.3 / 59.7 / 60.6 K | 1185 / 1184 / 1183 K |
+| PID de la tesis | 1/50 | 1185 ± 150 | 2 % | 35 650 | 52.1 K | 1192 K |
+| PI del DET | 7/50 | 3293 ± 170 | 0 % | 63 | 34.8 K | 1209 K |
+
+Familia nominal (escenario de la tesis): N1/N2/N3 tienen IAE 14.7 K·s con la bomba archivada y
+7.6 K·s a 40 kg/s, y se asientan en 13 s y 5.5 s (100 %). El PID tiene IAE 93 y 208 K·s y nunca
+se asienta; el PI, 221 K·s. Familia extrema (actuador físico): N2+sesgo tiene IAE 919 K·s y 0
+cruces (con la bomba archivada, 22/50 cruces por saturación); el PID, 3654 K·s y el PI, 5755 K·s.
+
+**Auditoría de optimalidad por consulta** (3150 consultas en las tres familias). Como en el
+53–85 % de las consultas la consigna se sigue exactamente ($J_{\rm best}\approx10^{-12}$), la
+brecha relativa no sirve. Se usa el exceso en error RMS sobre el horizonte. N3: ≤ 2.5·10⁻⁸ K.
+N2: ≤ 6·10⁻⁴ K (brecha relativa ≤ 0.03 % donde $J_{\rm best}\ge1$). N1: ≤ 7·10⁻⁴ K, salvo
+en la familia extrema con actuador físico (hasta 0.33 K, 6 %), porque N1 linealiza una sola vez
+y las jugadas son grandes. N3 con arranque en frío nunca encontró nada mejor (0 de 3150).
+Esto apoya en lazo cerrado lo que el certificado de F3c mostró en dos consultas.
+
+**Para el paper:** la conclusión central (una sola frontera, garantía calibrada, N2 ≈ óptimo
+en tiempo real) resiste 50 realizaciones, cinco capacidades y cuatro modelos de severidad. Lo
+que no resiste es una aceleración distinta de las reparaciones: el régimen útil de la capa de
+riesgo existe sólo si la duración de la falla es comparable, sin superarlo, al tiempo hasta
+1220 K. Hay que presentarlo como la condición de aplicabilidad y confirmar μ con el equipo.

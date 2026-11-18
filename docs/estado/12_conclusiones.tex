@@ -23,7 +23,9 @@
         elimina.
   \item \textbf{¿Resuelven a optimalidad?} N1 y N2 resuelven su QP al óptimo global, y N3
         llega a un óptimo local reproducible. Sus primeras acciones difieren en
-        $\le0.11$~kg/s.
+        $\le0.11$~kg/s. En 3150 consultas de lazo cerrado (campaña F6), N3 queda a
+        $\le2.5\cdot10^{-8}$~K de error RMS del mejor plan encontrado y N2 a $\le6\cdot10^{-4}$~K;
+        un arranque en frío nunca encontró algo mejor (sección~\ref{sec:f6}).
   \item \textbf{¿Dónde está el riesgo?} En los escenarios del modelo, en ninguna parte: la PCT
         no pasa de 1185~K. En la familia extrema, el resultado lo decide la capacidad del
         actuador, no el optimizador (sección~\ref{sec:extremos}). Con capacidad libre, el
@@ -49,6 +51,13 @@
         eficiente; la cota con cuantil es la más simple y su garantía está verificada.
         Con fallas parciales (la planta recibe $\eta\,u$) tampoco cambia: casi no agregan
         riesgo, y una cota que conoce $\eta$ equivale a la de falla total con $\alpha$ reescalado.
+        Las Proposiciones~\ref{prop:margen} y~\ref{prop:eta} lo demuestran, y la campaña F6
+        lo confirma con 50 realizaciones y cuatro vectores de severidad.
+  \item \textbf{¿De qué depende que la capa de riesgo sirva?} De la duración media de las fallas
+        frente al tiempo hasta 1220~K sin ACS ($\tau\approx165$~s). Con fallas de $\approx46$~s
+        actúa y cumple $\alpha$. Con fallas de $\approx150$~s la cota es inalcanzable: el ACS se
+        satura y el riesgo queda en 0.16. Con fallas de $\approx15$~s nunca actúa. La capacidad
+        del ACS (30--50~kg/s) casi no influye (sección~\ref{sec:f6}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -87,10 +96,10 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
 
 \subsection{Limitaciones}
 \begin{itemize}
-  \item La certificación global se demostró en dos consultas. En lazo cerrado sólo hay
-        evidencia de optimalidad local reproducible.
-  \item El Monte Carlo tiene 6 realizaciones nominales/estresadas y 14 extremas. Bastan para
-        las comparaciones pareadas con intervalos estrechos, no para estimar colas.
+  \item La certificación global se demostró en dos consultas. En lazo cerrado hay evidencia de
+        optimalidad local con varios arranques en 3150 consultas (F6), no un certificado global.
+  \item Las tablas principales tienen 50 realizaciones por familia (F6). Las colas del riesgo se
+        estiman con Rao--Blackwell, que considera sólo la primera falla de cada transitorio.
   \item La réplica del HRM se validó contra la realización archivada (error de $10^{-6}$~K) y
         sus perfiles de temperatura en estado estacionario coinciden con los de Simulink. No se
         comparó nodo a nodo durante una falla del ACS.
@@ -102,17 +111,23 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
   \item La brecha certificada es conservadora, sobre todo en 1161~s.
   \item La capa de riesgo es una primera versión (cota condicional a una falla que empieza
         ahora). El estimador de riesgo considera sólo la primera falla de cada transitorio.
-  \item Las tasas de falla del DET están aceleradas ($\lambda\times10^5$, $\mu\times10^4$); falta
-        confirmar con el equipo qué aceleración es representativa.
+  \item Las tasas de falla del DET están aceleradas ($\lambda\times10^5$, $\mu\times10^4$). La campaña F6
+        mostró que la utilidad de la capa de riesgo depende de esa aceleración: es el supuesto
+        crítico, y falta confirmarlo con el equipo.
+  \item Los resultados valen para duraciones de falla exponenciales (sin memoria). Con colas
+        pesadas, las fallas parciales sí pesarían y las formulaciones con escenarios dentro del
+        horizonte podrían separarse de la frontera.
 \end{itemize}
 
 \subsection{Próximos pasos, por prioridad}
 \begin{enumerate}
+  \item \textbf{Confirmar con el equipo la aceleración de las reparaciones} (decisión 11): decide
+        en cuál de los tres regímenes cae la capa de riesgo (sección~\ref{sec:f6}).
   \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
-        medida (sección~\ref{sec:f5b}).
-  \item \textbf{Confirmar el modelo de fallas parciales} (trenes del ACS y probabilidad de cada
-        severidad); con duraciones de cola pesada la estructura multiplicativa sí importaría.
-  \item \textbf{Confirmar con el equipo} la capacidad del ACS, la aceleración de las tasas de
-        falla y el $\alpha$ objetivo.
-  \item \textbf{Campaña grande en Olab} ($\ge100$ realizaciones por familia).
+        medida con 50 realizaciones.
+  \item \textbf{Confirmar el resto de los supuestos}: el modelo de 4 trenes con sus
+        probabilidades, el límite de 1220~K y la capacidad y rampa del ACS. Según F6, estos
+        dos últimos casi no cambian las conclusiones.
+  \item \textbf{Decidir el alcance}: un paper (formulación, lazo cerrado y riesgo) o dos
+        (formulación y certificación; capa de riesgo en lazo cerrado).
 \end{enumerate}

@@ -1,0 +1,162 @@
+%----------------------------------------------------------------------
+\subsection{El resultado estructural: por qué todas las formulaciones de riesgo son un margen}\label{sec:prop-aditiva}
+%----------------------------------------------------------------------
+Los experimentos de §8.14--8.18 del plan mostraron tres regularidades: (i) la cota con
+cuantil, el CVaR, el PSM de Wilks y el escenario orientado a la decisión caen sobre una misma
+frontera riesgo--pre-enfriamiento; (ii) el escenario óptimo de Homem-de-Mello es explícito; y
+(iii) una cota que conoce la severidad $\eta$ equivale a la de falla total con $\alpha$
+reescalado. Esta subsección las demuestra a partir de dos supuestos, de modo que dejan de ser
+observaciones empíricas y pasan a ser consecuencias de la estructura del problema.
+
+\paragraph{Planteamiento.} En la consulta $t_q$ el MPC elige el plan $u\in\mathcal U$ (caja,
+rampa). Sea $y_k(u)$ la PCT predicha y corregida por sesgo en el paso $k$ del horizonte
+($y_k(u)=\hat y_k(u)+d$). Una falla total del ACS que empieza en el paso $k$ y dura $D$ lleva la
+PCT a un pico $Y_k(u,D)$. El límite es $U=1220$~K. La duración $D\ge0$ es aleatoria, independiente
+de $u$, con función de supervivencia $S(t)=P(D>t)=\sum_i w_i e^{-\mu_i t}$ continua y
+estrictamente decreciente (mezcla de exponenciales del DET acelerado), y cuantil
+$q_p(D)=S^{-1}(1-p)$.
+
+\begin{definicion}[Supuestos estructurales]\label{def:supuestos}
+\textbf{(A1) Pico aditivo.} $Y_k(u,D)=y_k(u)+\Delta T(D)$, donde la curva de calentamiento
+$\Delta T:[0,\infty)\to[0,\infty)$ depende del estado de la consulta pero no de $u$.
+\textbf{(A2) Monotonía.} $\Delta T$ es no decreciente y continua, con $\Delta T(0)=0$.
+\end{definicion}
+
+En la implementación (A2) se cumple por construcción: \code{heatup\_curve} define
+$\Delta T(t)=\max_{s\le t}\hat y^{\,\rm sin\,ACS}(s)-\hat y_{\rm ahora}$, un máximo acumulado, e
+interpola linealmente entre muestras. (A1) es la aproximación de fondo: durante una falla total
+el caudal es cero sea cual sea $u$, así que $u$ sólo influye a través del estado en el que
+empieza la falla, resumido en $y_k(u)$. La réplica del HRM la respalda: el pico llega al final
+de la falla, y la tasa de calentamiento del ROM ($\approx0.3$~K/s) coincide con la del HRM (§8.13).
+
+Se escribe $Z=\Delta T(D)$ para el calentamiento aleatorio. Una \emph{medida de riesgo invariante
+a traslaciones} es un funcional $\rho$ de variables aleatorias con $\rho(Z+c)=\rho(Z)+c$ para toda
+constante $c$. Ejemplos: el VaR$_p$ (cuantil), el CVaR$_\beta$, la entrópica y los expectiles.
+
+\begin{proposicion}[Reducción a un margen]\label{prop:margen}
+Bajo (A1)--(A2), para cada paso $k$ y cada plan $u$:
+\begin{enumerate}
+\item[(a)] \emph{Medidas invariantes a traslaciones.} Si $\rho$ es invariante a traslaciones,
+  \[\rho\big(Y_k(u,D)\big)\le U\iff y_k(u)\le U-m_\rho,\qquad m_\rho:=\rho(Z).\]
+  En particular, la restricción probabilística equivale a la cota de §8.14:
+  \[P\big(Y_k(u,D)>U\big)\le\alpha\iff y_k(u)\le U_\alpha:=U-\Delta T\big(q_{1-\alpha}(D)\big),\]
+  y la restricción CVaR$_\beta$ de Rockafellar--Uryasev equivale a
+  $y_k(u)\le U-\mathrm{CVaR}_\beta(Z)$.
+\item[(b)] \emph{Escenario orientado a la decisión.} Si $0\le m_\rho\le\sup_t\Delta T(t)$, existe
+  una duración determinista $D^\ast\ge0$ con $\Delta T(D^\ast)=m_\rho$. El problema de
+  riesgo tiene entonces el mismo conjunto factible, y por lo tanto las mismas soluciones, que el
+  MPC determinista con el escenario único $D^\ast$:
+  $\{u:\ y_k(u)+\Delta T(D^\ast)\le U\}$. Para el VaR, $D^\ast=q_{1-\alpha}(D)$.
+\item[(c)] \emph{Una sola frontera.} Toda formulación de (a) o (b) define el conjunto factible
+  $\mathcal F(m)=\{u\in\mathcal U:\ y_k(u)\le U-m\ \forall k\}$ para algún margen $m\ge0$. Dos
+  formulaciones con el mismo $m$ producen las mismas decisiones. El riesgo condicional que deja
+  una decisión con $y_k(u)=U-m$ es $S\big(\Delta T^{-1}(m)\big)$, decreciente en $m$, y no depende de
+  la formulación que generó $m$.
+\end{enumerate}
+\end{proposicion}
+
+\begin{proof}
+(a) Como $u$ está fijo, $y_k(u)$ es una constante. Por (A1) y la invariancia a traslaciones,
+$\rho(Y_k)=\rho(Z+y_k(u))=y_k(u)+\rho(Z)$, y la equivalencia es inmediata. Para la restricción
+probabilística se usa el siguiente lema con $g=\Delta T$ y $m=U-y_k(u)$: si $g$ es no decreciente
+y continua y $D$ tiene $S$ continua y estrictamente decreciente, entonces
+\[P\big(g(D)>m\big)\le\alpha\iff m\ge g\big(q_{1-\alpha}(D)\big).\]
+($\Leftarrow$) Sea $q=q_{1-\alpha}(D)$. Si $m\ge g(q)$ y $g(D)>m$, entonces $g(D)>g(q)$, y como $g$
+es no decreciente, $D>q$. Luego $P(g(D)>m)\le P(D>q)=S(q)=\alpha$. ($\Rightarrow$) Si $m<g(q)$, por
+continuidad existe $\delta>0$ con $g(s)>m$ para $s\in(q-\delta,q]$. Si $D>q-\delta$, se toma
+$s\in(q-\delta,\min(D,q)]$ y se tiene $g(D)\ge g(s)>m$. Entonces
+$P(g(D)>m)\ge S(q-\delta)>S(q)=\alpha$, porque $S$ es estrictamente decreciente.
+El caso del CVaR es (a) con $\rho=\mathrm{CVaR}_\beta$. La formulación de Rockafellar--Uryasev
+$\min_\gamma\{\gamma+(1-\beta)^{-1}\mathbb E[(Y_k-\gamma)_+]\}\le U$ vale exactamente
+$\mathrm{CVaR}_\beta(Y_k)$, y la traslación $\gamma\mapsto\gamma-y_k(u)$ la reduce a
+$y_k(u)+\mathrm{CVaR}_\beta(Z)$. Con la medida empírica de la SAA la cuenta es la misma.
+
+(b) $\Delta T$ es continua con $\Delta T(0)=0$. Por el teorema del valor intermedio, todo
+$m\in[0,\sup\Delta T)$ tiene preimagen. Si $m=\sup\Delta T$ se alcanza, se toma su preimagen;
+si $\Delta T$ es constante en un tramo, cualquier punto del tramo sirve. Sea $D^\ast$ una
+preimagen de $m_\rho$. Por (a), las restricciones $y_k(u)\le U-m_\rho$ y
+$y_k(u)+\Delta T(D^\ast)\le U$ coinciden, y el costo no cambia. Para el VaR,
+$m_\rho=\Delta T(q_{1-\alpha})$, así que $D^\ast=q_{1-\alpha}(D)$ sirve.
+
+(c) Por (a) y (b), cada formulación sólo entra al problema a través de la constante $m$. El
+riesgo de una falla que empieza con $y_k=U-m$ es $P(\Delta T(D)>m)=S(\Delta T^{-1}(m))$, con
+$\Delta T^{-1}(m)=\sup\{t:\Delta T(t)\le m\}$. Es una función de $m$ solamente y no crece al
+aumentar $m$.
+\end{proof}
+
+\paragraph{Corolarios.}
+\begin{itemize}
+\item \emph{PSM de Wilks.} Con $D_{\max}$ el máximo de $n$ sorteos independientes, la cota
+  $y_k\le U-\Delta T(D_{\max})$ es la del VaR con un nivel aleatorio $1-S(D_{\max})$. Como
+  $1-S(D)$ es uniforme, $P\big(S(D_{\max})\le1-\beta\big)=1-\beta^{\,n}$: con $n=59$ y $\beta=0.95$,
+  la cota garantiza $P(\text{cruce}\mid\text{falla})\le0.05$ con confianza 0.952. En promedio
+  equivale a un cuantil $1-1/(n+1)\approx0.983$ (observado: Wilks 59 $\approx\alpha=0.01$--0.02).
+  Wilks recorre la misma frontera con un $m$ aleatorio entre consultas.
+\item \emph{Pérdida esperada.} $\mathbb E[(Y_k-U)_+]=\varphi\big(y_k(u)\big)$, con
+  $\varphi(y)=\mathbb E[(y+Z-U)_+]$ convexa y no decreciente. No es una cota, pero depende de $u$
+  sólo a través de $y_k(u)$. El MPC la equilibra con el costo de seguimiento, y su solución
+  activa un margen efectivo $m(\rho)$ que crece con $\rho$. Por eso cae sobre la misma frontera.
+\item \emph{Garantía en lazo cerrado.} Si en la consulta $t_q$ la planta cumple
+  $\mathrm{PCT}(t_q)\le U_\alpha$ (predicción con sesgo exacta) y (A1)--(A2) valen para la planta,
+  entonces $P(\text{cruce}\mid\text{falla que empieza en }t_q)\le\alpha$. Es lo que se verificó con
+  el estimador de Rao--Blackwell sobre el HRM (§8.16).
+\end{itemize}
+
+\begin{proposicion}[Fallas parciales: margen con $\alpha$ reescalado]\label{prop:eta}
+Suponga que cada falla tiene una severidad $\eta\in\{\eta_0=0<\eta_1<\dots<\eta_r\}$,
+independiente de $D$, con probabilidades $p_\eta$ y $p_0>0$, y que durante la falla la planta
+recibe el caudal $\eta\,\dot m_{\max}$. Suponga (A1)--(A2) para cada $\eta$, con curva
+$\Delta T_\eta$, y sea $\tau_\eta(m)=\Delta T_\eta^{-1}(m)$ el tiempo para acumular $m$ kelvin de
+calentamiento. Sea $G(m)=\sum_\eta p_\eta S(\tau_\eta(m))$ el riesgo de una falla con margen
+$m$. Entonces:
+\begin{enumerate}
+\item[(a)] $G(m)=p_0\,\big(1+\varepsilon(m)\big)\,S(\tau_0(m))$, con
+  $\varepsilon(m)=\sum_{\eta>0}\frac{p_\eta}{p_0}\frac{S(\tau_\eta(m))}{S(\tau_0(m))}\ge0$.
+  La cota que conoce $\eta$ con nivel $\alpha$, $G(m)\le\alpha$, es exactamente la cota de falla
+  total con nivel $\alpha'=\alpha/\big(p_0(1+\varepsilon(m_\alpha))\big)$, donde $m_\alpha$ es el margen
+  resultante.
+\item[(b)] Si $\tau_\eta(m)\ge\tau_0(m)+\Delta_\eta(m)$ con $\Delta_\eta\ge0$, y se separan las
+  componentes de la mezcla en rápidas ($\mu_i\ge\mu_\ast$) y lentas (peso total $w_{\rm lenta}$),
+  \[\varepsilon(m)\le\sum_{\eta>0}\frac{p_\eta}{p_0}\Big(e^{-\mu_\ast\Delta_\eta(m)}+\frac{w_{\rm lenta}}{S(\tau_0(m))}\Big).\]
+  Así, $\varepsilon\to0$ cuando el retraso $\Delta_\eta$ es grande frente a la duración media
+  $1/\mu_\ast$ de las fallas rápidas y la componente lenta es despreciable. En ese caso, la cota
+  que conoce $\eta$ con nivel $\alpha$ coincide con la de falla total con nivel $\alpha/p_0$.
+\end{enumerate}
+\end{proposicion}
+
+\begin{proof}
+(a) Es álgebra: se factoriza $p_0S(\tau_0)$ en $G$. Como $G$ y $p_0(1+\varepsilon)S(\tau_0)$ son la
+misma función, el margen que resuelve $G(m)=\alpha$ resuelve $S(\tau_0(m))=\alpha'$ con el
+$\alpha'$ indicado. Esa es, por la Proposición~\ref{prop:margen}(a), la cota de falla total con
+nivel $\alpha'$.
+(b) Para una componente rápida, $e^{-\mu_i\tau_\eta}\le e^{-\mu_\ast\Delta_\eta}e^{-\mu_i\tau_0}$. Para una
+lenta, $e^{-\mu_i\tau_\eta}\le1$. Sumando con pesos $w_i$:
+$S(\tau_\eta)\le e^{-\mu_\ast\Delta_\eta}S(\tau_0)+w_{\rm lenta}$. Se divide por $S(\tau_0)$ y se
+suma sobre $\eta>0$.
+\end{proof}
+
+\paragraph{Lectura con los números del SMDFR.} El calentamiento con caudal parcial es más lento:
+$\tau_\eta\approx\tau_0/(1-\eta\,\dot m_{\max}/\text{fuga})$ (error menor que 7~por ciento en el HRM,
+§8.18). Con fuga de 15~kg/s, $\dot m_{\max}=30$~kg/s y $\tau_0=160$~s: $\Delta_{0.125}\approx55$~s y
+$\Delta_{0.25}\approx170$~s. Con $\eta\ge0.375$, $\tau_\eta=\infty$. Con $1/\mu_\ast=46$~s,
+$e^{-\mu_\ast\Delta}$ vale 0.30 y 0.025. Con los trenes supuestos ($\eta\ge0.25$ en todas las fallas
+parciales), $\varepsilon$ queda dominado por la componente lenta ($w_{\rm lenta}=0.002$, reparación
+de 2.9~h). Esa componente es el mismo \emph{piso} de riesgo que ningún controlador evita
+(§8.16). De ahí la equivalencia observada: la cota que conoce $\eta$ con $\alpha=0.002$ es la de
+falla total con $\alpha=0.02=0.002/p_0$.
+
+\paragraph{Cuándo deja de valer.} (i) Si la falla empieza \emph{dentro} del horizonte y es
+parcial, $y_k$ depende de $\eta u$ y (A1) falla: el exceso es afín en $u$ con una pendiente que
+depende del escenario. Esas formulaciones (CVaR o pérdida esperada con escenarios) no se reducen
+a un margen, pero en el SMDFR quedan inactivas porque el pico llega después del horizonte de
+13~s. (ii) Si la duración tiene cola pesada (no exponencial), $S(\tau_0+\Delta)/S(\tau_0)$ no
+cae exponencialmente con $\Delta$ y $\varepsilon$ no es pequeño. (iii) Si el ROM no reproduce el
+calentamiento sin ACS, el margen que calcula el controlador no es el de la planta. Las
+sensibilidades de la campaña F6 (aceleración $\mu$, capacidad, probabilidades de severidad)
+miden cuánto se aleja el SMDFR de estas condiciones.
+
+\takeaway{Con el pico aditivo y monótono en la duración de la falla, toda medida de riesgo
+invariante a traslaciones (cuantil, CVaR, Wilks) y el escenario orientado a la decisión se
+reducen a un mismo objeto: un margen $m$ sobre la PCT. Las formulaciones sólo difieren en cómo
+eligen $m$, y por eso caen sobre una única frontera riesgo--pre-enfriamiento. Las fallas
+parciales sólo reescalan el nivel: $\alpha_{\rm total}=\alpha/(p_0(1+\varepsilon))$.}

@@ -256,17 +256,29 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   - With α ≤ 0.05 the worst-case PCT drops from 1218.5 K to 1212.0 K. α = 0.05 is almost
     free (ISE −19 %, mass +2 %). α = 0.01 lowers the mean PCT max by 5 K at 6.5× ISE and
     +33 % mass.
-- **Next steps (plan §8.12).**
-  1. Sweep the actuator capacity (m_max 15–50 kg/s) and the ramp, comparing N2 with
-     the DET PI at the same capacity.
-  2. Feed the twin the measured ACS flow, and forecast the leak without Park's law
-     using a local-linear-trend Kalman filter (L̂, Σ_L).
-  3. Add margins and risk, in two stages:
-     - deterministic margins: N2+DSM against PI+DSM;
-     - the risk layer on N2: CVaR scenarios, chance-constraint back-off, the
-       Homem-de-Mello et al. decision-focused forecast, and an online PSM from 59
-       Wilks runs.
-  4. Run a large campaign on the USM Olab VM.
+- **Structural result as propositions (18 Nov, plan §10.1;
+  `docs/estado/11h_proposicion.tex`).** If the peak is additive and monotone in the failure
+  length, every translation-invariant risk measure (quantile, CVaR, Wilks) and the
+  decision-focused scenario reduce to one margin on the PCT, so all formulations share one
+  frontier. With partial failures, the η-aware bound is the total-failure bound at
+  α/(p₀(1+ε)).
+- **F6 paper campaign on Olab (18 Nov, plan §10.2; `julia/f6_campaign.jl`,
+  `julia/F6Tasks.jl`, `results/f6_paper/`, `python/f6_summary.py`,
+  `python/make_f6_figures.py`).** 5850 closed loops, 50 realisations per result, 0 errors.
+  - The risk layer only works when the mean failure length is comparable to, but below, the
+    time to 1220 K (τ ≈ 165 s). That is the assumed μ×1e4 case. With μ×3e3 the bound is
+    unreachable and the ACS saturates; with μ×3e4 it never acts. A bound designed for μ×1e4
+    loses its guarantee if repairs are slower. The acceleration is the critical assumption.
+  - ACS capacity (30–50 kg/s) barely matters. With partial failures, N2's risk is
+    p₀ × 0.031 for all four severity vectors. All formulations lie on one frontier.
+  - Thesis metrics with DET failures: N1 = N2 = N3 reach 1220 K in 0/50 runs (IAE 475 K·s);
+    the thesis PID in 1/50 (IAE 1185); the DET PI in 7/50 (IAE 3293).
+  - Per-query optimality audit over 3150 closed-loop queries: N3 is within 2.5e-8 K RMS of
+    the best plan found, N2 within 6e-4 K; a cold start never found anything better.
+- **Next steps (plan §10).**
+  1. Confirm the failure-rate acceleration with the team (decision 11), then α, the
+     4-train model, the 1220 K limit and the ACS capacity.
+  2. Decide the scope: one paper or two.
 
   Tightening the certified gap (plan §8.5, step 4b.5) is postponed.
 
