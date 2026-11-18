@@ -38,3 +38,6 @@ Thumbs.db
 
 # --- Third-party reference material (papers, collaborators' scripts) -----
 20261011_docs/
+
+# LaTeX build output of the status report (the committed copy is docs/reporte_estado_mpc_monolitico.pdf)
+docs/estado_mpc_monolitico.pdf
