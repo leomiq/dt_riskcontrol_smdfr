@@ -1951,3 +1951,56 @@ con 40 y 30 kg/s; `results/f5b1d_partial/`):
 12. **Nivel de riesgo α** (§8.16): la cota cumple P(cruce | falla) ≤ α. Bajar de 0.031 (N2) a
     0.015 cuesta pre-enfriar 7.5 K y 17 % más de masa; a 0.011, 12.9 K y 32 %. Elegir α con el
     equipo, junto con la aceleración de las tasas (decisión 11).
+
+---
+
+## 10. Hacia el paper (estado al 18-11-2026)
+
+**Ruta del lazo cerrado (F5).** Cerrada con los pasos 1–3 de §8.12 y su extensión: capacidad
+(§8.13), gemelo (§8.13), márgenes DSM (§8.13, §8.15), riesgo con fallas tipo DET (§8.14),
+estimador de Rao–Blackwell (§8.16), formulaciones de riesgo (§8.17) y fallas parciales (§8.18).
+F1b.4 se saltó (§8.6, tabla F1b).
+
+**Lo que ya sostiene un paper.**
+
+1. Formulación monolítica: N1–N3 (QP o NLP) deciden en 0.03–0.2 s, frente a ~800 s de las
+   metaheurísticas. Hay certificación de optimalidad global en dos consultas (brecha ≤ 2.3 %
+   y 11.4 %), y LJ y el GA cuestan, con garantía, ≥ 28 % y ≥ 43 % más (§8.1–8.5).
+2. Lazo cerrado sobre el HRM validado: N2+sesgo supera al LJ archivado (−11 % de ISE) y al PID
+   de la tesis en todas sus métricas (IAE 2–50 veces menor). El DSM de la tesis no cambia la
+   trayectoria con un optimizador exacto (§8.8–8.15).
+3. Resultado estructural de riesgo: el pico es aditivo, $\mathrm{PCT}(t_f)+\Delta T(D)$. Por eso
+   la restricción probabilística, el CVaR, el PSM de Wilks y el escenario orientado a la
+   decisión de Homem-de-Mello se reducen a un margen sobre la PCT. Las formulaciones caen
+   sobre una misma frontera riesgo–pre-enfriamiento, y la cota cumple
+   P(cruce | falla) ≤ α (§8.14, §8.17).
+4. Estimador de riesgo de Rao–Blackwell, validado contra el conteo directo (§8.16).
+5. Fallas parciales: no cambian la conclusión, porque las duraciones son exponenciales y el
+   calentamiento con caudal parcial es más lento (§8.18).
+
+**Lo que falta para publicar** (por prioridad; lo demás del plan no es necesario):
+
+1. **Escribir el resultado estructural como proposición con demostración.** Los supuestos son
+   el pico aditivo y la monotonía de ΔT en $D$. Las consecuencias son: (a) todas las medidas
+   de riesgo invariantes a traslaciones se reducen a un margen; (b) el escenario óptimo
+   de Homem-de-Mello existe y es $D^*$ tal que $\Delta T(D^*)$ es el margen; (c) un margen que
+   conoce η equivale al de falla total con α reescalado cuando los τ_η crecen.
+2. **Sensibilidad a los supuestos clave**, con barridos cortos sobre lo existente:
+   - la aceleración de las tasas (la conclusión depende de que la duración media de las
+     fallas, ~46 s, sea corta frente a τ ≈ 160 s): μ×{3·10³, 10⁴, 3·10⁴};
+   - la capacidad del ACS: 30–50 kg/s;
+   - las probabilidades de severidad.
+3. **Más realizaciones en las tablas principales:** hoy son 4–14 en la familia extrema, las
+   formulaciones y las fallas parciales. Bastan ~50 por resultado con Rao–Blackwell. Hace
+   falta Olab o lotes en primer plano, porque en leo_acer las corridas largas en segundo
+   plano se cortan por memoria.
+4. **Confirmar los supuestos con el equipo:** capacidad y rampa del ACS (decisión 6), límite
+   de 1220 K (decisión 8), aceleración (decisión 11), α (decisión 12), y los 4 trenes del ACS
+   con sus probabilidades (§8.18).
+5. **Decidir el alcance:** un paper (formulación + lazo cerrado + riesgo) o dos (formulación
+   y certificación; capa de riesgo en lazo cerrado).
+
+**No necesarios para el paper:** escenario aprendido $g_\theta$ (el escenario óptimo es
+explícito); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c;
+el PSM con todas las fuentes de incertidumbre; las semillas pendientes de 3.i.0
+(detacc 210–230), del estimador (251–260) y de las formulaciones (208–212).
