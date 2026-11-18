@@ -50,7 +50,7 @@
 \large\mdseries Del reactor y su accidente a la formulación, resolución y certificación\\
 del problema de control}
 \author{Proyecto DT--SMDFR Risk Control}
-\date{11 de noviembre de 2026}
+\date{Versión consolidada, 18 de noviembre de 2026}
 
 \begin{document}
 \maketitle
@@ -58,48 +58,33 @@ del problema de control}
 \begin{abstract}
 \noindent Durante un accidente con pérdida de refrigerante (LOCA) en el reactor modular SMDFR,
 un gemelo digital decide cada 0.5~s cuánto plomo inyecta el sistema auxiliar de enfriamiento
-(ACS), mediante un control predictivo (MPC). Este documento explica el problema desde cero:
+(ACS), mediante un control predictivo (MPC). Este documento explica el problema desde cero
+(el reactor, el accidente, el controlador y las herramientas de optimización, integración
+numérica, incertidumbre y certificación) y luego reporta lo que se obtuvo al reemplazar las
+metaheurísticas del método original por \emph{formulaciones monolíticas}: el modelo reducido
+pasa a ser un conjunto de restricciones derivables. Los resultados principales son:
 \begin{itemize}
-  \item el reactor y su física, a partir del modelo de Liu et al.\ (2021);
-  \item el accidente y el actuador;
-  \item el controlador y el método actual, que resuelve el problema de optimización con
-        metaheurísticas sobre simulaciones de caja negra;
-  \item las herramientas necesarias: optimización, integración numérica, linealización,
-        incertidumbre y certificación.
-\end{itemize}
-Después propone \emph{formulaciones monolíticas} del mismo problema, en las que las ecuaciones
-del modelo reducido pasan a ser restricciones de un programa no lineal que se resuelve con
-derivadas exactas. Los resultados, en dos consultas de prueba, son:
-\begin{itemize}
-  \item una réplica algebraica del modelo que reproduce Simulink con un error de $10^{-6}$~K;
-  \item el problema se resuelve en $\sim0.05$~s como programa no lineal y en $\sim10$~ms como QP
-        linealizado, frente a $\sim800$~s del método actual;
-  \item la solución es un mínimo local estricto, es el único óptimo hallado en $\approx590$
-        arranques, y una cota inferior \emph{certificada} demuestra que está a menos del
-        2.3\,\% (1180~s) y del 11.4\,\% (1161~s) del óptimo global;
-  \item evaluadas con la misma vara, las decisiones de Luus--Jaakola y del algoritmo genético
-        cuestan, con garantía, al menos un 28\,\% y un 43\,\% más que el óptimo global;
-  \item la incertidumbre del pronóstico de fuga no cambia la decisión, y la cota del actuador,
-        que hoy se expresa en amperios, no tiene base física y debe fijarse en kg/s.
-\end{itemize}
-La última parte cierra el lazo. El modelo de alta resolución (HRM, 12 nodos) se programó en
-Julia y reproduce Simulink con un error de $10^{-6}$~K, lo que permite simular lazos cerrados
-completos sin MATLAB. Sobre esa planta:
-\begin{itemize}
-  \item N1, N2 y N3 dan el mismo resultado en lazo cerrado y en un Monte Carlo con
-        perturbaciones no previstas, sin fallas del solver y con $\le0.7$~s por consulta,
-        siempre que el MPC corrija el sesgo del ROM ($\sim0.2$~K);
-  \item el MPC mejora a LJ en un 11\,\% y el actuador físico reduce el error a la mitad;
-  \item en los escenarios del modelo la PCT no pasa de 1185~K, así que una capa de riesgo no
-        tendría nada que controlar; en escenarios extremos el resultado lo decide la
-        capacidad del actuador y no el optimizador, lo que define dónde debe trabajar la capa
-        de riesgo;
-  \item el pico de PCT lo fija la duración de las fallas del ACS. Ni el pronóstico de fuga
-        ni el margen DSM de la tesis (con cualquier peso $\lambda_{\rm dsm}$) cambian la
-        trayectoria de N2, que gana al PID de la tesis en todas sus métricas. Con fallas
-        generadas como en el DET, una cota de riesgo en N2 cumple
-        $P(\text{cruce}\mid\text{falla})\le\alpha$: baja el riesgo de 0.031 a 0.011 con
-        $\alpha=0.01$, a cambio de pre-enfriar unos 13~K.
+  \item \textbf{Resolver bien.} Una réplica algebraica del modelo reproduce Simulink con un
+        error de $10^{-6}$~K. El problema se resuelve en $\sim0.05$~s como programa no lineal y en
+        $\sim10$~ms como QP linealizado, frente a $\sim800$~s del método actual. Una cota
+        inferior \emph{certificada} demuestra que la solución está a menos del 2.3\,\% y del
+        11.4\,\% del óptimo global en las dos consultas de prueba. Luus--Jaakola y el algoritmo
+        genético cuestan, con garantía, al menos un 28\,\% y un 43\,\% más.
+  \item \textbf{Controlar bien.} El modelo de alta resolución (HRM, 12 nodos) se programó en
+        Julia, con un error de $10^{-6}$~K frente a Simulink, y hace de planta. En 50
+        realizaciones por familia, N1, N2 y N3 dan la misma PCT pico y el mismo IAE mediano. En 3800 consultas
+        auditadas por lazo, N3 queda a $\le2.5\cdot10^{-8}$~K y N2 a $\le6\cdot10^{-4}$~K del mejor plan
+        encontrado. N2 supera al PID y al PI de la tesis en todas sus métricas, y el margen DSM
+        de la tesis no cambia su trayectoria.
+  \item \textbf{Gestionar el riesgo bien.} El riesgo está en las fallas del ACS, y el pico de
+        PCT llega al final de la falla. Con fallas generadas como en el árbol de eventos, una
+        cota de riesgo en N2 cumple $P(\text{cruce de 1220~K}\mid\text{falla})\le\alpha$. Como el
+        pico es aditivo y monótono en la duración de la falla, se demuestra que el cuantil, el
+        CVaR, el PSM de Wilks y el escenario orientado a la decisión se reducen a un mismo
+        margen y recorren una sola frontera riesgo--pre-enfriamiento. Las fallas parciales sólo
+        reescalan el nivel $\alpha$. La capa actúa cuando las fallas se recuperan en menos
+        tiempo que el que tarda la PCT en llegar a 1220~K ($\approx165$~s), sin ser
+        instantáneas.
 \end{itemize}
 \end{abstract}
 
@@ -123,11 +108,19 @@ completos sin MATLAB. Sobre esa planta:
 \input{estado/09_formulaciones}
 \input{estado/10_certificacion_teoria}
 
-\part{Resultados}
+\part{Resultados en lazo abierto}
 \input{estado/11_resultados}
 
-\part{Lazo cerrado sobre el HRM programable}
+\part{Lazo cerrado sobre el HRM}
 \input{estado/11b_lazo_cerrado}
+\input{estado/11c_extremos}
+\input{estado/11f_dsm_lambda}
+\input{estado/11j_desempeno}
+
+\part{La capa de riesgo}
+\input{estado/11e_riesgo}
+\input{estado/11h_proposicion}
+\input{estado/11i_riesgo_resultados}
 
 \part{Conclusiones}
 \input{estado/12_conclusiones}
@@ -237,6 +230,23 @@ completos sin MATLAB. Sobre esa planta:
 \bibitem{intervaljl} L.~Benet, D.~P.~Sanders y colaboradores. \code{IntervalArithmetic.jl}:
   aritmética de intervalos validada en Julia.
   \url{https://github.com/JuliaIntervals/IntervalArithmetic.jl}.
+\bibitem{rockafellar2000} R.~T.~Rockafellar, S.~Uryasev. Optimization of conditional
+  value-at-risk. \emph{Journal of Risk} 2(3) (2000) 21--41.
+\bibitem{artzner1999} P.~Artzner, F.~Delbaen, J.-M.~Eber, D.~Heath. Coherent measures of risk.
+  \emph{Mathematical Finance} 9(3) (1999) 203--228.
+\bibitem{casella2002} G.~Casella, R.~L.~Berger. \emph{Statistical Inference}, 2.ª ed.
+  Duxbury, 2002.
+\bibitem{diehl2005} M.~Diehl, H.~G.~Bock, J.~P.~Schlöder. A real-time iteration scheme for
+  nonlinear optimization in optimal feedback control. \emph{SIAM Journal on Control and
+  Optimization} 43(5) (2005) 1714--1736.
+\bibitem{cadwallader} L.~C.~Cadwallader (INL). Datos de tasas de falla y tiempos de reparación
+  de componentes de sistemas de refrigeración por metal líquido.
+  \url{https://inldigitallibrary.inl.gov/sites/sti/sti/6760037.pdf}.
+\bibitem{nrcgi122} U.S.~NRC. NUREG-0933, Generic Issue 122: Davis-Besse loss of all feedwater
+  event (probabilidades de no recuperación a 30--40~min, tomadas de los APS de Oconee-3 y de
+  NUREG-1032).
+\bibitem{nfpa110} NFPA 110. \emph{Standard for Emergency and Standby Power Systems}: la fuente
+  de reserva debe tomar la carga en 10~s.
 \end{thebibliography}
 
 \end{document}

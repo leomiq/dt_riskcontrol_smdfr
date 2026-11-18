@@ -273,7 +273,7 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     p₀ × 0.031 for all four severity vectors. All formulations lie on one frontier.
   - Thesis metrics with DET failures: N1 = N2 = N3 reach 1220 K in 0/50 runs (IAE 475 K·s);
     the thesis PID in 1/50 (IAE 1185); the DET PI in 7/50 (IAE 3293).
-  - Per-query optimality audit over 3150 closed-loop queries: N3 is within 2.5e-8 K RMS of
+  - Per-query optimality audit over 3800 closed-loop queries per loop (~11 400 in all): N3 is within 2.5e-8 K RMS of
     the best plan found, N2 within 6e-4 K; a cold start never found anything better.
 - **Decisions (18 Nov, plan §10.3).** Scope: one paper. Failure duration, proposed from
   the literature: repairs take days and operator recoveries tens of minutes, so no

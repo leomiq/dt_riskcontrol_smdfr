@@ -49,4 +49,67 @@ Se comparan, durante 240~s: sin ACS, caudal máximo constante, el PI del DET y N
 sesgo con los dos actuadores. N1 y N3 se omiten porque coinciden con N2, y la referencia
 pareada pasa a ser N2+sesgo.
 
-\input{estado/11d_extremos_resultados}
+\paragraph{Resultados} (14 realizaciones, \code{results/f5a2\_monte\_carlo/runs\_extreme.csv}).
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l Y r r r r@{}}\toprule
+Actuador & Controlador & Llega a 1220~K & Tiempo hasta 1220~K & PCT máx.\ si no llega & Masa inyectada\\\midrule
+--- & Sin ACS & 14/14 & 113--181~s (media 140) & --- & 0\\
+Archivado & Caudal máximo, N2, N2+sesgo & 9/14 & 155--251~s (media 191) & 1206--1219~K & 470--2070~kg\\
+--- & PI del DET & 0/14 & --- & 1204--1216~K & 5300--6360~kg\\
+Físico & N2 / N2+sesgo & 0/14 & --- & 1189--1207~K & 3260--5170~kg\\\bottomrule
+\end{tabularx}
+\caption{Familia extrema. Los tiempos se cuentan desde la activación del ACS. Las tres
+variantes con la caja archivada dan resultados idénticos en las 14 realizaciones. Tiempo p99
+por consulta de N2: $\le0.19$~s, sin fallas del solver.}
+\end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_extreme.pdf}
+\caption{Una realización extrema. Sin ACS, la PCT llega a 1220~K a los 128~s (cruz gris). Con
+la caja archivada, el MPC satura en todo momento (igual que el caudal máximo) y sólo retrasa
+el cruce hasta los 155~s (cruz azul). El PI del DET reacciona tarde pero con fuerza (hasta
+670~kg/s) y enfría hasta 1135~K. N2 con el actuador físico deja subir la PCT durante la falla
+hasta 1203~K y vuelve a la referencia sin sobreenfriar.}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_cl_extreme_max.pdf}
+\caption{PCT máxima por realización. Los puntos sobre la línea de 1220~K son corridas que
+alcanzaron el estado final del DET.}
+\end{figure}
+
+\paragraph{Cómo leer estos resultados.}
+\begin{enumerate}
+  \item \textbf{Con la caja archivada, el optimizador no importa.} En las 14 realizaciones
+        el MPC decide el caudal máximo en cada consulta: la fuga supera la capacidad. N2, N2
+        con sesgo y el caudal máximo constante dan exactamente la misma trayectoria, y 9 de
+        14 llegan al estado final del DET, en promedio unos 60~s después de lo que llegarían sin ACS. Una
+        capa de riesgo tampoco cambiaría nada: no hay decisión que tomar, sólo capacidad.
+  \item \textbf{Con el actuador físico, el límite queda lejos.} Ninguna realización pasa de
+        1207~K, aun con fallas de hasta 90~s y un ACS al 60\,\%. El margen mínimo es de 13~K.
+        El MPC inyecta un 25\,\% menos de masa que el PI del DET y no sobreenfría.
+  \item \textbf{La corrección de sesgo pierde precisión con fallas del ACS.} El calentamiento
+        del ROM usa los caudales \emph{pedidos}, así que el gemelo no sabe que el ACS falló.
+        La corrección de sesgo absorbe esa diferencia, pero como un sesgo constante: en esta
+        familia, N2 con y sin sesgo no se distinguen ($\Delta$ISE $=-16\,000\pm21\,000$~K$^2$).
+        Si el caudal real del ACS se mide, el gemelo debería usarlo.
+\end{enumerate}
+
+\noindent La campaña F6 repitió la familia con 50 realizaciones (sección~\ref{sec:desempeno}):
+con la caja archivada, 22 de 50 llegan a 1220~K; con el actuador físico, ninguna (PCT pico
+media de 1194~K).
+
+\takeaway{El riesgo de cruzar 1220~K existe en esta familia, pero en los dos actuadores
+probados no depende de la decisión: con la caja archivada nada lo evita, y con el actuador
+físico nunca ocurre. Una capa de riesgo sólo puede aportar en el régimen intermedio, con una
+capacidad comparable a la fuga y fallas largas del ACS, manteniendo un margen bajo la
+referencia ante una falla posible. La parte~VI busca ese régimen.}
+
+\paragraph{Lo que se mantiene para la capa de riesgo.} La capa se monta sobre N2, que es un QP
+de $\sim30$~ms y admite restricciones de riesgo sin salir del tiempo real. El evento que se
+quiere evitar es cruzar 1220~K, el estado final del DET. La PCT del ROM se sigue corrigiendo
+con el polinomio $p_4$ más la corrección de sesgo: tras ella, el desajuste ROM--HRM es
+$\le0.12$~K, demasiado pequeño para justificar una red que lo aprenda. Cada variante se evalúa
+de forma pareada contra N2+sesgo, midiendo la frecuencia del cruce, la PCT máxima, el margen y
+el costo de la prudencia (masa inyectada y error de seguimiento).

@@ -30,7 +30,18 @@ $G$, $G(s)$ & Matriz condensada de sensibilidad de la salida al control (26$\tim
 $[A](Z)$ & Jacobiano evaluado con aritmética de intervalos sobre la caja $Z$\\
 $\varepsilon_k$ & Cota del residuo no lineal en el paso $k$\\
 N1, N2, N3 & Formulaciones LTI, LTV iterada y no lineal\\
-BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iteración de Newton (Simulink)\\\bottomrule
+BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iteración de Newton (Simulink)\\
+$d$ & Corrección de sesgo: PCT del HRM menos PCT del ROM en la consulta\\
+\multicolumn{2}{@{}l}{\emph{Riesgo}}\\
+$D$, $S(t)$ & Duración de una falla del ACS; su supervivencia $P(D>t)=\sum_iw_ie^{-\mu_it}$\\
+$w_i$, $\lambda$ & Peso de cada componente, $\lambda_i/\sum\lambda_j$; tasa total de fallas del sistema\\
+$q_{1-\alpha}(D)$, $\alpha$ & Cuantil de la duración; nivel de riesgo admitido\\
+$\Delta T(D)$ & Calentamiento de la PCT durante una falla de duración $D$ (curva de calentamiento)\\
+$U_\alpha$, $m$ & Cota de riesgo sobre la PCT, $1220-\Delta T(q_{1-\alpha})$; margen genérico $U-y$\\
+$\tau(x)$ & Tiempo que tarda la PCT del HRM en pasar 1220~K con el ACS apagado desde el estado $x$\\
+$\eta$, $p_\eta$, $p_0$ & Severidad de una falla parcial (fracción de caudal entregada); su probabilidad; fracción de fallas totales\\
+$\mu\times$, $\bar t_{\rm rec}$ & Aceleración de las tasas de reparación; tiempo medio de recuperación automática\\
+$\beta$, $\rho$ & Nivel del CVaR; peso de la pérdida esperada\\\bottomrule
 \end{tabularx}
 \end{table}
 
@@ -44,6 +55,10 @@ BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iterac
         cualquiera sea el paso.
   \item[BiLSTM] Red neuronal recurrente bidireccional con celdas de memoria de corto y largo
         plazo; aquí pronostica la fuga.
+  \item[APS] Análisis probabilístico de seguridad: estima la frecuencia de cada secuencia de
+        accidente y su consecuencia.
+  \item[Back-off] Endurecer una restricción en un margen para cubrir una incertidumbre; aquí,
+        bajar el límite de la PCT de 1220~K a $U_\alpha$.
   \item[Brecha de optimalidad] Diferencia relativa entre una cota superior (el costo de una
         solución) y una cota inferior demostrada del óptimo global.
   \item[Cinética puntual] Modelo de la población de neutrones que supone una forma espacial
@@ -52,6 +67,11 @@ BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iterac
         problema con restricciones.
   \item[Convexo] Problema cuyo conjunto factible y costo son convexos; en él, todo mínimo local
         es global.
+  \item[Corrección de sesgo] (\emph{offset-free}) Restar a la consigna la diferencia medida entre
+        la planta y el modelo, para que un error constante del modelo no deje un error
+        estacionario.
+  \item[CVaR] Valor en riesgo condicional: la media de la cola superior de una variable aleatoria
+        por encima de su cuantil $\beta$.
   \item[DET] Árbol dinámico de eventos: simulación que se ramifica cuando un componente falla o
         se repara.
   \item[Diferenciación automática] Cálculo exacto de derivadas propagando la regla de la cadena
@@ -59,6 +79,9 @@ BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iterac
   \item[Disparo simple] Formulación de control óptimo en la que sólo los controles son
         variables y el costo se obtiene simulando.
   \item[HRM] Modelo de alta resolución (12 nodos) del SMDFR; hace de planta.
+  \item[IAE] Integral del error absoluto de seguimiento en el tiempo.
+  \item[Invariancia a traslaciones] Propiedad de una medida de riesgo: sumar una constante a la
+        variable suma la misma constante a la medida, $\rho(Z+c)=\rho(Z)+c$.
   \item[LOCA] Accidente con pérdida de refrigerante.
   \item[Metaheurística] Método de búsqueda general que sólo evalúa el costo (LJ, GA, DE, PSO).
   \item[MC-dropout] Estimación de la incertidumbre de una red neuronal repitiendo la inferencia
@@ -66,14 +89,22 @@ BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iterac
   \item[MPC] Control predictivo basado en modelo: optimiza un horizonte futuro, aplica la primera
         acción y repite.
   \item[NLP / QP] Programa no lineal / programa cuadrático.
+  \item[Números aleatorios comunes] Usar las mismas realizaciones para todos los controladores,
+        de modo que las comparaciones sean pareadas y tengan menos varianza.
   \item[PCT] Temperatura pico de la vaina (aquí, de la pared de los tubos): el indicador de
         seguridad.
   \item[Precursores] Fragmentos de fisión que emiten neutrones retardados al decaer.
+  \item[Pre-enfriar] Mantener la PCT bajo la consigna antes de una falla posible, para que el
+        calentamiento durante la falla no llegue al límite.
   \item[PSM / DSM] Margen probabilístico / determinista de seguridad.
+  \item[Rao--Blackwell] Estimador que reemplaza una variable aleatoria por su esperanza
+        condicional; conserva la media y no aumenta la varianza.
   \item[Reactividad] Medida de cuánto se aparta el reactor de la criticidad,
         $\rho=(k-1)/k$.
   \item[ROM] Modelo reducido (un nodo por material) usado por el controlador para predecir.
   \item[SAA] Aproximación de una esperanza por el promedio sobre escenarios muestreados.
+  \item[Tiempo de asentamiento] Instante desde el cual el error queda para siempre dentro de una
+        banda (aquí, 0.30~K).
   \item[Transcripción directa] Formulación monolítica: estados y controles son variables, y la
         dinámica discretizada es un conjunto de restricciones.
 \end{description}
@@ -88,18 +119,37 @@ BE, \code{ode1be} & Euler implícito convergido; Euler implícito con una iterac
   \item \textbf{Certificación}: \code{julia/ReducedP0.jl}, \code{f3c\_optimality.jl}
         (pasos 1--3), \code{f3c\_lower\_bound.jl} (4a), \code{f3c\_rigorous.jl} (4b; centro
         con \code{F3C\_CENTER=mid}), \code{f3c\_compare\_decisions.jl}.
-  \item \textbf{Riesgo y actuador}: \code{python/f4\_leak\_ensemble.py},
+  \item \textbf{Riesgo de pronóstico y actuador}: \code{python/f4\_leak\_ensemble.py},
         \code{f4\_forecast\_calibration.py}, \code{julia/f4\_risk\_decisions.jl},
         \code{f4\_actuator\_sweep.jl}.
+  \item \textbf{HRM y lazo cerrado}: \code{julia/SMDFRHRM.jl}, \code{HRMQueries.jl},
+        \code{ClosedLoop.jl} (banco, controladores, métricas de la tesis, modos de riesgo),
+        \code{f1b\_validate\_hrm.jl}, \code{f45\_*.jl}, \code{f5a\_closed\_loop.jl},
+        \code{f5a2\_monte\_carlo.jl}, \code{f5a\_optimality\_audit.jl}.
+  \item \textbf{Capa de riesgo}: \code{f5b1a\_capacity\_sweep.jl}, \code{f5b0\_closed\_loop.jl}
+        y \code{python/f5b0\_leak\_forecast.py} (gemelo), \code{f5b1b\_dsm.jl},
+        \code{f5b1b0\_dsm\_lambda.jl}, \code{f5b1c\_risk.jl}, \code{f5b1c\_rb\_risk.jl},
+        \code{f5b1d\_partial.jl}, \code{f5b1d\_tau\_eta.jl}.
+  \item \textbf{Campaña F6} (50 realizaciones, paralela y reanudable):
+        \code{julia/f6\_campaign.jl <campañas> <procesos>} con las tareas de
+        \code{julia/F6Tasks.jl}; resumen \code{python/f6\_summary.py} $\Rightarrow$
+        \code{results/f6\_paper/summary.md}.
   \item \textbf{Análisis didácticos} (valores propios, respuesta en frecuencia, curva de la
         bomba, autoridad): \code{julia/didactic\_analysis.jl} $\Rightarrow$
         \code{results/didactic/}.
-  \item \textbf{Resultados}: \code{results/f1\_rom\_replica/}, \code{f3\_certificates/},
-        \code{f3c\_optimality/}, \code{f4\_risk/}, \code{didactic/}.
-  \item \textbf{Figuras}: \code{python/make\_status\_figures.py} (resultados) y
-        \code{python/make\_didactic\_figures.py} (capítulos introductorios). Las figuras de
-        rigidez y de brecha de optimalidad en una dimensión son ejemplos ilustrativos, no
-        resultados del modelo.
+  \item \textbf{Resultados}: \code{results/f1\_rom\_replica/}, \code{f1b\_hrm\_replica/},
+        \code{f3\_certificates/}, \code{f3c\_optimality/}, \code{f4\_risk/},
+        \code{f5a\_closed\_loop/}, \code{f5a2\_monte\_carlo/}, \code{f5b*/}, \code{f6\_paper/},
+        \code{didactic/}.
+  \item \textbf{Figuras}: \code{python/make\_status\_figures.py} (lazo abierto),
+        \code{make\_didactic\_figures.py} (capítulos introductorios),
+        \code{make\_closed\_loop\_figures.py} (lazo cerrado), \code{make\_f5b\_figures.py} (capa
+        de riesgo) y \code{make\_f6\_figures.py} (campaña F6). Las figuras de rigidez y de
+        brecha de optimalidad en una dimensión son ejemplos ilustrativos, no resultados del
+        modelo.
   \item \textbf{Documento}: \code{tectonic -X compile estado\_mpc\_monolitico.tex} desde
-        \code{docs/}; los capítulos están en \code{docs/estado/}.
+        \code{docs/}; los capítulos están en \code{docs/estado/}. La copia versionada es
+        \code{docs/reporte\_estado\_mpc\_monolitico.pdf}. El plan de trabajo
+        (\code{docs/monolithic\_formulation\_plan.md}) es el cuaderno cronológico; este
+        documento es la versión consolidada.
 \end{itemize}

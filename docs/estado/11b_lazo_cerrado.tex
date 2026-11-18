@@ -16,11 +16,16 @@ juzga por lo que pasa cuando sus decisiones se aplican una tras otra sobre la pl
 \end{enumerate}
 \noindent Para cerrar el lazo hace falta la planta. En Simulink, cada consulta del lazo
 archivado tarda unos 800~s, y en leo\_acer no hay MATLAB. Por eso el primer paso fue
-programar el HRM en Julia, igual que se hizo antes con el ROM. Esta parte presenta ese
-trabajo (F1b), las consultas generadas sin Simulink (F4.5), el lazo cerrado determinista
-(F5a.1), un Monte Carlo de lazos cerrados (F5a.2), una auditoría de optimalidad de los
-solvers y los escenarios extremos (F5a.3). Termina con lo que todo esto implica para la capa
-de riesgo.
+programar el HRM en Julia, igual que se hizo antes con el ROM. Esta parte presenta, en orden:
+\begin{enumerate}
+  \item la réplica del HRM (F1b) y las consultas generadas sin Simulink (F4.5);
+  \item el lazo cerrado sobre la realización archivada (F5a.1) y un primer Monte Carlo que mide
+        el valor de la corrección de sesgo (F5a.2);
+  \item los escenarios extremos, que muestran dónde puede estar el riesgo (F5a.3);
+  \item el margen DSM y el PID de la tesis, medidos con las métricas de la tesis;
+  \item el desempeño con 50 realizaciones por familia y la auditoría de optimalidad en lazo
+        cerrado (campaña F6).
+\end{enumerate}
 
 %======================================================================
 \section{El HRM en Julia reproduce Simulink (F1b)}\label{sec:hrm}
@@ -181,47 +186,5 @@ actuador. Tiempo p99 por consulta: $\le0.18$~s (QP) y $\le0.71$~s (NLP).}
 \takeaway{Con 6 realizaciones, la conclusión de una sola realización se sostiene: N1, N2 y
 N3 son indistinguibles cuando tienen corrección de sesgo. La corrección vale más cuanto más
 perturbada está la planta (de +0.4\,\% a +19\,\% de ISE sin ella). El actuador físico
-reduce el ISE en un 41--51\,\%.}
-
-%======================================================================
-\section{¿Los solvers resuelven a optimalidad?}\label{sec:auditoria}
-%======================================================================
-El conteo de fallas anterior trata como éxito la salida \emph{aceptable} de Ipopt
-(\code{ALMOST\_LOCALLY\_SOLVED}). Para saber si eso esconde algo, a lo largo de un lazo
-N3+sesgo (726 consultas: la realización archivada y dos del Monte Carlo, con los dos
-actuadores) cada consulta se resolvió de cinco maneras, y todas las soluciones se evaluaron
-con el mismo costo P0 sobre el ROM (\code{julia/f5a\_optimality\_audit.jl}).
-
-\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
-\begin{tabularx}{\linewidth}{@{}l Y r r@{}}\toprule
-Solver & Estado de terminación (726 consultas) & Brecha [K$^2$] (mediana / máx.) & $|\Delta\mdot_0|$ máx.\ [kg/s]\\\midrule
-N1 (QP) & óptimo: 726 & $10^{-6}$ / 0.0097 & 0.11\\
-N2 (QP) & óptimo: 726 & $5\cdot10^{-12}$ / 0.0022 & 0.01\\
-N3 en el lazo & óptimo local: 160; aceptable: 566 & $2\cdot10^{-14}$ / $3\cdot10^{-8}$ & ---\\
-N3 sin salida aceptable & igual, más 7 por límite de iteraciones & idéntica & $2\cdot10^{-7}$\\
-N3 con arranque en frío & igual & 0 / $4\cdot10^{-8}$ & 0.0015\\\bottomrule
-\end{tabularx}
-\caption{Auditoría de optimalidad. La brecha de costo se mide contra el mejor N3 de cada
-consulta. Estados: óptimo = \code{OPTIMAL} (Clarabel); óptimo local = \code{LOCALLY\_SOLVED}
-y aceptable = \code{ALMOST\_LOCALLY\_SOLVED} (Ipopt).}
-\end{table}
-
-\begin{itemize}
-  \item N1 y N2 resuelven su QP convexo al óptimo global. Ese óptimo es el del modelo
-        linealizado; medido sobre P0, la pérdida es $\le0.01$~K$^2$ y sólo aparece en las
-        primeras consultas, donde el costo vale 15--46~K$^2$.
-  \item N3 termina en la salida aceptable en el 78\,\% de las consultas porque, en régimen,
-        el costo óptimo es $\approx3\cdot10^{-12}$~K$^2$: el seguimiento es perfecto y la
-        tolerancia de $10^{-10}$ queda bajo el ruido numérico. Sin la salida aceptable, o
-        desde un arranque en frío, llega al mismo punto.
-\end{itemize}
-
-\takeaway{Todas las decisiones del lazo son óptimas para su problema: global en N1 y N2
-(QP convexos) y local reproducible en N3. La optimalidad global de N3 sólo está certificada
-en las dos consultas de la sección~\ref{sec:certificacion}.}
-
-\input{estado/11c_extremos}
-
-\input{estado/11e_f5b}
-
-\input{estado/11i_f6}
+reduce el ISE en un 41--51\,\%. La sección~\ref{sec:desempeno} repite la comparación con 50
+realizaciones y las métricas de la tesis.}

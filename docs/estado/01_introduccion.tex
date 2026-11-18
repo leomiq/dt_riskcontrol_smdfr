@@ -10,19 +10,27 @@ control predictivo ni la optimización numérica. Por eso cada concepto se intro
 usarse, con un ejemplo cuando ayuda, y cada resultado se acompaña de la pregunta que
 responde.
 
-El texto tiene cuatro partes:
+El texto tiene siete partes:
 \begin{enumerate}[label=\textbf{Parte \Roman*.}, leftmargin=*]
   \item \textbf{El problema físico} (secciones~\ref{sec:reactor}--\ref{sec:accidente}): qué
         es el reactor SMDFR, cómo se describe su dinámica (neutrones y calor) y qué ocurre en
         el accidente que se quiere controlar.
   \item \textbf{El controlador} (secciones~\ref{sec:mpc}--\ref{sec:actual}): qué es un
         control predictivo, qué problema de optimización resuelve en cada instante y cómo lo
-        resuelve hoy el método del proyecto.
+        resolvía el método original del proyecto.
   \item \textbf{Las herramientas} (secciones~\ref{sec:optimizacion}--\ref{sec:certteoria}):
         los fundamentos de optimización, integración numérica, linealización, incertidumbre y
         certificación de optimalidad, y las formulaciones que propone este trabajo.
-  \item \textbf{Los resultados} (secciones~\ref{sec:replica}--\ref{sec:conclusiones}):
-        qué se obtuvo con cada formulación, cuál es mejor, con qué garantía y qué falta.
+  \item \textbf{Resultados en lazo abierto} (secciones~\ref{sec:replica}--\ref{sec:actuador}):
+        una decisión aislada. Cuánto tarda, cuán buena es, con qué garantía y cuál método gana.
+  \item \textbf{Lazo cerrado sobre el HRM} (secciones~\ref{sec:cl-intro}--\ref{sec:auditoria}):
+        las decisiones aplicadas una tras otra sobre el modelo de alta resolución, con las
+        métricas de control de la tesis y en 50 realizaciones por familia.
+  \item \textbf{La capa de riesgo} (secciones~\ref{sec:riesgo-donde}--\ref{sec:riesgo-fallas}):
+        dónde está el riesgo, cómo se acota, por qué todas las formulaciones se reducen a un
+        margen, y en qué condiciones sirve.
+  \item \textbf{Conclusiones} (sección~\ref{sec:conclusiones}): las respuestas, lo que enseña
+        el caso, las limitaciones y los próximos pasos.
 \end{enumerate}
 Quien ya conozca la física puede saltar a la parte~II; quien conozca el control predictivo,
 a la parte~III. Los recuadros sombreados resumen la idea principal de cada sección. Al final
@@ -65,8 +73,17 @@ Luego evalúa esas formulaciones y certifica la calidad de sus soluciones.
   \item ¿Cuál método produce la mejor decisión, y por cuánto?
   \item ¿La incertidumbre del pronóstico de fuga cambia la decisión?
   \item ¿Las cotas del actuador tienen base física?
+  \item ¿Se sostienen las conclusiones en lazo cerrado, con el modelo de alta resolución como
+        planta?
+  \item ¿Los solvers resuelven a optimalidad en lazo cerrado?
+  \item ¿Cómo se compara el MPC con los controladores de la tesis (PID, PI del DET y margen
+        DSM)?
+  \item ¿Dónde está el riesgo de llegar a 1220~K?
+  \item ¿Sirve una capa de riesgo, y cuánto cuesta?
+  \item ¿Qué formulación de riesgo conviene?
+  \item ¿De qué depende que la capa de riesgo sirva?
 \end{enumerate}
-Cada sección de resultados termina con un recuadro que responde una de ellas, y la
+Las secciones de resultados terminan con un recuadro que responde una de ellas, y la
 sección~\ref{sec:conclusiones} las reúne.
 
 \subsection{Ruta de trabajo}
@@ -80,11 +97,13 @@ organizó en fases (tabla~\ref{tab:fases} y figura~\ref{fig:fases}).
 Fase & Objetivo & Criterio de cierre & Estado\\\midrule
 F0 Ecuaciones & Escribir el ROM término a término desde el archivo de Simulink & Cada término trazado a un bloque & Cerrada\\
 F1 Réplica & ROM algebraico en Julia, con diferenciación automática & Error $\ll1$~K frente a Simulink & Cerrada\\
-F2 NLP (N3) & P0 como programa no lineal monolítico & Comparado con LJ y GA en Simulink & 2 consultas\\
-F3 QP (N1, N2) & P0 linealizado como QP; función de transferencia; certificado dual & Brecha frente a N3 medida & 2 consultas\\
-F3c Certificación & Brecha de optimalidad global del P0 no lineal; comparación de decisiones & Brecha certificada pequeña & Pasos 1--4b\\
-F4 Riesgo & Restricción probabilística, SAA, cuantiles & Una decisión que cambie por riesgo & Abierta\\
-F5 Lazo cerrado & Las 61 consultas, multietapa & $<120$~s por consulta & Pendiente\\\bottomrule
+F2 NLP (N3) & P0 como programa no lineal monolítico & Comparado con LJ y GA en Simulink & Cerrada\\
+F3 QP (N1, N2) & P0 linealizado como QP; función de transferencia; certificado dual & Brecha frente a N3 medida & Cerrada\\
+F3c Certificación & Brecha de optimalidad global del P0 no lineal; comparación de decisiones & Brecha certificada pequeña & Cerrada (2 consultas)\\
+F4 Riesgo de pronóstico & Restricción probabilística, SAA, cuantiles & Saber si el pronóstico cambia la decisión & Cerrada: no la cambia\\
+F1b, F5a Lazo cerrado & HRM en Julia como planta; N1--N3 en lazo cerrado; Monte Carlo & $<120$~s por consulta & Cerrada\\
+F5b Capa de riesgo & Fallas del ACS como en el DET; cota de riesgo; formulaciones & Garantía $P\le\alpha$ verificada & Cerrada\\
+F6 Campaña final & 50 realizaciones por resultado; sensibilidad; auditoría de optimalidad & Conclusiones robustas & Cerrada\\\bottomrule
 \end{tabularx}
 \caption{Fases del trabajo (detalle en \code{docs/monolithic\_formulation\_plan.md}).}
 \label{tab:fases}
@@ -104,8 +123,8 @@ F5 Lazo cerrado & Las 61 consultas, multietapa & $<120$~s por consulta & Pendien
 \node[box] (f1) at (3.6,0)    {\textbf{F1}\\Réplica\\algebraica};
 \node[box] (f2) at (8.8,1.6)  {\textbf{F2}\\NLP no lineal\\(N3)};
 \node[box] (f3) at (8.8,-1.6) {\textbf{F3}\\Linealización\\(N1, N2)};
-\node[box] (f4) at (13.4,0)   {\textbf{F4}\\Riesgo\\(probab., SAA)};
-\node[box] (f5) at (17.0,0)   {\textbf{F5}\\Lazo cerrado\\(61 consultas)};
+\node[box] (f4) at (13.4,0)   {\textbf{F4}\\Riesgo de\\pronóstico};
+\node[box] (f5) at (17.0,0)   {\textbf{F5--F6}\\Lazo cerrado\\y capa de riesgo};
 \node[box] (f3c) at (13.4,-3.4) {\textbf{F3c}\\Certificación\\y comparación};
 \node[ref] (sim) at (3.6,-3.6) {Simulink (ROM)\\referencia exacta};
 \draw[arr] (f0) -- (f1);
@@ -122,8 +141,9 @@ F5 Lazo cerrado & Las 61 consultas, multietapa & $<120$~s por consulta & Pendien
 \end{tikzpicture}}
 \caption{Cómo se encadenan las fases. F0 y F1 producen un modelo derivable y validado. F2
 lo usa como restricción (el problema exacto) y F3 como fuente de derivadas (el problema
-lineal). F3c certifica la calidad de las soluciones. F4 y F5 construyen sobre un problema
-que ya es tratable y verificado. Las flechas discontinuas son validaciones contra
+lineal). F3c certifica la calidad de las soluciones. F4 mide el riesgo de pronóstico, y
+F5--F6 cierran el lazo sobre el HRM y agregan la capa de riesgo de fallas del ACS, sobre un
+problema que ya es tratable y verificado. Las flechas discontinuas son validaciones contra
 Simulink.}
 \label{fig:fases}
 \end{figure}

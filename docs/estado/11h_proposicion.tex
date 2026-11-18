@@ -1,12 +1,18 @@
-%----------------------------------------------------------------------
-\subsection{El resultado estructural: por qué todas las formulaciones de riesgo son un margen}\label{sec:prop-aditiva}
-%----------------------------------------------------------------------
-Los experimentos de §8.14--8.18 del plan mostraron tres regularidades: (i) la cota con
-cuantil, el CVaR, el PSM de Wilks y el escenario orientado a la decisión caen sobre una misma
-frontera riesgo--pre-enfriamiento; (ii) el escenario óptimo de Homem-de-Mello es explícito; y
-(iii) una cota que conoce la severidad $\eta$ equivale a la de falla total con $\alpha$
-reescalado. Esta subsección las demuestra a partir de dos supuestos, de modo que dejan de ser
-observaciones empíricas y pasan a ser consecuencias de la estructura del problema.
+%======================================================================
+\section{El resultado estructural: por qué todas las formulaciones de riesgo son un margen}\label{sec:prop-aditiva}
+%======================================================================
+La cota de la sección anterior es una de muchas maneras de incorporar el riesgo. El plan
+consideraba otras cuatro: el CVaR por escenarios, el PSM en línea de Wilks, el escenario
+orientado a la decisión de Homem-de-Mello y la pérdida esperada. Antes de compararlas con
+experimentos conviene preguntarse qué tienen en común. La respuesta está en la observación de
+la sección~\ref{sec:riesgo-donde}: el pico es la PCT al empezar la falla más un calentamiento
+que sólo depende de la duración. A partir de esa estructura, esta sección demuestra tres
+resultados: (i) el cuantil, el CVaR, Wilks y el escenario orientado a la decisión se reducen a
+un margen sobre la PCT y recorren una misma frontera riesgo--pre-enfriamiento; (ii) el escenario
+óptimo de Homem-de-Mello es explícito; y (iii) una cota que conoce la severidad $\eta$ de una
+falla parcial equivale a la de falla total con $\alpha$ reescalado. Las
+secciones~\ref{sec:riesgo-rb} y~\ref{sec:riesgo-parciales} los confirman con 50
+realizaciones.
 
 \paragraph{Planteamiento.} En la consulta $t_q$ el MPC elige el plan $u\in\mathcal U$ (caja,
 rampa). Sea $y_k(u)$ la PCT predicha y corregida por sesgo en el paso $k$ del horizonte
@@ -27,7 +33,8 @@ $\Delta T(t)=\max_{s\le t}\hat y^{\,\rm sin\,ACS}(s)-\hat y_{\rm ahora}$, un má
 interpola linealmente entre muestras. (A1) es la aproximación de fondo: durante una falla total
 el caudal es cero sea cual sea $u$, así que $u$ sólo influye a través del estado en el que
 empieza la falla, resumido en $y_k(u)$. La réplica del HRM la respalda: el pico llega al final
-de la falla, y la tasa de calentamiento del ROM ($\approx0.3$~K/s) coincide con la del HRM (§8.13).
+de la falla, y la tasa de calentamiento del ROM ($\approx0.3$~K/s) coincide con la del HRM
+(sección~\ref{sec:riesgo-donde}).
 
 Se escribe $Z=\Delta T(D)$ para el calentamiento aleatorio. Una \emph{medida de riesgo invariante
 a traslaciones} es un funcional $\rho$ de variables aleatorias con $\rho(Z+c)=\rho(Z)+c$ para toda
@@ -38,7 +45,8 @@ Bajo (A1)--(A2), para cada paso $k$ y cada plan $u$:
 \begin{enumerate}
 \item[(a)] \emph{Medidas invariantes a traslaciones.} Si $\rho$ es invariante a traslaciones,
   \[\rho\big(Y_k(u,D)\big)\le U\iff y_k(u)\le U-m_\rho,\qquad m_\rho:=\rho(Z).\]
-  En particular, la restricción probabilística equivale a la cota de §8.14:
+  En particular, la restricción probabilística equivale a la cota de la
+  sección~\ref{sec:riesgo-cota}:
   \[P\big(Y_k(u,D)>U\big)\le\alpha\iff y_k(u)\le U_\alpha:=U-\Delta T\big(q_{1-\alpha}(D)\big),\]
   y la restricción CVaR$_\beta$ de Rockafellar--Uryasev equivale a
   $y_k(u)\le U-\mathrm{CVaR}_\beta(Z)$.
@@ -99,7 +107,7 @@ aumentar $m$.
 \item \emph{Garantía en lazo cerrado.} Si en la consulta $t_q$ la planta cumple
   $\mathrm{PCT}(t_q)\le U_\alpha$ (predicción con sesgo exacta) y (A1)--(A2) valen para la planta,
   entonces $P(\text{cruce}\mid\text{falla que empieza en }t_q)\le\alpha$. Es lo que se verificó con
-  el estimador de Rao--Blackwell sobre el HRM (§8.16).
+  el estimador de Rao--Blackwell sobre el HRM (sección~\ref{sec:riesgo-rb}).
 \end{itemize}
 
 \begin{proposicion}[Fallas parciales: margen con $\alpha$ reescalado]\label{prop:eta}
@@ -137,12 +145,13 @@ suma sobre $\eta>0$.
 
 \paragraph{Lectura con los números del SMDFR.} El calentamiento con caudal parcial es más lento:
 $\tau_\eta\approx\tau_0/(1-\eta\,\dot m_{\max}/\text{fuga})$ (error menor que 7~por ciento en el HRM,
-§8.18). Con fuga de 15~kg/s, $\dot m_{\max}=30$~kg/s y $\tau_0=160$~s: $\Delta_{0.125}\approx55$~s y
+sección~\ref{sec:riesgo-parciales}). Con fuga de 15~kg/s, $\dot m_{\max}=30$~kg/s y $\tau_0=160$~s: $\Delta_{0.125}\approx55$~s y
 $\Delta_{0.25}\approx170$~s. Con $\eta\ge0.375$, $\tau_\eta=\infty$. Con $1/\mu_\ast=46$~s,
 $e^{-\mu_\ast\Delta}$ vale 0.30 y 0.025. Con los trenes supuestos ($\eta\ge0.25$ en todas las fallas
 parciales), $\varepsilon$ queda dominado por la componente lenta ($w_{\rm lenta}=0.002$, reparación
 de 2.9~h). Esa componente es el mismo \emph{piso} de riesgo que ningún controlador evita
-(§8.16). De ahí la equivalencia observada: la cota que conoce $\eta$ con $\alpha=0.002$ es la de
+(sección~\ref{sec:riesgo-rb}). De ahí la equivalencia que se observa en la
+sección~\ref{sec:riesgo-parciales}: la cota que conoce $\eta$ con $\alpha=0.002$ es la de
 falla total con $\alpha=0.02=0.002/p_0$.
 
 \paragraph{Cuándo deja de valer.} (i) Si la falla empieza \emph{dentro} del horizonte y es
@@ -151,9 +160,9 @@ depende del escenario. Esas formulaciones (CVaR o pérdida esperada con escenari
 a un margen, pero en el SMDFR quedan inactivas porque el pico llega después del horizonte de
 13~s. (ii) Si la duración tiene cola pesada (no exponencial), $S(\tau_0+\Delta)/S(\tau_0)$ no
 cae exponencialmente con $\Delta$ y $\varepsilon$ no es pequeño. (iii) Si el ROM no reproduce el
-calentamiento sin ACS, el margen que calcula el controlador no es el de la planta. Las
-sensibilidades de la campaña F6 (aceleración $\mu$, capacidad, probabilidades de severidad)
-miden cuánto se aleja el SMDFR de estas condiciones.
+calentamiento sin ACS, el margen que calcula el controlador no es el de la planta. La
+sección~\ref{sec:riesgo-aplicabilidad} mide cuánto se aleja el SMDFR de estas condiciones
+(aceleración de las reparaciones, capacidad, probabilidades de severidad).
 
 \takeaway{Con el pico aditivo y monótono en la duración de la falla, toda medida de riesgo
 invariante a traslaciones (cuantil, CVaR, Wilks) y el escenario orientado a la decisión se

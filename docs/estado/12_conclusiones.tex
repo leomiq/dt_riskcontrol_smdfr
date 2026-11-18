@@ -18,46 +18,47 @@
         rampa admisible.
   \item \textbf{¿Se sostienen las conclusiones en lazo cerrado, con el HRM como planta?} Sí.
         Con la réplica del HRM en Julia (error $\sim10^{-6}$~K frente a Simulink), N1, N2 y N3
-        dan el mismo resultado en lazo cerrado y en el Monte Carlo, sin fallas del solver. El
-        desajuste ROM--HRM es un sesgo de $\sim0.2$~K que la corrección \emph{offset-free}
-        elimina.
-  \item \textbf{¿Resuelven a optimalidad?} N1 y N2 resuelven su QP al óptimo global, y N3
-        llega a un óptimo local reproducible. Sus primeras acciones difieren en
-        $\le0.11$~kg/s. En 3150 consultas de lazo cerrado (campaña F6), N3 queda a
-        $\le2.5\cdot10^{-8}$~K de error RMS del mejor plan encontrado y N2 a $\le6\cdot10^{-4}$~K;
-        un arranque en frío nunca encontró algo mejor (sección~\ref{sec:f6}).
-  \item \textbf{¿Dónde está el riesgo?} En los escenarios del modelo, en ninguna parte: la PCT
-        no pasa de 1185~K. En la familia extrema, el resultado lo decide la capacidad del
-        actuador, no el optimizador (sección~\ref{sec:extremos}). Con capacidad libre, el
-        pico lo fija la duración de las fallas del ACS: la única palanca es pre-enfriar
-        (sección~\ref{sec:f5b}).
-  \item \textbf{¿El margen DSM de la tesis cambia la trayectoria?} No con N2, para ningún
-        $\lambda_{\rm dsm}$ entre $10^2$ y $10^6$ ni con $U=1244$ o 1220~K. Su umbral es una
-        banda de 0.15~K sobre la consigna, y N2 ya sigue la consigna con más precisión. En la
-        tesis se activaba por el LJ subóptimo y por el desajuste de la predicción
-        (sección~\ref{sec:dsm-lambda}).
-  \item \textbf{¿N2 o el PID de la tesis?} N2: IAE de 2 a 50 veces menor, se asienta en 3--14~s
-        y tiene error estacionario de 0.01~K. El PID, sin el artefacto del lazo archivado,
-        sobre-enfría y nunca se asienta en la banda de 0.30~K.
-  \item \textbf{¿Sirve una capa de riesgo?} Con fallas como en el DET (tasas aceleradas), una
-        cota de riesgo en N2 baja la peor PCT de 1218.5 a 1212~K; con $\alpha=0.05$ el costo es
-        casi nulo. Con un estimador de Rao--Blackwell, validado contra el conteo directo,
-        $P(\text{cruce}\mid\text{falla})$ es 0.031 para N2 y la cota la lleva a $\le\alpha$
-        (0.015 con $\alpha=0.02$, 0.011 con $\alpha=0.01$). El precio es pre-enfriar 7.5--12.9~K.
-        El PID de la tesis es un 5\,\% más riesgoso que N2, y el PI del DET casi 4 veces más.
-  \item \textbf{¿Qué formulación de riesgo conviene?} Por la estructura aditiva del pico, el
-        CVaR, el PSM en línea de Wilks y el escenario orientado a la decisión se reducen a una
-        cota sobre la PCT, y la pérdida esperada cae sobre la misma frontera. Ninguna es más
-        eficiente; la cota con cuantil es la más simple y su garantía está verificada.
-        Con fallas parciales (la planta recibe $\eta\,u$) tampoco cambia: casi no agregan
-        riesgo, y una cota que conoce $\eta$ equivale a la de falla total con $\alpha$ reescalado.
-        Las Proposiciones~\ref{prop:margen} y~\ref{prop:eta} lo demuestran, y la campaña F6
-        lo confirma con 50 realizaciones y cuatro vectores de severidad.
-  \item \textbf{¿De qué depende que la capa de riesgo sirva?} De la duración media de las fallas
-        frente al tiempo hasta 1220~K sin ACS ($\tau\approx165$~s). Con fallas de $\approx46$~s
-        actúa y cumple $\alpha$. Con fallas de $\approx150$~s la cota es inalcanzable: el ACS se
-        satura y el riesgo queda en 0.16. Con fallas de $\approx15$~s nunca actúa. La capacidad
-        del ACS (30--50~kg/s) casi no influye (sección~\ref{sec:f6}).
+        dan la misma PCT pico y el mismo IAE mediano en 50 realizaciones por familia, sin
+        fallas del solver. El desajuste ROM--HRM es un sesgo de $\sim0.2$~K que la corrección
+        \emph{offset-free} elimina; sin ella el ISE sube hasta un 19\,\% con perturbaciones no
+        previstas (secciones~\ref{sec:f5a2} y~\ref{sec:desempeno}).
+  \item \textbf{¿Los solvers resuelven a optimalidad en lazo cerrado?} Sí. N1 y N2 resuelven su
+        QP al óptimo global y N3 llega a un óptimo local reproducible. En 3800 consultas por
+        lazo, N3 queda a $\le2.5\cdot10^{-8}$~K de error equivalente del mejor plan encontrado
+        y N2 a $\le6\cdot10^{-4}$~K; un arranque en frío nunca encontró algo mejor. N1 se aleja
+        hasta 0.33~K sólo con movimientos grandes del actuador (sección~\ref{sec:auditoria}).
+  \item \textbf{¿Cómo se compara el MPC con los controladores de la tesis?} N2 gana en todas
+        las métricas de la tesis. En la familia nominal se asienta siempre, en 5.5--13~s, con
+        un IAE de 6 a 28 veces menor que el del PID, que sobre-enfría y nunca se asienta. El
+        margen DSM de la tesis no cambia la trayectoria de N2 con ningún
+        $\lambda_{\rm dsm}$ entre $10^2$ y $10^6$: su umbral es una banda de 0.15~K, y N2 ya
+        sigue la consigna con más precisión. En la tesis se activaba por el LJ subóptimo y por
+        el desajuste de la predicción (secciones~\ref{sec:dsm-lambda} y~\ref{sec:desempeno}).
+  \item \textbf{¿Dónde está el riesgo de llegar a 1220~K?} En las fallas largas del ACS. En los
+        escenarios del modelo la PCT no pasa de 1185~K, y en la familia extrema lo decide la
+        capacidad del actuador, no el optimizador. Con capacidad libre, el pico llega al final
+        de la falla y crece con su duración: la única palanca es pre-enfriar
+        (secciones~\ref{sec:extremos}, \ref{sec:riesgo-donde} y~\ref{sec:riesgo-cota}).
+  \item \textbf{¿Sirve una capa de riesgo, y cuánto cuesta?} Sí. Con fallas como en el DET, una
+        cota sobre la PCT cumple $P(\text{cruce}\mid\text{falla})\le\alpha$, verificado con un
+        estimador de Rao--Blackwell sobre la planta: 0.031 para N2, 0.015 con $\alpha=0.02$ y
+        0.011 con $\alpha=0.01$. El precio es pre-enfriar 7.5--12.9~K y un 17--32\,\% más de masa.
+        Con fallas dentro del lazo, ninguna variante de N2 llega a 1220~K; el PID de la tesis
+        llega en 1 de 50 realizaciones y el PI del DET en 7 (secciones~\ref{sec:riesgo-rb}
+        y~\ref{sec:riesgo-fallas}).
+  \item \textbf{¿Qué formulación de riesgo conviene?} La cota con cuantil. Por la estructura
+        aditiva del pico, el cuantil, el CVaR, el PSM de Wilks y el escenario orientado a la
+        decisión se reducen a un margen (proposición~\ref{prop:margen}), y la pérdida esperada
+        cae sobre la misma frontera. Con fallas parciales tampoco cambia: el riesgo es $p_0$
+        veces el de las fallas totales, y la cota que conoce $\eta$ es la de falla total con
+        $\alpha$ reescalado (proposición~\ref{prop:eta}). Las dos cosas se confirman con 50
+        realizaciones (secciones~\ref{sec:riesgo-formulaciones} y~\ref{sec:riesgo-parciales}).
+  \item \textbf{¿De qué depende que la capa de riesgo sirva?} Del tiempo de recuperación
+        automática del ACS frente al tiempo que tarda la PCT en llegar a 1220~K sin enfriamiento
+        ($\tau\approx165$~s). Con recuperaciones de $\approx46$~s actúa y cumple $\alpha$; con
+        $\approx150$~s ningún controlador la cumple; con $\approx15$~s sobra. Las fallas que
+        terminan por reparación o por el operador duran mucho más que $\tau$ y pertenecen al
+        APS. La capacidad del ACS casi no influye (sección~\ref{sec:riesgo-aplicabilidad}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -92,50 +93,57 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
         y, por último, una cota inferior rigurosa con aritmética de intervalos.
   \item \textbf{Los supuestos heredados deben revisarse.} La cota del actuador en amperios
         parecía un dato, y resultó ser un artefacto del modelo de la bomba.
+  \item \textbf{La estructura también simplifica el riesgo.} Cinco formulaciones de riesgo
+        distintas resultaron ser la misma cosa, un margen sobre la PCT, porque el pico es
+        aditivo en la duración de la falla. Encontrar esa estructura vale más que comparar
+        formulaciones una por una.
+  \item \textbf{Una cifra necesita su escala.} Una brecha relativa de $10^5$\,\% resultó ser
+        una diferencia de $10^{-12}$~K$^2$. Antes de interpretar un número hay que preguntarse
+        respecto de qué está normalizado.
 \end{enumerate}
 
 \subsection{Limitaciones}
 \begin{itemize}
-  \item La certificación global se demostró en dos consultas. En lazo cerrado hay evidencia de
-        optimalidad local con varios arranques en 3150 consultas (F6), no un certificado global.
-  \item Las tablas principales tienen 50 realizaciones por familia (F6). Las colas del riesgo se
-        estiman con Rao--Blackwell, que considera sólo la primera falla de cada transitorio.
-  \item La réplica del HRM se validó contra la realización archivada (error de $10^{-6}$~K) y
-        sus perfiles de temperatura en estado estacionario coinciden con los de Simulink. No se
-        comparó nodo a nodo durante una falla del ACS.
-  \item El pronóstico de fuga en el lazo es perfecto o tiene un sesgo constante; el ensamble
-        BiLSTM todavía no está en el lazo.
-  \item La certificación vale para P0 sobre el ROM. No dice nada sobre el desajuste entre el
-        ROM y el HRM, ni sobre el reactor real.
-  \item Las cotas del actuador siguen sin decidirse; se usan dos configuraciones de referencia.
-  \item La brecha certificada es conservadora, sobre todo en 1161~s.
-  \item La capa de riesgo es una primera versión (cota condicional a una falla que empieza
-        ahora). El estimador de riesgo considera sólo la primera falla de cada transitorio.
-  \item Las tasas de falla del DET están aceleradas ($\lambda\times10^5$, $\mu\times10^4$). La campaña F6
-        mostró que la utilidad de la capa de riesgo depende de esa aceleración: es el supuesto
-        crítico, y falta confirmarlo con el equipo.
-  \item Los resultados valen para duraciones de falla exponenciales (sin memoria). Con colas
-        pesadas, las fallas parciales sí pesarían y las formulaciones con escenarios dentro del
-        horizonte podrían separarse de la frontera.
+  \item \textbf{Optimalidad global.} El certificado riguroso se demostró en dos consultas, y es
+        conservador en 1161~s. En lazo cerrado hay evidencia de optimalidad local con varios
+        arranques en 3800 consultas por lazo, no un certificado global.
+  \item \textbf{La planta.} La réplica del HRM se validó contra la realización archivada (error
+        de $10^{-6}$~K), y sus perfiles de temperatura en estado estacionario coinciden con los
+        de Simulink. No se comparó nodo a nodo durante una falla del ACS, que es justo el
+        régimen del que depende el resultado de riesgo. El calentamiento del ROM y del HRM sin
+        ACS coincide ($\approx0.3$~K/s).
+  \item \textbf{El pronóstico de fuga.} En el lazo se probaron un pronóstico perfecto, uno con
+        sesgo constante, la persistencia y un filtro de Kalman. La BiLSTM de la tesis no está en
+        el lazo; con un horizonte de 13~s, la persistencia basta.
+  \item \textbf{El modelo y el reactor real.} La certificación vale para P0 sobre el ROM. No dice
+        nada sobre el desajuste entre el ROM y el HRM, ni sobre el reactor real.
+  \item \textbf{El modelo de fallas.} Las tasas del DET están aceleradas ($\lambda\times10^5$,
+        $\mu\times10^4$), y la utilidad de la capa de riesgo depende de la aceleración de las
+        reparaciones: es el supuesto crítico. Los resultados valen para duraciones
+        exponenciales (sin memoria); con colas pesadas, las fallas parciales sí pesarían y las
+        formulaciones con escenarios dentro del horizonte podrían separarse de la frontera. Las
+        fallas parciales (4 trenes) son un supuesto: el DET no las tiene.
+  \item \textbf{La capa de riesgo} es condicional a una falla que empieza en la consulta, y el
+        estimador de riesgo considera sólo la primera falla de cada transitorio.
+  \item \textbf{El actuador.} La capacidad y la rampa del ACS siguen sin fijarse. Casi no
+        cambian el riesgo, pero sí el desempeño nominal (IAE de 14.7 frente a 7.6~K\,s).
 \end{itemize}
 
 \subsection{Próximos pasos, por prioridad}
 \begin{enumerate}
-  \item \textbf{Confirmar con el equipo la aceleración de las reparaciones} (decisión 11): decide
-        en cuál de los tres regímenes cae la capa de riesgo (sección~\ref{sec:f6}). Propuesta
-        a partir de la literatura (plan §10.3): las reparaciones duran días y las
-        recuperaciones por el operador decenas de minutos, así que ningún controlador las
-        mitiga y quedan para el APS. El MPC protege contra interrupciones que se recuperan
-        solas por redundancia (arranque en 10--20~s más el restablecimiento del caudal). El
-        caso base es $\mu\times10^4$ (media $\approx46$~s). Falta el dato de la redundancia
-        del ACS del SMDFR.
-  \item \textbf{Alcance: un solo paper} (decidido el 18-11): formulación y certificación, lazo
-        cerrado con las métricas de la tesis, y capa de riesgo con las proposiciones y su
-        condición de aplicabilidad.
-  \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento ya está
-        medida con 50 realizaciones.
+  \item \textbf{Confirmar con el equipo el tiempo de recuperación del ACS} (decisión 11 del
+        plan): si el ACS del SMDFR tiene trenes redundantes con arranque automático y cuánto
+        tarda en restablecer el caudal. Decide en cuál de los tres regímenes cae la capa de
+        riesgo (sección~\ref{sec:riesgo-aplicabilidad}). Mientras tanto, el caso base es
+        $\mu\times10^4$ (media $\approx46$~s), interpretado como recuperación automática.
+  \item \textbf{Elegir $\alpha$ con el equipo}: la frontera riesgo--pre-enfriamiento está medida
+        con 50 realizaciones.
   \item \textbf{Confirmar el resto de los supuestos}: el modelo de 4 trenes con sus
-        probabilidades, el límite de 1220~K y la capacidad y rampa del ACS. Según F6, estos
-        dos últimos casi no cambian las conclusiones.
-  \item \textbf{Escribir el manuscrito.}
+        probabilidades, el límite de 1220~K, y la capacidad y rampa del ACS.
+  \item \textbf{Escribir el manuscrito} (decidido el 18-11: un solo paper con la formulación y
+        su certificación, el lazo cerrado con las métricas de la tesis, y la capa de riesgo con
+        las proposiciones y su condición de aplicabilidad).
+  \item \textbf{Opcional, si un revisor lo pide}: comparar la réplica del HRM con Simulink nodo a
+        nodo durante una falla del ACS (requiere MATLAB), y ajustar el certificado riguroso
+        (paso 4b.5 del plan).
 \end{enumerate}

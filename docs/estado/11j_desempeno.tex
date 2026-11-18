@@ -1,0 +1,161 @@
+%======================================================================
+\section{Desempeño con 50 realizaciones y las métricas de la tesis}\label{sec:desempeno}
+%======================================================================
+\paragraph{Por qué hace falta.} Las secciones anteriores usan entre 1 y 20 realizaciones. Bastan
+para comparaciones pareadas con intervalos estrechos, pero un paper necesita cifras con
+intervalos de confianza honestos, medidas con las mismas métricas con que la tesis evaluó sus
+controladores.
+
+\paragraph{La campaña F6.} Se corrieron 5850 lazos cerrados en la máquina Olab: 24 procesos
+en paralelo, 175~min y ninguna corrida fallida (\code{julia/f6\_campaign.jl},
+\code{julia/F6Tasks.jl}). Las campañas \code{nom} y \code{ext} de esta sección usan 50
+realizaciones de la familia nominal (semillas impares 1--99, 121 consultas) y de la familia
+extrema (semillas 101--150, 481 consultas). Las campañas de riesgo se describen en la
+parte~VI. Todas las comparaciones usan números aleatorios comunes, y los intervalos son la
+media $\pm1.96$ errores estándar. Tablas completas en \code{results/f6\_paper/summary.md}
+(\code{python/f6\_summary.py}).
+
+\paragraph{Las métricas de la tesis} (Tabla~10 del paper de control; \code{thesis\_metrics} en
+\code{julia/ClosedLoop.jl}). Con $e=y_{\rm ref}-\mathrm{PCT}$:
+\begin{itemize}
+  \item \textbf{IAE}: integral de $|e|$ en el tiempo; resume el error de seguimiento.
+  \item \textbf{Tiempo de asentamiento}: instante desde el cual $|e|\le0.30$~K para siempre
+        ($\infty$ si nunca ocurre). Se reporta la mediana y la fracción de realizaciones que
+        se asientan.
+  \item \textbf{Sobrepaso mínimo}: $\min(\mathrm{PCT}-y_{\rm ref})$; negativo si la PCT baja
+        de la consigna (sobre-enfriamiento).
+  \item \textbf{Error estacionario}: media de $e$ en el último 20\,\% de la corrida.
+  \item \textbf{Variación total (VT)}: $\sum|\Delta\dot m|$ del caudal mandado; mide cuánto se
+        mueve el actuador.
+  \item \textbf{DSM mínimo}: margen mínimo a 1244~K, el límite de la tesis.
+\end{itemize}
+
+\begin{table}[H]\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}Y r r r r r r@{}}\toprule
+Controlador & IAE [K\,s] & Asienta (fracción) & Sobrepaso mín.\ [K] & Err.\ estac.\ [K] & VT [kg/s] & DSM mín.\ [K]\\\midrule
+\multicolumn{7}{@{}l}{\textit{Familia nominal, bomba archivada (12.9~kg/s)}}\\
+N1 = N2 = N3 (+sesgo) & $14.7\pm1.6$ & 13~s (100\,\%) & $-0.02$ & 0.01 & 30 & 62.9\\
+PID de la tesis & $92.9\pm0.4$ & nunca & $-2.73$ & 1.99 & 15\,340 & 62.9\\
+PI del DET & $221\pm13$ & nunca & $+1.84$ & $-5.18$ & 0 & 59.2\\
+\addlinespace
+\multicolumn{7}{@{}l}{\textit{Familia nominal, 40~kg/s, rampa 5~kg/s por paso}}\\
+N1 = N2 = N3 (+sesgo) & $7.6\pm0.5$ & 5.5~s (100\,\%) & $-0.11$ & 0.01 & 87 & 62.9\\
+PID de la tesis & $208\pm1$ & nunca & $-5.20$ & 3.11 & 15\,060 & 62.9\\
+PI del DET & $221\pm13$ & nunca & $+1.84$ & $-5.18$ & 0 & 59.2\\
+\addlinespace
+\multicolumn{7}{@{}l}{\textit{Familia extrema, actuador físico (ninguna corrida llega a 1220~K)}}\\
+N2 = N3 (+sesgo) & $919\pm280$ & 85~s (94\,\%) & $-6.1$ & 0.79 & 468 & 50.0\\
+N1 (+sesgo) & $637\pm110$ & 86~s (100\,\%) & $-2.1$ & $-0.05$ & 418 & 50.0\\
+N2 sin sesgo & $835\pm100$ & 100~s (14\,\%) & $+0.74$ & $-0.76$ & 324 & 49.1\\
+PID de la tesis & $3654\pm800$ & 238~s (2\,\%) & $-33.3$ & 12.6 & 9576 & 45.3\\
+PI del DET & $5755\pm49$ & nunca & $-40.7$ & 24.5 & 972 & 35.2\\\bottomrule
+\end{tabularx}
+\caption{Métricas de la tesis en 50 realizaciones por familia (media $\pm$ IC al 95\,\%). Con
+la bomba archivada en la familia extrema, N2 llega a 1220~K en 22 de 50 realizaciones porque la
+capacidad no alcanza (sección~\ref{sec:extremos}). La VT del PID es grande porque su caudal
+oscila entre el mínimo y el máximo de la bomba.}
+\label{tab:desempeno}
+\end{table}
+
+\paragraph{Cómo leer la tabla.}
+\begin{enumerate}
+  \item \textbf{En el escenario de la tesis (familia nominal), N2 gana en todas las métricas.}
+        Se asienta en todas las realizaciones, en 5.5--13~s, con error estacionario de 0.01~K.
+        El PID de la tesis nunca se asienta en la banda de 0.30~K: sobre-enfría (sobrepaso
+        de $-2.7$ a $-5.2$~K) y su caudal oscila (VT de unos 15\,000~kg/s). El PI del DET
+        trabaja con su propia consigna de 1144~K y deja la PCT 5~K sobre $y_{\rm ref}$.
+  \item \textbf{En la familia extrema, N1, N2 y N3 dan la misma PCT pico en las 50
+        realizaciones}, y la diferencia mediana de IAE entre N1 y N2 es de $-0.1$~K\,s. La
+        media difiere ($-282\pm170$~K\,s a favor de N1) por unas pocas realizaciones en las que,
+        después de una falla larga con $\eta$ y sesgo de pronóstico desconocidos, las
+        trayectorias se separan. Optimizar mejor el costo P0 no garantiza un IAE menor cuando
+        la planta tiene perturbaciones que el modelo no conoce. La corrección de sesgo hace que
+        N2 se asiente (94\,\% frente a 14\,\% sin ella).
+  \item \textbf{El PID y el PI son los que más arriesgan.} Su DSM mínimo es de 45 y 35~K,
+        frente a 50~K de N2, y su IAE es de 4 a 6 veces el de N2.
+\end{enumerate}
+
+\takeaway{\textbf{Respuesta a Q6 y Q8.} Con 50 realizaciones por familia, las conclusiones
+se sostienen. N1, N2 y N3 dan la misma PCT pico, y N2 supera al PID y al PI de la tesis en
+todas sus métricas: se asienta siempre en el escenario de la tesis, con un IAE de 6 a 28 veces
+menor que el del PID. El margen DSM de la tesis no cambia la trayectoria de N2
+(sección~\ref{sec:dsm-lambda}).}
+
+%======================================================================
+\section{¿Los solvers resuelven a optimalidad en lazo cerrado?}\label{sec:auditoria}
+%======================================================================
+La certificación de la sección~\ref{sec:certificacion} vale para dos consultas. En lazo
+cerrado hay miles, y en cada una el solver puede terminar antes de tiempo o en un óptimo local
+distinto. La auditoría responde a esa pregunta en dos niveles: primero, qué dicen los estados
+de terminación de los solvers; después, cuán lejos queda cada decisión del mejor plan que se
+puede encontrar.
+
+\subsection{Estados de terminación}
+El conteo de fallas del Monte Carlo trata como éxito la salida \emph{aceptable} de Ipopt
+(\code{ALMOST\_LOCALLY\_SOLVED}). Para saber si eso esconde algo, a lo largo de un lazo
+N3+sesgo (726 consultas: la realización archivada y dos del Monte Carlo, con los dos
+actuadores) cada consulta se resolvió de cinco maneras, y todas las soluciones se evaluaron
+con el mismo costo P0 sobre el ROM (\code{julia/f5a\_optimality\_audit.jl}).
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l Y r r@{}}\toprule
+Solver & Estado de terminación (726 consultas) & Brecha [K$^2$] (mediana / máx.) & $|\Delta\mdot_0|$ máx.\ [kg/s]\\\midrule
+N1 (QP) & óptimo: 726 & $10^{-6}$ / 0.0097 & 0.11\\
+N2 (QP) & óptimo: 726 & $5\cdot10^{-12}$ / 0.0022 & 0.01\\
+N3 en el lazo & óptimo local: 160; aceptable: 566 & $2\cdot10^{-14}$ / $3\cdot10^{-8}$ & ---\\
+N3 sin salida aceptable & igual, más 7 por límite de iteraciones & idéntica & $2\cdot10^{-7}$\\
+N3 con arranque en frío & igual & 0 / $4\cdot10^{-8}$ & 0.0015\\\bottomrule
+\end{tabularx}
+\caption{Estados de terminación. La brecha de costo se mide contra el mejor N3 de cada
+consulta. Estados: óptimo = \code{OPTIMAL} (Clarabel); óptimo local = \code{LOCALLY\_SOLVED}
+y aceptable = \code{ALMOST\_LOCALLY\_SOLVED} (Ipopt).}
+\end{table}
+
+\noindent N1 y N2 resuelven su QP convexo al óptimo global. Ese óptimo es el del modelo
+linealizado; medido sobre P0, la pérdida es $\le0.01$~K$^2$ y sólo aparece en las primeras
+consultas, donde el costo vale 15--46~K$^2$. N3 termina en la salida aceptable en el 78\,\% de
+las consultas porque, en régimen, el costo óptimo es $\approx3\cdot10^{-12}$~K$^2$: el
+seguimiento es perfecto y la tolerancia de $10^{-10}$ queda bajo el ruido numérico. Sin la
+salida aceptable, o desde un arranque en frío, llega al mismo punto.
+
+\subsection{Distancia al mejor plan, en 3800 consultas por lazo}
+En la campaña F6, a lo largo de los lazos de N1, N2 y N3 de las tres familias, se auditó una
+consulta de cada 20 (de cada 10 en la nominal): 3800 consultas por cada lazo, unas 11\,400 en
+total. En cada una se
+resolvieron N1, N2, N3 con arranque en caliente y pulido, y N3 desde un arranque en frío. Todos
+los planes se evaluaron con el mismo costo P0 sobre el ROM \code{ode1be}, y $J_{\rm best}$ es el
+mejor de ellos.
+
+\paragraph{Cómo medir la distancia: una lección de normalización.} La medida natural sería la
+brecha relativa $J/J_{\rm best}-1$, pero en el 53--85\,\% de las consultas la consigna se sigue
+exactamente y $J_{\rm best}\approx10^{-12}$~K$^2$. Dividir por un número así infla cualquier
+diferencia: la primera versión de la tabla mostraba brechas de $10^5$\,\% entre planes que
+daban la misma trayectoria. Por eso el exceso se mide como un error de seguimiento equivalente,
+en kelvin: $\Delta_{\rm RMS}=\sqrt{J/K}-\sqrt{J_{\rm best}/K}$ con $K=26$. La brecha relativa se
+reporta sólo donde $J_{\rm best}\ge1$~K$^2$.
+
+\begin{table}[H]\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabularx}{\linewidth}{@{}l r r Y@{}}\toprule
+Lazo (familia, actuador) & Consultas & $\Delta_{\rm RMS}$ máx.\ [K] & Brecha relativa donde $J_{\rm best}\ge1$ (mediana / máx.)\\\midrule
+N3, todas las familias & 3800 & $2.5\cdot10^{-8}$ & $\le3\cdot10^{-9}$\\
+N2, con fallas del DET (40~kg/s) & 1250 & $6.3\cdot10^{-5}$ & $2\cdot10^{-9}$ / $8\cdot10^{-5}$\\
+N2, nominal (archivada / 40~kg/s) & 650 / 650 & $3.8\cdot10^{-6}$ / $1.0\cdot10^{-4}$ & $\le4\cdot10^{-4}$\\
+N2, extrema (físico) & 1250 & $5.9\cdot10^{-4}$ & $5\cdot10^{-6}$ / $3\cdot10^{-4}$\\
+N1, con fallas y nominal & 2550 & $\le6.8\cdot10^{-4}$ & $\le8\cdot10^{-4}$\\
+N1, extrema (físico) & 1250 & 0.33 & $4\cdot10^{-3}$ / 0.063\\\bottomrule
+\end{tabularx}
+\caption{Distancia al mejor plan encontrado (\code{results/f6\_paper/*\_audit.csv}). N3 con
+arranque en frío no encontró un plan mejor en ninguna consulta.}
+\end{table}
+
+\noindent N1 linealiza una sola vez, en el punto de la consulta. Cuando el plan óptimo hace
+movimientos grandes, como en la familia extrema con el actuador físico, el modelo lineal se
+aleja del no lineal y la decisión pierde hasta 0.33~K de error equivalente. N2 relinealiza a lo
+largo de la trayectoria y no tiene ese problema.
+
+\takeaway{\textbf{Respuesta a Q7.} Sí. N1 y N2 resuelven su QP convexo al óptimo global, y en
+3800 consultas de lazo cerrado N3 queda a $\le2.5\cdot10^{-8}$~K y N2 a $\le6\cdot10^{-4}$~K de
+error equivalente del mejor plan encontrado; un arranque en frío nunca encontró algo mejor. N1
+se aleja (hasta 0.33~K) sólo con movimientos grandes del actuador. Es evidencia de optimalidad
+local con varios arranques, no un certificado global: el certificado sigue limitado a las dos
+consultas de la sección~\ref{sec:certificacion}.}

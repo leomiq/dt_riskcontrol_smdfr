@@ -2131,12 +2131,12 @@ Familia nominal (escenario de la tesis): N1/N2/N3 tienen IAE 14.7 K·s con la bo
 se asienta; el PI, 221 K·s. Familia extrema (actuador físico): N2+sesgo tiene IAE 919 K·s y 0
 cruces (con la bomba archivada, 22/50 cruces por saturación); el PID, 3654 K·s y el PI, 5755 K·s.
 
-**Auditoría de optimalidad por consulta** (3150 consultas en las tres familias). Como en el
+**Auditoría de optimalidad por consulta** (3800 consultas por lazo en las tres familias, unas 11 400 en total). Como en el
 53–85 % de las consultas la consigna se sigue exactamente ($J_{\rm best}\approx10^{-12}$), la
 brecha relativa no sirve. Se usa el exceso en error RMS sobre el horizonte. N3: ≤ 2.5·10⁻⁸ K.
 N2: ≤ 6·10⁻⁴ K (brecha relativa ≤ 0.03 % donde $J_{\rm best}\ge1$). N1: ≤ 7·10⁻⁴ K, salvo
 en la familia extrema con actuador físico (hasta 0.33 K, 6 %), porque N1 linealiza una sola vez
-y las jugadas son grandes. N3 con arranque en frío nunca encontró nada mejor (0 de 3150).
+y las jugadas son grandes. N3 con arranque en frío nunca encontró nada mejor en ninguna consulta.
 Esto apoya en lazo cerrado lo que el certificado de F3c mostró en dos consultas.
 
 **Para el paper:** la conclusión central (una sola frontera, garantía calibrada, N2 ≈ óptimo
