@@ -275,6 +275,15 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     the thesis PID in 1/50 (IAE 1185); the DET PI in 7/50 (IAE 3293).
   - Per-query optimality audit over 3800 closed-loop queries per loop (~11 400 in all): N3 is within 2.5e-8 K RMS of
     the best plan found, N2 within 6e-4 K; a cold start never found anything better.
+- **Synthesis figures (18 Nov; `python/make_synthesis_figures.py`, `docs/figures/syn_*`).**
+  Seven figures built only from the committed results, placed in the status report: a
+  graphical abstract after the abstract, time vs cost in open loop, representative closed-loop
+  trajectories in three families, 50 failure-aligned closed loops (fan charts), a thesis-metric
+  scorecard, the margin mechanism (ΔT, S(D), time to 1220 K τ) and the 11 400-query audit.
+  Two findings while building them: (i) assumption A1 holds only approximately — pre-cooled
+  states heat up 0.6–1.2 K less over 40 s of failure (≈10 %), on the safe side, which is why
+  the plant keeps τ ≈ 207 s against the 182 s asked by the α = 0.02 bound; (ii) solve time p99
+  ≤ 0.28 s, but 2 of 11 400 queries exceeded the 0.5 s period (0.52 and 0.67 s).
 - **Decisions (18 Nov, plan §10.3).** Scope: one paper. Failure duration, proposed from
   the literature: repairs take days and operator recoveries tens of minutes, so no
   controller can mitigate them and they belong to the PSA. The MPC protects against

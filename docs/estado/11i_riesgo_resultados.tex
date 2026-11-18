@@ -290,6 +290,20 @@ mín.: margen mínimo a 1244~K.}
 \label{tab:det-tesis}
 \end{table}
 
+\noindent La tabla da promedios. La figura~\ref{fig:syn-fan} muestra las 50 trayectorias de cada
+controlador alineadas en el inicio de la falla, que es donde se decide si se cruza o no 1220~K.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_cl_fan.pdf}
+\caption{Cincuenta lazos cerrados con fallas del DET (40~kg/s), alineados en el inicio de la
+primera falla ($s=0$). Arriba, PCT; abajo, caudal que entrega el ACS (cero durante la falla).
+Bandas: 50 y 90\,\% central por instante; línea gruesa: mediana. Las líneas finas son las corridas
+que llegan a 1220~K, donde se detienen. En la mayoría de las realizaciones el PI del DET no
+inyecta antes de la falla (zona muerta) y la PCT la recibe alta; la cota de riesgo trabaja
+6--7~K bajo la consigna y ese margen absorbe las fallas largas.}
+\label{fig:syn-fan}
+\end{figure}
+
 \paragraph{Cómo leer la tabla.}
 \begin{enumerate}
   \item \textbf{Ninguna variante de N2 llega a 1220~K}; el PID de la tesis llega en una

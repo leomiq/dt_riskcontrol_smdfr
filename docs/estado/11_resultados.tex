@@ -346,6 +346,25 @@ el mejor encontrado y la barra llega hasta el límite que fija la cota certifica
 1180~s se omite el lazo archivado (1572--1612\,\%).}
 \end{figure}
 
+\noindent La figura~\ref{fig:syn-openloop} junta las dos dimensiones de la comparación: cuánto
+cuesta cada decisión y cuánto tarda en obtenerse. Los métodos monolíticos ocupan la esquina buena
+(abajo a la izquierda); las metaheurísticas, la opuesta. La evolución diferencial muestra que un
+método sin derivadas puede llegar al mismo óptimo, pero con 90\,000 evaluaciones y unas 2000 veces
+el tiempo de N2.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_openloop.pdf}
+\caption{Calidad y tiempo en lazo abierto ($t_q=1180$~s). (a) Costo de la decisión sobre el
+mejor plan encontrado frente al tiempo de cálculo, en escalas logarítmicas; N2 es el mejor plan
+(exceso 0, dibujado en $10^{-9}$). La banda gris es la incertidumbre certificada: el óptimo global
+está a lo sumo un 2.39\,\% bajo el mejor plan (cota inferior de la sección~\ref{sec:certificacion}).
+La banda azul marca lo que cabe en el período de muestreo. Barras verticales: rango entre semillas.
+(b) Tiempo por decisión ordenado; N2 suma sus cuatro iteraciones SQP. Fuentes:
+\code{results/e2\_optimizers\_1180}, \code{f3\_certificates}, \code{f3c\_optimality};
+\code{python/make\_synthesis\_figures.py}.}
+\label{fig:syn-openloop}
+\end{figure}
+
 \takeaway{\textbf{Respuesta a Q3.} N3 y N2 son los mejores y empatan: dan la misma decisión.
 N1 cuesta un 0.0026\,\% más en 1180~s y lo mismo en 1161~s; es el más rápido y el único QP
 convexo certificable, así que es el candidato natural para tiempo real. Los cuatro

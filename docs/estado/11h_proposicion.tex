@@ -36,6 +36,35 @@ empieza la falla, resumido en $y_k(u)$. La réplica del HRM la respalda: el pico
 de la falla, y la tasa de calentamiento del ROM ($\approx0.3$~K/s) coincide con la del HRM
 (sección~\ref{sec:riesgo-donde}).
 
+\paragraph{Cuánto se cumple (A1) en la planta.} La figura~\ref{fig:syn-mechanism}(a) superpone
+las 287 fallas observadas en la campaña F6 \code{det}, con siete controladores. Para una misma
+semilla, 40~s después del inicio de la falla la PCT subió 8.2~K (mediana). N1, N2 y N3 dan
+exactamente el mismo calentamiento. Los controladores que pre-enfrían se calientan algo
+\emph{menos}: 0.6~K menos con la cota $\alpha=0.02$ y 1.2~K menos con Wilks (medianas a 40~s), y
+2.4--3.0~K menos a 80~s (cuatro semillas con fallas tan largas). Es decir, $u$ influye en el
+calentamiento por algo más que $y_k(u)$, del orden de un 10\,\%. El error tiene el signo seguro:
+suponer el mismo $\Delta T$ que sin pre-enfriamiento sobrestima el pico. La figura~\ref{fig:syn-mechanism}(c)
+lo confirma en la planta: con la cota $\alpha=0.02$ el tiempo hasta 1220~K que se mantiene es
+de 207~s, sobre el $q_{0.98}(D)=182$~s que pide la cota, y con $\alpha=0.01$ es de 246~s frente a
+219~s. Para el manuscrito, (A1) debe presentarse como una aproximación conservadora, con esta
+cuantificación.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_mechanism.pdf}
+\caption{De la duración de la falla al margen. (a) Calentamiento $\Delta T$ durante cada falla
+observada en lazo cerrado (287 fallas, siete controladores, coloreadas por controlador como en
+la figura~\ref{fig:syn-cl-compare}). Las curvas se agrupan por estado inicial (semilla), no por
+controlador. (b) Supervivencia $S(d)=P(D>d)$ de la duración de la falla (mezcla de exponenciales
+del DET, $\mu\times10^4$) y sus cuantiles $q_{1-\alpha}$. (c) Tiempo $\tau$ que tardaría la PCT
+de la planta en llegar a 1220~K si el ACS fallara en ese instante, por controlador (desde
+$t=60$~s, 50 realizaciones; línea fina: 90\,\% central; barra: 50\,\% central; marca: mediana).
+El riesgo es $S(\tau)$ promediado sobre el instante de la falla (estimador de Rao--Blackwell,
+sección~\ref{sec:riesgo-rb}): pedir $P\le\alpha$ es pedir $\tau\ge q_{1-\alpha}$, y como $\tau$
+crece al bajar la PCT, eso es un margen sobre la PCT. A la derecha: $P(\text{cruce}\mid
+\text{falla})$ y pre-enfriamiento medio de cada controlador (campaña \code{sens}, 40~kg/s).}
+\label{fig:syn-mechanism}
+\end{figure}
+
 Se escribe $Z=\Delta T(D)$ para el calentamiento aleatorio. Una \emph{medida de riesgo invariante
 a traslaciones} es un funcional $\rho$ de variables aleatorias con $\rho(Z+c)=\rho(Z)+c$ para toda
 constante $c$. Ejemplos: el VaR$_p$ (cuantil), el CVaR$_\beta$, la entrópica y los expectiles.

@@ -57,6 +57,32 @@ oscila entre el mínimo y el máximo de la bomba.}
 \label{tab:desempeno}
 \end{table}
 
+\noindent Detrás de cada fila hay trayectorias. La figura~\ref{fig:syn-cl-compare} muestra una
+realización representativa de cada familia y la figura~\ref{fig:syn-scorecard}, la distribución
+completa de tres métricas para los cinco controladores.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_cl_compare.pdf}
+\caption{Trayectorias de lazo cerrado en una realización de cada familia: PCT (arriba) y caudal
+que entrega el ACS (abajo). \emph{Nominal}: N2 lleva la PCT a la consigna en 17~s y la mantiene;
+el PID sobre-enfría y el PI no inyecta (zona muerta). \emph{Fallas del DET}: una falla de 118~s
+(banda gris) lleva al PI a 1220~K; N2 llega a 1218.5~K y N2 con cota de riesgo, que entra a la
+falla 4.4~K más frío, a 1212~K. En esta realización el PID también entra frío (sobre-enfría) y
+su curva queda casi bajo la de la cota (pico de 1213~K). \emph{Extrema}: realización con el pico más alto de N2; el PID conmuta
+hasta 4600~kg/s y sobre-enfría 70~K. El eje del caudal en la familia extrema es lineal hasta
+50~kg/s y logarítmico encima.}
+\label{fig:syn-cl-compare}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_scorecard.pdf}
+\caption{Métricas por controlador y familia, 50 realizaciones cada una. IAE y variación total
+del caudal \emph{entregado} (no el mandado de la tabla~\ref{tab:desempeno}, que incluye lo que la
+bomba no puede dar): media $\pm$ IC al 95\,\%, escala logarítmica. PCT pico: cada punto es una
+realización y la marca negra la media; línea de trazos, 1220~K; punteada, $y_{\rm ref}$.}
+\label{fig:syn-scorecard}
+\end{figure}
+
 \paragraph{Cómo leer la tabla.}
 \begin{enumerate}
   \item \textbf{En el escenario de la tesis (familia nominal), N2 gana en todas las métricas.}
@@ -147,6 +173,19 @@ N1, extrema (físico) & 1250 & 0.33 & $4\cdot10^{-3}$ / 0.063\\\bottomrule
 \caption{Distancia al mejor plan encontrado (\code{results/f6\_paper/*\_audit.csv}). N3 con
 arranque en frío no encontró un plan mejor en ninguna consulta.}
 \end{table}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_audit.pdf}
+\caption{Las 11\,400 consultas auditadas, como distribuciones acumuladas. (a) Exceso de error RMS
+sobre el mejor plan: cada curva sube cuando la fracción de consultas con exceso menor o igual al
+valor del eje crece. N3 queda en $\le2.5\cdot10^{-8}$~K, N2 en $\le6\cdot10^{-4}$~K y N1 llega a
+0.33~K sólo en la familia extrema. (b) Tiempo de resolución por consulta, medido en Olab con 24
+procesos en paralelo; la curva de trazos son las consultas de los lazos con cota de riesgo
+($\alpha=0.02$ y Wilks, campaña \code{det}). El p99 es $\le0.28$~s en todos. Sólo 2 de las
+11\,400 consultas superan el período de 0.5~s (0.52~s con N3 y 0.67~s con N2, ambas en la familia
+nominal).}
+\label{fig:syn-audit}
+\end{figure}
 
 \noindent N1 linealiza una sola vez, en el punto de la consulta. Cuando el plan óptimo hace
 movimientos grandes, como en la familia extrema con el actuador físico, el modelo lineal se

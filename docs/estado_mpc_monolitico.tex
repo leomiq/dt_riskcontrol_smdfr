@@ -6,6 +6,7 @@
 %   .venv\Scripts\python python/make_status_figures.py      (resultados)
 %   .venv\Scripts\python python/make_didactic_figures.py    (capítulos introductorios)
 %   .venv\Scripts\python python/make_closed_loop_figures.py (lazo cerrado, fig_cl_*)
+%   .venv\Scripts\python python/make_synthesis_figures.py   (figuras de síntesis, syn_*)
 % Notas de compilación: con Tectonic no usar UprightFont= junto con Path=; en pies de figura
 % y títulos usar \rm max / \rm min (babel-spanish choca con \max y \min en argumentos móviles).
 \documentclass[11pt,a4paper]{article}
@@ -87,6 +88,20 @@ pasa a ser un conjunto de restricciones derivables. Los resultados principales s
         instantáneas.
 \end{itemize}
 \end{abstract}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/syn_overview.pdf}
+\caption{Resumen gráfico. \textbf{1}: tiempo por decisión en lazo abierto ($t_q=1180$~s); la
+línea marca el período de muestreo de 0.5~s. N1, N2 y N3 caben en él y Luus--Jaakola (LJ) y el
+algoritmo genético (GA) no; además, LJ y GA cuestan al menos un 28 y un 43\,\% más, con garantía
+(figura~\ref{fig:syn-openloop}). \textbf{2}: PCT pico de cada una de las 50 realizaciones con
+fallas del ACS generadas como en el DET (40~kg/s); N2, con o sin cota de riesgo, nunca llega a
+1220~K (figuras~\ref{fig:syn-cl-compare}--\ref{fig:syn-fan}). \textbf{3}: probabilidad de
+llegar a 1220~K dada una falla frente al pre-enfriamiento, para las cuatro formulaciones de
+riesgo; todas caen sobre la misma curva (figura~\ref{fig:syn-mechanism} y
+sección~\ref{sec:riesgo-formulaciones}).}
+\label{fig:resumen}
+\end{figure}
 
 \tableofcontents
 \clearpage
