@@ -134,12 +134,22 @@ $\beta$, $\rho$ & Nivel del CVaR; peso de la pérdida esperada\\\bottomrule
         \code{julia/f6\_campaign.jl <campañas> <procesos>} con las tareas de
         \code{julia/F6Tasks.jl}; resumen \code{python/f6\_summary.py} $\Rightarrow$
         \code{results/f6\_paper/summary.md}.
+  \item \textbf{Certificado global en lazo cerrado (F7)}: \code{julia/F7Cert.jl} (problema,
+        proyección de factibilidad, Ipopt/Knitro, encierro por intervalos y \emph{branch and
+        bound}) y \code{julia/f7\_certify.jl <nom|det|ext> <semillas>} (re-corre el lazo N3 de
+        F6 y certifica las consultas difíciles; un proceso por semilla en Olab);
+        \code{julia/f7\_knitro.jl} (Knitro sobre las consultas serializadas, requiere
+        licencia); resumen y figuras \code{python/make\_f7\_figures.py} $\Rightarrow$
+        \code{results/f7\_cert/summary.md}.
+  \item \textbf{Trayectorias por formulación}: \code{python/make\_trajectory\_figures.py}
+        $\Rightarrow$ \code{results/f6\_paper/trajectory\_distances.csv} y las figuras
+        \code{traj\_*}.
   \item \textbf{Análisis didácticos} (valores propios, respuesta en frecuencia, curva de la
         bomba, autoridad): \code{julia/didactic\_analysis.jl} $\Rightarrow$
         \code{results/didactic/}.
   \item \textbf{Resultados}: \code{results/f1\_rom\_replica/}, \code{f1b\_hrm\_replica/},
         \code{f3\_certificates/}, \code{f3c\_optimality/}, \code{f4\_risk/},
-        \code{f5a\_closed\_loop/}, \code{f5a2\_monte\_carlo/}, \code{f5b*/}, \code{f6\_paper/},
+        \code{f5a\_closed\_loop/}, \code{f5a2\_monte\_carlo/}, \code{f5b*/}, \code{f6\_paper/}, \code{f7\_cert/},
         \code{didactic/}.
   \item \textbf{Figuras}: \code{python/make\_status\_figures.py} (lazo abierto),
         \code{make\_didactic\_figures.py} (capítulos introductorios),

@@ -289,12 +289,31 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   controller can mitigate them and they belong to the PSA. The MPC protects against
   interruptions recovered automatically by redundancy. Base case μ×1e4 (mean ≈ 46 s), read
   as the automatic recovery time, with μ×3e3 and μ×3e4 as the sensitivity band.
+- **Closed-loop trajectories compared across formulations (20 Nov, plan §10.4, status report
+  §35; `python/make_trajectory_figures.py`, `docs/figures/traj_*`,
+  `results/f6_paper/trajectory_distances.csv`).** Pairwise max |ΔPCT| over the same 50
+  realisations: N2 and N3 coincide (< 1e-4 K; 0.39 K at most in the extreme family). N1
+  leaves N3 only in the extreme family (median 1.4 K) after a failure with unknown reduced
+  capacity and a stale bias, yet its median IAE is the same. What moves a trajectory is the
+  controller (5–40 K), the risk margin (9–18 K, all before the failure; every formulation heats
+  up by the same ΔT(D) during it), the bias correction (6 K), not how exactly P0 is solved.
+- **Global-optimality certificate in closed loop, F7 (20 Nov, plan §10.4, status report §26;
+  `julia/F7Cert.jl`, `julia/f7_certify.jl`, `python/make_f7_figures.py`, `results/f7_cert/`).**
+  77 hard closed-loop queries (J > 0.01; 10 seeds per family, re-run through a capture hook in
+  `F6Tasks.jl`) certified with a spatial branch and bound: interval enclosure of the residual of
+  an affine model on each sub-box plus a convex QP relaxation (Clarabel), with the hard ramp
+  propagated into the box. UB = the loop's N3 decision (exactly feasible after projection);
+  a 24-start Ipopt multistart always converges to the same plan. Result: N3 within 0.5 % of the
+  global optimum in all 77 queries (≤ 0.01 % in 42), N2 with the same guarantee, N1 within
+  1.3 %. `julia/f7_knitro.jl` re-solves the serialised queries with Knitro (installed via
+  KNITRO_jll; licence pending).
 - **Next steps (plan §10).**
   1. Ask the team about the ACS redundancy and its flow-restoration time (fixes the base
      case), α, the 4-train model and the 1220 K limit.
-  2. Write the manuscript.
+  2. Write the manuscript (all results in place).
 
-  Tightening the certified gap (plan §8.5, step 4b.5) is postponed.
+  Optional, if a reviewer asks: Knitro (licence) or an independent global solver on the 77
+  certified queries.
 
 - [Monolithic formulation plan](docs/monolithic_formulation_plan.md) and
   [its presentation](presentations/monolithic_formulation.pdf) (Spanish)
@@ -305,9 +324,9 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
 
 `matlab/certified_cost_lower_bound_box.m` and `matlab/m1_branch_and_bound.m`
 implement a *conditional* lower bound on the P0 cost and a box branch-and-bound.
-They close the gap on a two-mode test problem. For the real ROM/DET the only
-lower bound available is `J ≥ 0`, because rigorous thermal enclosures are not
-built yet.
+They close the gap on a two-mode test problem. For the real ROM, rigorous
+enclosures were later built in Julia: `julia/f3c_rigorous.jl` (open loop, two
+queries) and `julia/F7Cert.jl` (spatial branch and bound, 77 closed-loop queries).
 
 ## Layout
 

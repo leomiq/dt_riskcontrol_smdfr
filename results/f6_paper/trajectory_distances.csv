@@ -1,0 +1,17 @@
+family,act,a,b,n,max_dpct_med,max_dpct_p90,max_dpct_max,rms_dpct_med,max_dm_med,max_dm_max,frac_above_0p01K,t_first_0p01K_med
+"nominal, bomba archivada",arch,N1b,N3b,50,0.0001,0.0001,0.0001,1.575e-05,0.001466,0.004568,0,nan
+"nominal, bomba archivada",arch,N2b,N3b,50,0.0001,0.0001,0.0001,9.091e-06,0.0006965,0.001976,0,nan
+"nominal, 40 kg/s",cap40,N1b,N3b,50,0.0044,0.00602,0.0066,0.0009427,0.5579,1.085,0,nan
+"nominal, 40 kg/s",cap40,N2b,N3b,50,0.0001,0.0001,0.0001,1.286e-05,0.001776,0.004414,0,nan
+"fallas del DET, 40 kg/s",cap40,N1b,N3b,50,0.0012,0.00212,0.0025,0.0001152,0.09887,0.2102,0,nan
+"fallas del DET, 40 kg/s",cap40,N2b,N3b,50,0.0001,0.0001,0.0001,1.068e-05,0.0008095,0.004021,0,nan
+"extrema, actuador físico",phys,N1b,N3b,50,1.424,14.45,24.18,0.2808,17.68,70.92,1,63.25
+"extrema, actuador físico",phys,N2b,N3b,50,0.0068,0.1412,0.3921,0.001376,0.2186,90.76,0.4,84.25
+"fallas del DET, 40 kg/s",cap40,N2_DSM_U1244_l1e4,N2b,50,0.0201,0.02987,0.0453,0.001902,1.619,3.211,0.8,11.5
+"extrema, actuador físico",phys,N2,N2b,50,6.213,21.68,36.74,1.927,71.54,205.7,1,6.5
+"fallas del DET, 40 kg/s",cap40,N2_exp_r100,N2b,50,2.49,3.054,5.369,2.004,31.82,34.15,1,10
+"fallas del DET, 40 kg/s",cap40,N2_var_a0.02,N2b,50,8.73,16.68,25.6,7.44,33.03,36.38,0.98,10
+"fallas del DET, 40 kg/s",cap40,N2_cvar_b0.95,N2b,50,9.874,18.13,27.5,8.451,33.17,36.38,1,10
+"fallas del DET, 40 kg/s",cap40,N2_wilks59,N2b,50,18.38,24.84,30.61,13.34,32.85,40,1,10.25
+"nominal, 40 kg/s",cap40,PID,N2b,50,5.232,5.431,5.584,3.654,40,40,1,0
+"extrema, actuador físico",phys,PI,N2b,50,40.33,41.42,51.68,25.19,460.4,520.2,1,0

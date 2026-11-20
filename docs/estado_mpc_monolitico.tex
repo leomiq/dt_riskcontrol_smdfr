@@ -51,7 +51,7 @@
 \large\mdseries Del reactor y su accidente a la formulación, resolución y certificación\\
 del problema de control}
 \author{Proyecto DT--SMDFR Risk Control}
-\date{Versión consolidada, 18 de noviembre de 2026}
+\date{Versión consolidada, 20 de noviembre de 2026}
 
 \begin{document}
 \maketitle
@@ -70,13 +70,19 @@ pasa a ser un conjunto de restricciones derivables. Los resultados principales s
         $\sim10$~ms como QP linealizado, frente a $\sim800$~s del método actual. Una cota
         inferior \emph{certificada} demuestra que la solución está a menos del 2.3\,\% y del
         11.4\,\% del óptimo global en las dos consultas de prueba. Luus--Jaakola y el algoritmo
-        genético cuestan, con garantía, al menos un 28\,\% y un 43\,\% más.
+        genético cuestan, con garantía, al menos un 28\,\% y un 43\,\% más. En lazo cerrado, un
+        \emph{branch and bound} espacial con encierros por intervalos certifica que la decisión
+        de N3 está a menos del 0.5\,\% del óptimo global en 77 consultas difíciles (a menos del
+        0.01\,\% en 42); N2 tiene la misma garantía y N1 queda a menos del 1.3\,\%.
   \item \textbf{Controlar bien.} El modelo de alta resolución (HRM, 12 nodos) se programó en
         Julia, con un error de $10^{-6}$~K frente a Simulink, y hace de planta. En 50
         realizaciones por familia, N1, N2 y N3 dan la misma PCT pico y el mismo IAE mediano. En 3800 consultas
         auditadas por lazo, N3 queda a $\le2.5\cdot10^{-8}$~K y N2 a $\le6\cdot10^{-4}$~K del mejor plan
         encontrado. N2 supera al PID y al PI de la tesis en todas sus métricas, y el margen DSM
-        de la tesis no cambia su trayectoria.
+        de la tesis no cambia su trayectoria. Comparadas trayectoria a trayectoria, N2 y N3
+        coinciden (menos de 0.4~K) y N1 sólo se separa en la familia extrema; lo que mueve una
+        trayectoria es el controlador, el margen de riesgo y la corrección de sesgo, no la
+        fidelidad con que se resuelve el P0.
   \item \textbf{Gestionar el riesgo bien.} El riesgo está en las fallas del ACS, y el pico de
         PCT llega al final de la falla. Con fallas generadas como en el árbol de eventos, una
         cota de riesgo en N2 cumple $P(\text{cruce de 1220~K}\mid\text{falla})\le\alpha$. Como el
@@ -131,11 +137,13 @@ sección~\ref{sec:riesgo-formulaciones}).}
 \input{estado/11c_extremos}
 \input{estado/11f_dsm_lambda}
 \input{estado/11j_desempeno}
+\input{estado/11l_certificacion}
 
 \part{La capa de riesgo}
 \input{estado/11e_riesgo}
 \input{estado/11h_proposicion}
 \input{estado/11i_riesgo_resultados}
+\input{estado/11k_trayectorias}
 
 \part{Conclusiones}
 \input{estado/12_conclusiones}

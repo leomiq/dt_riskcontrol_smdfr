@@ -5,7 +5,9 @@
 \subsection{Respuestas a las preguntas}
 El resumen gráfico (figura~\ref{fig:resumen}) condensa las tres respuestas principales; las
 figuras~\ref{fig:syn-openloop}, \ref{fig:syn-cl-compare}--\ref{fig:syn-scorecard},
-\ref{fig:syn-audit}, \ref{fig:syn-mechanism} y~\ref{fig:syn-fan} son su versión detallada.
+\ref{fig:syn-audit}, \ref{fig:syn-mechanism} y~\ref{fig:syn-fan} son su versión detallada;
+las figuras~\ref{fig:f7-cert} y~\ref{fig:traj-hierarchy} resumen el certificado global y la
+comparación de trayectorias.
 \begin{enumerate}[label=\textbf{Q\arabic*.}]
   \item \textbf{¿Se puede resolver P0 con exactitud y en tiempo real?} Sí. La formulación
         monolítica resuelve P0 en $\sim0.05$~s (NLP) o $\sim10$~ms (QP condensado), unas
@@ -30,6 +32,12 @@ figuras~\ref{fig:syn-openloop}, \ref{fig:syn-cl-compare}--\ref{fig:syn-scorecard
         lazo, N3 queda a $\le2.5\cdot10^{-8}$~K de error equivalente del mejor plan encontrado
         y N2 a $\le6\cdot10^{-4}$~K; un arranque en frío nunca encontró algo mejor. N1 se aleja
         hasta 0.33~K sólo con movimientos grandes del actuador (sección~\ref{sec:auditoria}).
+        \emph{Y llegan al óptimo global}: en 77 consultas difíciles de las tres familias, un
+        \emph{branch and bound} espacial con encierros rigurosos por intervalos certifica que la
+        decisión de N3 está a menos del 0.5\,\% del óptimo global (a menos del 0.01\,\% en 42);
+        N2 tiene la misma garantía y N1 queda a menos del 1.3\,\%. Los 24 arranques de Ipopt
+        convergen siempre al mismo plan. Las consultas con $J\approx0$ quedan certificadas por
+        la cota trivial $J\ge0$ (sección~\ref{sec:f7}).
   \item \textbf{¿Cómo se compara el MPC con los controladores de la tesis?} N2 gana en todas
         las métricas de la tesis. En la familia nominal se asienta siempre, en 5.5--13~s, con
         un IAE de 6 a 28 veces menor que el del PID, que sobre-enfría y nunca se asienta. El
@@ -62,6 +70,17 @@ figuras~\ref{fig:syn-openloop}, \ref{fig:syn-cl-compare}--\ref{fig:syn-scorecard
         $\approx150$~s ningún controlador la cumple; con $\approx15$~s sobra. Las fallas que
         terminan por reparación o por el operador duran mucho más que $\tau$ y pertenecen al
         APS. La capacidad del ACS casi no influye (sección~\ref{sec:riesgo-aplicabilidad}).
+  \item \textbf{¿Las formulaciones producen trayectorias distintas? ¿Qué decide la
+        trayectoria?} En el escenario de la tesis y con fallas del DET, N1, N2 y N3 son
+        indistinguibles en lazo cerrado (bajo 7~mK), y N2 reproduce a N3 también en la familia
+        extrema (bajo 0.4~K). N1 se separa sólo cuando una falla con capacidad reducida y un sesgo
+        desactualizado sacan a la planta de su punto de linealización (1.4~K en mediana), y aun
+        así no es peor en IAE mediano. Ordenadas por cuánto mueven la PCT: el controlador
+        (5--40~K), el margen de riesgo (9--18~K, siempre antes de la falla; durante ella todas
+        las formulaciones se calientan igual), la corrección de sesgo (6~K), la formulación
+        lineal frente a la no lineal (1.4~K), el margen DSM (0.02~K) y relinealizar frente a
+        resolver el NLP (bajo $10^{-4}$~K fuera de la familia extrema)
+        (sección~\ref{sec:trayectorias}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -103,13 +122,23 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
   \item \textbf{Una cifra necesita su escala.} Una brecha relativa de $10^5$\,\% resultó ser
         una diferencia de $10^{-12}$~K$^2$. Antes de interpretar un número hay que preguntarse
         respecto de qué está normalizado.
+  \item \textbf{Optimizar mejor el problema no garantiza una mejor trayectoria.} N3 resuelve el
+        P0 al óptimo global, con certificado, y aun así N1 tiene a veces mejor IAE en la familia
+        extrema, porque allí el P0 está mal informado (capacidad reducida desconocida, sesgo
+        desactualizado). El certificado responde si el solver resolvió el problema planteado;
+        la trayectoria depende de si ese problema describe bien la planta.
 \end{enumerate}
 
 \subsection{Limitaciones}
 \begin{itemize}
-  \item \textbf{Optimalidad global.} El certificado riguroso se demostró en dos consultas, y es
-        conservador en 1161~s. En lazo cerrado hay evidencia de optimalidad local con varios
-        arranques en 3800 consultas por lazo, no un certificado global.
+  \item \textbf{Optimalidad global.} En lazo abierto el certificado de la raíz es conservador
+        (11.4\,\% en 1161~s). En lazo cerrado se certificaron 77 consultas difíciles, no las
+        11\,400 auditadas; las demás tienen evidencia de optimalidad local con varios arranques,
+        o la cota trivial si $J\approx0$. El \emph{branch and bound} es código propio (los
+        encierros se validaron contra muestreo en F3c) y toma la cota de cada QP de Clarabel con
+        tolerancia $10^{-10}$; una validación cruzada con un solver global independiente (SCIP,
+        Gurobi) o con Knitro como segundo solver local queda pendiente (falta la licencia de
+        Knitro).
   \item \textbf{La planta.} La réplica del HRM se validó contra la realización archivada (error
         de $10^{-6}$~K), y sus perfiles de temperatura en estado estacionario coinciden con los
         de Simulink. No se comparó nodo a nodo durante una falla del ACS, que es justo el
@@ -147,6 +176,7 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
         su certificación, el lazo cerrado con las métricas de la tesis, y la capa de riesgo con
         las proposiciones y su condición de aplicabilidad).
   \item \textbf{Opcional, si un revisor lo pide}: comparar la réplica del HRM con Simulink nodo a
-        nodo durante una falla del ACS (requiere MATLAB), y ajustar el certificado riguroso
-        (paso 4b.5 del plan).
+        nodo durante una falla del ACS (requiere MATLAB), y resolver las 77 consultas
+        certificadas con Knitro (\code{julia/f7\_knitro.jl}, listo; falta la licencia) o con un
+        solver global independiente.
 \end{enumerate}

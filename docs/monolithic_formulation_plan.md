@@ -1960,7 +1960,7 @@ con 40 y 30 kg/s; `results/f5b1d_partial/`):
 
 ---
 
-## 10. Hacia el paper (estado al 18-11-2026)
+## 10. Hacia el paper (estado al 20-11-2026)
 
 **Ruta del lazo cerrado (F5).** Cerrada con los pasos 1–3 de §8.12 y su extensión: capacidad
 (§8.13), gemelo (§8.13), márgenes DSM (§8.13, §8.15), riesgo con fallas tipo DET (§8.14),
@@ -1971,7 +1971,9 @@ F1b.4 se saltó (§8.6, tabla F1b).
 
 1. Formulación monolítica: N1–N3 (QP o NLP) deciden en 0.03–0.2 s, frente a ~800 s de las
    metaheurísticas. Hay certificación de optimalidad global en dos consultas (brecha ≤ 2.3 %
-   y 11.4 %), y LJ y el GA cuestan, con garantía, ≥ 28 % y ≥ 43 % más (§8.1–8.5).
+   y 11.4 %), y LJ y el GA cuestan, con garantía, ≥ 28 % y ≥ 43 % más (§8.1–8.5). En lazo
+   cerrado, 77 consultas difíciles quedan certificadas a ≤ 0.5 % del óptimo global (≤ 0.01 %
+   en 42) con un *branch and bound* espacial (§10.4).
 2. Lazo cerrado sobre el HRM validado: N2+sesgo supera al LJ archivado (−11 % de ISE) y al PID
    de la tesis en todas sus métricas (IAE 2–50 veces menor). El DSM de la tesis no cambia la
    trayectoria con un optimizador exacto (§8.8–8.15).
@@ -2193,3 +2195,63 @@ Fuentes: [GI-122, Davis-Besse](https://www.nrc.gov/sr0933/section-3-new-generic-
 [NFPA 110, arranque en 10 s](https://www.cummins.com/sites/default/files/2019-04/FAQ_NFPA%20110%20Time%20to%20Readiness.pdf);
 [UFGS, 20 s por defecto](https://ufgscriteriadocreport.tpub.com/16263A/16263A0064.htm);
 [NUREG/CR-6928](https://www.nrc.gov/reading-rm/doc-collections/nuregs/contract/cr6928/index).
+
+### 10.4 Trayectorias de lazo cerrado por formulación y certificado global (20-11-2026)
+
+**Trayectorias** (reporte de estado, §35; `python/make_trajectory_figures.py` →
+`docs/figures/traj_*`, `results/f6_paper/trajectory_distances.csv`). Se compararon las
+trayectorias completas de la campaña F6, a pares, con las mismas realizaciones (50 por familia).
+La métrica es el máximo en el tiempo de |PCT_A − PCT_B| por realización.
+
+| Comparación | Familia | Mediana | Máximo |
+|---|---|---|---|
+| N2 − N3 | nominal / DET | < 10⁻⁴ K | < 10⁻⁴ K |
+| N2 − N3 | extrema | 0.007 K | 0.39 K |
+| N1 − N3 | nominal / DET | 0.004 / 0.001 K | 0.007 K |
+| N1 − N3 | extrema | 1.4 K | 24 K |
+| DSM de la tesis − N2 | DET | 0.02 K | 0.05 K |
+| sin sesgo − con sesgo (N2) | extrema | 6.2 K | 37 K |
+| capa de riesgo − N2 (ρ=100, cuantil 0.02, CVaR 0.95, Wilks) | DET | 2.5–18 K | 31 K |
+| PID / PI − N2 | nominal / extrema | 5.2 / 40 K | 52 K |
+
+- Las formulaciones no cambian la trayectoria salvo N1 en la familia extrema. Ahí se separa
+  después de la falla, cuando una capacidad reducida desconocida (η) y un sesgo desactualizado
+  sacan a la planta de su punto de linealización. Aun así, la diferencia mediana de IAE con N3 es
+  de −0.1 K·s y N1 es mejor en la mitad de las realizaciones: optimizar mejor el P0 no garantiza
+  una mejor trayectoria si el P0 está mal informado.
+- Las formulaciones de riesgo pre-enfrían distinto (de 1.3 K la pérdida esperada a 13 K Wilks),
+  pero se calientan igual durante la falla (5.1–6.1 K en mediana, la misma curva ΔT(D)). Es la
+  proposición de reducción a un margen, vista en las trayectorias.
+
+**Certificado de optimalidad global en lazo cerrado, F7** (reporte de estado, §26;
+`julia/F7Cert.jl`, `julia/f7_certify.jl`, `python/make_f7_figures.py`, `results/f7_cert/`).
+Se re-corrieron los lazos N3 de F6 con un gancho (`F6Tasks.CAPTURE`) y se certificaron las
+consultas auditadas difíciles ($J>0.01$), hasta 3 por semilla con 10 semillas por familia: 77
+consultas.
+
+- *UB:* las decisiones N3 del lazo, N1 y N2, más un multistart de Ipopt (24 arranques), todo
+  proyectado exactamente al conjunto factible. Ipopt viola la rampa en ~4·10⁻⁷.
+- *LB:* un *branch and bound* espacial. En cada sub-caja, el residuo del modelo afín se encierra
+  con intervalos (generaliza 4b de F3c) y se resuelve la relajación convexa con Clarabel. La caja
+  se reduce por propagación de la rampa dura. Límite de 900 s por consulta, 30 procesos en Olab.
+
+| Familia | Consultas | Certificadas ≤ 0.01 % | Todas ≤ | Brecha raíz (mediana) | Exceso N1 máx. |
+|---|---|---|---|---|---|
+| nominal 40 kg/s | 20 | 5 | 0.50 % | 4.9 % | 0.51 % |
+| DET 40 kg/s | 27 | 15 | 0.12 % | 7.5 % | 0.15 % |
+| extrema | 30 | 22 | 0.13 % | raíz no verificada | 1.27 % |
+
+La decisión N3 del lazo es el óptimo global dentro de la brecha en las 77 consultas, y N2 tiene la
+misma garantía. Las consultas no cerradas a 0.01 % tienen $J\le32$ y una brecha absoluta ≤ 0.01
+(≤ 0.02 K de error RMS). Los 24 arranques convergen siempre al mismo plan. Las consultas con
+$J\approx0$ quedan certificadas por la cota trivial $J\ge0$.
+
+*Knitro:* KNITRO.jl 16 se instala (KNITRO_jll) en leo_acer y en Olab (entorno por defecto), pero
+falta la licencia. `julia/f7_knitro.jl` re-resuelve las consultas serializadas
+(`results/f7_cert/queries/*.jls`) con los cuatro algoritmos y el multistart de Knitro, y las
+compara con la UB y la LB. Sólo puede bajar la UB, y un valor bajo la LB revelaría un error.
+
+**Estado para el manuscrito.** Con §10.1–10.4, el material del paper está completo. Lo único
+abierto son los datos del equipo (§10.3: tiempo de recuperación del ACS, α, capacidad y rampa)
+y, si un revisor lo pide, Knitro o un solver global independiente sobre las consultas
+certificadas.

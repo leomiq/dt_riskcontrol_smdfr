@@ -49,6 +49,9 @@ const PVECS = (base = [0.4, 0.3, 0.2, 0.1], uniform = [0.25, 0.25, 0.25, 0.25],
 const TCAP_ETA = 400.0
 
 const _cache = Dict{Any,Any}()
+# optional extra callback CAPTURE[](t, c, L, act, prev, dec) after each MPC decision of a :fail task
+# (f7_certify.jl uses it to capture closed-loop queries without changing the loop)
+const CAPTURE = Ref{Any}(nothing)
 cached(f, k) = get!(f, _cache, k)
 qgrid(n, muacc) = cached(() -> [CL.failure_quantile((i - 0.5) / n, dist(muacc)) for i in 1:n], (:dq, n, muacc))
 const DSM_THR = 0.00237737
@@ -273,6 +276,10 @@ function run_task(t)
         end
         arows = Any[]
         audit = t.audit ? make_audit(t.audit_every, arows, t.key) : nothing
+        if CAPTURE[] !== nothing
+            a0 = audit; cap = CAPTURE[]
+            audit = (c, L, act, prev, dec) -> (a0 === nothing || a0(c, L, act, prev, dec); cap(t, c, L, act, prev, dec))
+        end
         tr = @elapsed lg = run_loop(B, t.ctrl; n = t.n, act, bias = t.bias, audit, pert..., kw...)
         M = metrics(lg, B.y_ref); T = thesis_metrics(lg, B.y_ref)
         au = if isempty(arows)
