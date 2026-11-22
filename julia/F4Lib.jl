@@ -90,12 +90,19 @@ function add_scenario!(md, c, m, L, guess)
     [@expression(md, x(k, 15) + sum(pv[i] * (L[k] + m[k] + 5550)^(length(pv) - i) for i in eachindex(pv)) + 0.4) for k in 1:K]
 end
 
-"""P0 cost of one scenario; the rate limit is soft (P0) or hard (from ṁ_prev)."""
+"""P0 cost of one scenario; the rate limit is soft (P0) or hard (from ṁ_prev).
+With `c.Rmove = R > 0` (F8) it adds the move suppression R Σ_k (ṁ_k − ṁ_{k−1})², k = 1 from
+the applied flow ṁ_prev (absent field or R = 0: the original cost, unchanged)."""
 function scenario_cost!(md, c, m, y, ramp)
     K = c.K
     rr = @variable(md, [1:K], lower_bound = 0)
     @constraint(md, [k = 1:K], y[k] - U_y <= rr[k])
     track = @expression(md, sum((y[k] - c.y_ref)^2 for k in 1:K) + lam_pct * sum(rr .^ 2))
+    Rm = get(c, :Rmove, 0.0)
+    if Rm > 0
+        mv = [c.m_prev; m]
+        track = @expression(md, track + Rm * sum((mv[k+1] - mv[k])^2 for k in 1:K))
+    end
     if ramp == :soft
         s = @variable(md, [1:K-1], lower_bound = 0)
         @constraint(md, [k = 1:K-1], m[k+1] - m[k] <= dm_lim + s[k])

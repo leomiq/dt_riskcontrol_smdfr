@@ -175,7 +175,12 @@ function solve_qp(c, C, act)
     r = @variable(md, [1:K], lower_bound = 0)
     @constraint(md, [k = 1:K], y[k] - F4Lib.U_y <= r[k])
     obj = @expression(md, sum((y[k] - c.y_ref)^2 for k in 1:K) + F4Lib.lam_pct * sum(r .^ 2))
-    if get(c, :dsm, nothing) !== nothing          # F5b.1b: λ_s Σ [DSM_k − τ]₊², DSM on the bias-corrected ŷ
+    Rm = get(c, :Rmove, 0.0)                      # F8: move suppression R Σ (u_k − u_{k−1})², u_0 = applied
+    if Rm > 0
+        uv = [c.m_prev; u]
+        obj = @expression(md, obj + Rm * sum((uv[k+1] - uv[k])^2 for k in 1:K))
+    end
+    if get(c, :dsm, nothing) !== nothing         # F5b.1b: λ_s Σ [DSM_k − τ]₊², DSM on the bias-corrected ŷ
         z = c.dsm; den = z.U - (c.y_ref + c.d)    # U − y_ref (c.y_ref is shifted by −d)
         q = @variable(md, [1:K], lower_bound = 0)
         @constraint(md, [k = 1:K], (y[k] - c.y_ref) / den - z.thr <= q[k])
@@ -384,13 +389,15 @@ u_k = u_{k−1} + K_p e + I_k, I_k = I_{k−1} + K_i e Δt (K_p = −0.5, K_i = 
 to [56.68, 100] A and rate-limited to 60 A/s from u_{k−1} (u_0 = 0, as in the thesis); the
 current goes to the pump map and the plant (capacity, η and failures apply as to the MPC).
 `ctrl = :PI` is the DET's own PI (setpoint 1144 K), a different controller.
+`Rmove = R` (F8) adds the move suppression R Σ_k (ṁ_k − ṁ_{k−1})² to N1/N2/N3, with ṁ_0 the
+flow applied at the previous query (R = 0: the original formulation).
 `keep_states = true` stores the plant state and DET logic after every query in `log.states`
 (for `time_to_limit`).
 """
 function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false, eta = 1.0,
                   fail = nothing, fbias = 0.0, audit = nothing, measured_acs = false,
                   leak_noise = 0.0, noise_seed = 1, forecast = :oracle, kf = nothing, kf_thr = 5.0, eta_pi = false,
-                  dsm = nothing, pi_setpoint = nothing, risk = nothing,
+                  dsm = nothing, pi_setpoint = nothing, risk = nothing, Rmove = 0.0,
                   pid = (Kp = -0.5, Ki = -0.4, I_min = 56.68, I_max = 100.0, dI_max = 60.0),
                   keep_states = false)
     pH = B.pH; hist = copy(B.hist)
@@ -404,7 +411,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
     wrng = Random.Xoshiro(noise_seed + 7)               # Wilks draws (risk mode :wilks)
     log = (t_q = Float64[], pct = Float64[], m = Float64[], m_plant = Float64[], u = Float64[],
            yhat_now = Float64[], d = Float64[], time = Float64[], status = String[],
-           m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], states = Any[], breakdown = [false], limit = [false])
+           m_plan = Vector{Float64}[], ferr = Float64[], ubound = Float64[], yhat_max = Float64[], states = Any[], breakdown = [false], limit = [false])
     # leak measurements and forecaster
     tb = B.t_start - KF_BURN - DELAY - h
     nz = randn(Random.Xoshiro(noise_seed), round(Int, (B.t_start + n * h - tb) / h) + 2)
@@ -437,7 +444,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
             push!(log.t_q, t_q); push!(log.pct, s.pct[end]); push!(log.m, s.acs[end])
             push!(log.m_plant, s.acs[end]); push!(log.u, s.current[end]); push!(log.yhat_now, NaN)
             push!(log.d, NaN); push!(log.time, 0.0); push!(log.status, "-"); push!(log.m_plan, [s.acs[end]])
-            push!(log.ferr, NaN); push!(log.ubound, NaN)
+            push!(log.ferr, NaN); push!(log.ubound, NaN); push!(log.yhat_max, NaN)
             s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
             continue
         end
@@ -462,7 +469,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         d = pct_now - yhat_now
         c = (; p = B.pR4, h, K, S = max.(abs.(w.x_init), 1.0), x_init = w.x_init,
              leak0 = w.leak_warm[end], y_ref = bias ? B.y_ref - d : B.y_ref, m_prev = m_applied,
-             d = bias ? d : 0.0, dsm)
+             d = bias ? d : 0.0, dsm, Rmove = Float64(Rmove))
         ub = NaN
         if risk !== nothing
             mode = get(risk, :mode, :var)
@@ -507,6 +514,10 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
                 dec = (m = clamp.(vcat(prev[2:end], prev[end]), act.m_lo, act.m_hi), status = dec.status, time = dec.time)
             end
             m1 = dec.m[1]; prev = dec.m
+            # F8 check: largest PCT the ROM predicts for the applied plan (no bias correction, as
+            # in the λ_pct[ŷ − U_y]₊ term of the cost)
+            Xp = rom_traj(c, dec.m, L)
+            yhmax = maximum(R4.output(Xp[j+1, :], L[j], dec.m[j], c.p) for j in 1:K)
         else
             if ctrl == :PID
                 e = B.y_ref - pct_now
@@ -519,6 +530,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
                      ctrl == :LJ ? current_to_massflow(B.cs[findfirst(==(t_q), B.cs[:, 1]), 2]) : error("ctrl")
             end
             dec = (m = fill(m1, K), status = "-", time = 0.0)
+            yhmax = NaN
         end
         u1 = m1 > 0 ? F4Lib.massflow_to_current(m1) : 56.0                  # 56 A: pump off
         mp = failed ? 0.0 : eta_f * eta * m1                                 # real flow
@@ -543,7 +555,7 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
         push!(log.u, u1)
         push!(log.yhat_now, yhat_now); push!(log.d, d); push!(log.time, dec.time)
         push!(log.status, dec.status); push!(log.m_plan, dec.m); push!(log.ferr, maximum(abs.(L .- Ltrue)))
-        push!(log.ubound, ub)
+        push!(log.ubound, ub); push!(log.yhat_max, yhmax)
         s.pct[end] > pH.monitor_band[2] && (log.limit[1] = true; break)
     end
     log

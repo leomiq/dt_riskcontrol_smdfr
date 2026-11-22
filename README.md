@@ -55,6 +55,26 @@ with `DSM = (ŷ − y_ref)/(U_y − y_ref)`, `Δṁ = 5 kg/s`, `λ_m = 1e-4`,
 probabilistic safety margin (PSM) from IS-MCDET is computed after the decision,
 in `matlab/DET_scheduler_postprocessing_perc_online.m`. It does not enter the cost.
 
+### Original formulation and the monolithic closed-loop formulation
+
+The problem as first posed (progress meeting, Sep 2025) had only the tracking term in the
+cost, with the ACS ramp (`0 ≤ dṁ/dt ≤ 5 kg/s²`) and the safety margin
+`0 ≤ SM = (U_y − ŷ)/(U_y − w) ≤ 1` as **hard** constraints; P0 above softened both. The
+monolithic closed loops (F5–F7) use
+
+$$
+\min_{u,x}\;\sum_k(\hat y_k-y_{\rm ref})^2+\lambda_{\rm pct}\sum_k[\hat y_k-U_y]_+^2
+\quad\text{s.t.}\quad x_k=x_{k-1}+\Delta t\,f(x_k,\hat d_k,u_k),\;\;
+0\le u_k\le\dot m_{\max},\;\; |u_k-u_{k-1}|\le 5\ \text{kg/s per step},
+$$
+
+with `u_0` the flow applied at the previous query: the ramp is **hard** (an input constraint is
+always feasible; 10 kg/s² = 0.18 %/s of the nominal flow), and the margin stays **soft**
+because the penalty is zero in every loop (max PCT 1220.1 K vs `U_y = 1244 K`), so the
+soft and hard problems have the same optimum. The side `SM ≤ 1` (ŷ ≥ w) is omitted: it would
+forbid the pre-cooling through which the risk layer acts. Details: status report,
+section "De la formulación original a la del lazo cerrado" (`docs/estado/04_mpc.tex`).
+
 ## Results at a glance
 
 Closed loop, 61 queries, Luus–Jaakola with seed 1, same accident stream

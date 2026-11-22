@@ -195,6 +195,23 @@ $$
 \end{aligned}
 $$
 
+**Versión usada en los lazos cerrados (F5–F7; aclarado el 22-11-2026).** La rampa es
+**dura**: $\lvert\dot m_{{\rm ACS},k}-\dot m_{{\rm ACS},k-1}\rvert\le5$ kg/s por paso
+(10 kg/s²), sin holgura $s_k$ y con $\dot m_{{\rm ACS},0}$ igual al caudal aplicado en la
+consulta anterior. El margen queda **blando**, $\lambda_{\rm pct}[\hat y_k-1244]_+^2$. En la
+formulación original (Progress Meeting de septiembre de 2025) la rampa,
+$0\le\dot u\le5$ kg/s², y el margen, $0\le{\rm SM}=(U_y-\hat y)/(U_y-w)\le1$, eran ambos
+restricciones duras. Se mantiene el margen blando por tres razones:
+
+1. La penalización vale cero en todos los lazos: la PCT máxima es 1220.1 K, frente a
+   $U_y=1244$ K. Por eso el óptimo blando es también el óptimo duro (proposición
+   «blanda y dura coinciden», reporte de estado §4).
+2. Una cota dura sobre la salida puede ser infactible durante una falla del ACS.
+3. El lado ${\rm SM}\le1$ ($\hat y\ge w$) prohibiría el preenfriamiento de la capa de riesgo.
+
+La rampa de 10 kg/s² está dentro de la banda de 0.1–0.4 %/s de Argonne (0.18 %/s). Con
+2.5, 5 o 10 kg/s por paso, la PCT máxima cambia ≤ 0.6 K (§8.13).
+
 **Tamaño**: con $K=26$, son 17 × 26 = 442 variables de estado, 26 de control y unas 50
 holguras. Es un NLP pequeño: Ipopt lo resuelve en ≈ 0.1 s (§8.1).
 
@@ -2255,3 +2272,39 @@ compara con la UB y la LB. Sólo puede bajar la UB, y un valor bajo la LB revela
 abierto son los datos del equipo (§10.3: tiempo de recuperación del ACS, α, capacidad y rampa)
 y, si un revisor lo pide, Knitro o un solver global independiente sobre las consultas
 certificadas.
+
+### 10.5 Formulación original y supresión de movimiento (F8, 22-11-2026)
+
+**Formulación.** En la presentación de septiembre de 2025 (Progress Meeting, LASAR), la rampa
+($0\le\dot u\le5$ kg/s²) y el margen ($0\le{\rm SM}\le1$) eran restricciones duras. P0
+(`fitness_cost.m`) las ablandó. En F5–F7 la rampa ya es dura (±5 kg/s por paso, desde la
+acción aplicada) y el margen sigue blando. Se decidió no endurecer el margen, por tres razones:
+
+- su penalización nunca se activa, así que el óptimo blando es el duro;
+- una cota dura sobre la salida puede ser infactible durante una falla del ACS;
+- el lado ${\rm SM}\le1$ prohibiría el preenfriamiento.
+
+Quedó escrito en el reporte de estado, §4.5 (proposición «blanda y dura coinciden»). El valor
+de $\lambda_{\rm pct}$ es irrelevante porque el umbral está en la pared; el margen con umbral
+interior (DSM) ya se barrió en §8.13 y §8.15.
+
+**F8: supresión de movimiento** $R\sum_k(\dot m_k-\dot m_{k-1})^2$, con $\dot m_0$ el caudal
+aplicado. Implementado en N1, N2 y N3 (`Rmove` en `ClosedLoop.run_loop`; `F4Lib.scenario_cost!`).
+Campañas `rrisk` y `rmove` (`julia/F6Tasks.jl`), Olab: 2350 lazos, 0 errores, 26 min,
+$R\in\{0,10^{-3},\dots,100\}$; resumen en `python/f8_rmove.py` → `results/f8_rmove/summary.md`,
+figuras `fig_f8_tradeoff` y `fig_f8_risk`.
+
+- **Frontera seguimiento–suavidad.** En la familia nominal, $R=0.1$ reduce la variación total de
+  87 a 40 kg/s y el IAE sube de 8.0 a 13.7 K·s. Con fallas (det), $R$ entre 0.1 y 1 cambia el
+  IAE en < 5 % y reduce la variación total 32–41 %. Con $R\ge30$, 1–2 de 50 realizaciones
+  cruzan 1220 K.
+- **La capa de riesgo oscilaba.** En F6, las capas de riesgo tienen una variación total de
+  1450–1920 kg/s, contra 90–135 kg/s de N2: el caudal alterna 12↔17 kg/s a rampa máxima, y la
+  oscilación llega a la planta. Con $R\ge0.03$ desaparece (1923 → 86 kg/s con $R=0.1$), sin
+  cambiar P(cruce|falla) (0.01545 → 0.01544), el preenfriamiento (7.4 K) ni la masa. Las
+  conclusiones de riesgo se mantienen. **Propuesta: $R=0.1$ en el controlador del paper.**
+- **Sin capa de riesgo**, el riesgo no cambia hasta $R\approx3$ y sube 16 % con $R=100$: la PCT
+  queda 0.4 K sobre la consigna.
+- **N3 = N2 con el mismo R**: ΔPCT ≤ 0.002 K y Δṁ ≤ 0.026 kg/s.
+- **Verificación del margen blando**: la PCT predicha máxima es 1220.32 K en los 2350 lazos, así
+  que la penalización no se activó en ninguna consulta.

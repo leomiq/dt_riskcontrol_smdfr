@@ -99,6 +99,11 @@ en las restricciones $s_k\ge|u_{k+1}-u_k|-\Delta\mdot$. El menor $s_k$ factible 
 $\max(0,|u_{k+1}-u_k|-\Delta\mdot)$, y su costo es exactamente la bisagra al cuadrado. El
 argumento para $r_k$ es el mismo.
 \end{proof}
+\noindent En los lazos cerrados (F5--F7) la rampa es dura (sección~\ref{sec:formulacion-final}):
+las holguras $s_k$ desaparecen y la rampa queda como $|u_k-u_{k-1}|\le\Delta\mdot$ para
+$k=1,\dots,K$, con $u_0$ el caudal aplicado en la consulta anterior. Lo mismo vale para N1 y
+N2. La holgura $r_k$ se mantiene, pero vale cero en todos los lazos
+(proposición~\ref{prop:blanda-dura}).
 
 \subsection{N3 reducida: el mismo problema sólo en los controles}
 Los estados se eliminan con la simulación, $x_k=\Phi(x_{k-1},\hat d_k,u_k)$, y queda

@@ -208,6 +208,8 @@ const TNAMES = (:min_safety_margin, :margin_1220, :min_overshoot, :max_abs_dev_p
                 :settling_time, :steady_state_error, :IAE, :cumulative_error, :peak_PCT, :final_PCT,
                 :total_variation, :max_control_rate, :tv_plant, :coolant_mass, :runtime_median)
 
+ymax(lg) = (v = filter(!isnan, lg.yhat_max); isempty(v) ? NaN : maximum(v))   # F8: max predicted ŷ
+
 """Run one task; returns a Dict file => vector of rows (NamedTuples) to append."""
 function run_task(t)
     out = Dict{String,Vector{Any}}()
@@ -215,14 +217,14 @@ function run_task(t)
     bb = bench(t.family, t.seed, t.act)
     B, r = bb.B, bb.r
     head = (; key = t.key, campaign = t.campaign, family = t.family, seed = t.seed, case = t.case,
-            ctrl = t.ctrl, bias = t.bias, act = t.act, mmax = bb.mmax, mu_design = t.mu_design,
+            ctrl = t.ctrl, bias = t.bias, act = t.act, mmax = bb.mmax, mu_design = t.mu_design, R = get(t, :R, 0.0),
             A = r.A, B = r.Bp, drift = r.d)
     if B === nothing
         put(t.campaign * "_skipped.csv", (; key = t.key, seed = t.seed, reason = "no ACS demand"))
         return out
     end
     act = actuator(B, t.act)
-    kw = riskkw(t.spec, bb.mmax)
+    kw = merge(riskkw(t.spec, bb.mmax), (Rmove = get(t, :R, 0.0),))   # F8: move suppression
     lead = B.t_start - B.t_act
     if t.kind == :rb
         tr = @elapsed lg = run_loop(B, t.ctrl; n = NQ_DET, act, bias = t.bias, keep_states = true, kw...)
@@ -234,7 +236,7 @@ function run_task(t)
         put(t.campaign * ".csv", (; head..., lead,
             p_cond_mu3e3 = ps[1].cond, p_cond_mu1e4 = ps[2].cond, p_cond_mu3e4 = ps[3].cond,
             p_unc_mu3e3 = ps[1].unc, p_unc_mu1e4 = ps[2].unc, p_unc_mu3e4 = ps[3].unc,
-            tau_mean = mean(τ), tau_min = minimum(τ), mean_dev = mean(lg.pct .- B.y_ref),
+            tau_mean = mean(τ), tau_min = minimum(τ), mean_dev = mean(lg.pct .- B.y_ref), yhat_max = ymax(lg),
             ubound_mean = (u = filter(!isnan, lg.ubound); isempty(u) ? NaN : mean(u)),
             M..., T..., wall_loop = tr, wall_tau = tt))
         for (j, i) in enumerate(idx)
@@ -293,7 +295,7 @@ function run_task(t)
         end
         ub = filter(!isnan, lg.ubound)
         put(t.campaign * ".csv", (; head..., lead, n_req = t.n, eta = r.eta, fbias = r.fb, finfo...,
-            M..., T..., ubound_mean = isempty(ub) ? NaN : mean(ub), au..., wall = tr))
+            M..., T..., ubound_mean = isempty(ub) ? NaN : mean(ub), yhat_max = ymax(lg), au..., wall = tr))
         foreach(a -> put(t.campaign * "_audit.csv", a), arows)
         for j in eachindex(lg.t_q)
             put(t.campaign * "_traj.csv", (; key = t.key, t = lg.t_q[j] - lg.t_q[1], pct = lg.pct[j], m = lg.m[j],
@@ -307,11 +309,16 @@ end
 
 # ---------------------------------------------------------------- campaigns
 function mk(campaign, kind, family, seed, act, case, ctrl; bias = ctrl in (:N1, :N2, :N3), spec = nothing,
-            mu_design = NaN, n = NQ_DET, audit = false, audit_every = 20, cost = 1.0)
+            mu_design = NaN, n = NQ_DET, audit = false, audit_every = 20, cost = 1.0, R = 0.0)
     key = "$(campaign)|$(family)|$(seed)|$(act)|$(case)"
-    (; key, campaign, kind, family, seed, act, case, ctrl, bias, spec, mu_design, n, audit, audit_every, cost)
+    (; key, campaign, kind, family, seed, act, case, ctrl, bias, spec, mu_design, n, audit, audit_every, cost, R)
 end
 ecode(x) = (s = @sprintf("%.0e", x); replace(s, "e+0" => "e", "e+" => "e"))   # 3e3, 1e4, …
+
+# F8: move-suppression weights R [K²/(kg/s)²] (R = 0: the F6 formulation)
+const RGRID = parse.(Float64, split(get(ENV, "F8_RGRID", "0,1e-3,1e-2,1e-1,1,10,100"), ","))
+const RGRID_N3 = (0.0, 0.1, 10.0)
+rcode(R) = R == 0 ? "0" : ecode(R)
 
 """Task list of a campaign; `seeds` overrides the default seeds of its family."""
 function campaign_tasks(name; seeds = nothing)
@@ -389,8 +396,25 @@ function campaign_tasks(name; seeds = nothing)
             push!(T, mk(name, :fail, :extreme, s, :phys, "PI", :PI; cost = 2))
             push!(T, mk(name, :fail, :extreme, s, :phys, "PID", :PID; cost = 2))
         end
+    elseif name == "rrisk"     # F8: move suppression R × risk layer, failure-free loop + Rao–Blackwell
+        S = seeds === nothing ? (201:250) : seeds
+        for s in S, R in RGRID
+            push!(T, mk(name, :rb, :detacc, s, :cap40, "N2_R$(rcode(R))", :N2; R, cost = 1))
+            push!(T, mk(name, :rb, :detacc, s, :cap40, "N2_var_a0.02_R$(rcode(R))", :N2; R,
+                        spec = (:var, 0.02, 1e4), mu_design = 1e4, cost = 1.5))
+        end
+    elseif name == "rmove"     # F8: move suppression R, closed loop with failures (det) and nominal family
+        S = seeds === nothing ? (201:250) : seeds
+        for s in S, R in RGRID
+            push!(T, mk(name, :fail, :detacc, s, :cap40, "N2b_R$(rcode(R))", :N2; R, cost = 4))
+            R in RGRID_N3 && push!(T, mk(name, :fail, :detacc, s, :cap40, "N3b_R$(rcode(R))", :N3; R, cost = 8))
+        end
+        SN = seeds === nothing ? (1:2:99) : seeds
+        for s in SN, R in RGRID
+            push!(T, mk(name, :fail, :nominal, s, :cap40, "N2b_R$(rcode(R))", :N2; R, n = min(121, NQ_DET), cost = 1.5))
+        end
     else
-        error("unknown campaign $name (sens, form, eta, det, nom, ext)")
+        error("unknown campaign $name (sens, form, eta, det, nom, ext, rrisk, rmove)")
     end
     T
 end

@@ -81,6 +81,14 @@ comparación de trayectorias.
         lineal frente a la no lineal (1.4~K), el margen DSM (0.02~K) y relinealizar frente a
         resolver el NLP (bajo $10^{-4}$~K fuera de la familia extrema)
         (sección~\ref{sec:trayectorias}).
+  \item \textbf{¿La formulación es la planteada originalmente? ¿Hace falta penalizar los
+        movimientos?} La rampa es dura, como en la formulación de 2025. El margen se deja
+        blando porque su penalización nunca se activa (PCT predicha máxima de 1220.3~K en 2350
+        lazos), y entonces el óptimo blando es el óptimo duro
+        (proposición~\ref{prop:blanda-dura}). Una supresión de movimiento $R\sum\Delta u^2$
+        recorre la frontera seguimiento--suavidad. Con $R\ge0.03$ elimina una oscilación de
+        período dos que tenía la capa de riesgo, sin cambiar el riesgo ni la masa. Se propone
+        $R=0.1$ (secciones~\ref{sec:formulacion-final} y~\ref{sec:supresion}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small

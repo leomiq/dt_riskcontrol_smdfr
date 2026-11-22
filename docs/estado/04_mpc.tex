@@ -116,6 +116,100 @@ Cotas del actuador & $u\in[56.69,56.75]$~A, es decir, $\mdot\in[0.58,12.86]$~kg/
 \caption{Parámetros de P0 usados en todo el documento.}
 \end{table}
 
+\subsection{De la formulación original a la del lazo cerrado}\label{sec:formulacion-final}
+P0 no es la formulación con la que se planteó el problema. En la presentación de avance de
+septiembre de 2025 (\emph{Progress Meeting}, LASAR) el problema era
+\begin{align*}
+\min_{u}\quad & \sum_{j=1}^{M}Q\big[\hat y(t+j\,|\,t)-w\big]^2\\
+\text{s.a.}\quad & \Delta u(t+j-1)=0,\quad j>M,\\
+& u_{\min}\le u(t+j)\le u_{\max},\qquad \Delta u_{\min}\le\Delta u(t+j)\le\Delta u_{\max},\qquad j=1,\dots,M,\\
+& \underline{\rm SM}\le{\rm SM}(t+j)=\frac{U_y-\hat y(t+j)}{U_y-w}\le\overline{\rm SM},\qquad j\le M,
+\end{align*}
+con $u$ la tasa de cambio del caudal del ACS, $u_{\min}=0$, $u_{\max}=5$~kg/s$^2$ (0.1\,\% del
+caudal nominal por segundo), $\underline{\rm SM}=0$, $\overline{\rm SM}=1$, $U_y=1244$~K y
+$w=1144$~K. La rampa y el margen eran \textbf{restricciones duras}, y el costo sólo tenía el
+seguimiento. El modelo, en cambio, no era una restricción: $\hat y$ salía de simular el árbol
+de eventos. Como ${\rm SM}=1-{\rm DSM}$, los dos lados del margen dicen cosas distintas:
+${\rm SM}\ge0$ equivale a $\hat y\le U_y$ (seguridad) y ${\rm SM}\le1$ a $\hat y\ge w$ (no
+enfriar bajo la consigna, una condición de desempeño).
+
+Al programarla para Luus--Jaakola y GA (\code{fitness\_cost.m}), la rampa y el lado
+${\rm SM}\ge0$ pasaron al costo como bisagras con pesos fijos, términos (b) y (c) de P0. El
+lado ${\rm SM}\le1$ desapareció. Sólo queda un chequeo $|{\rm DSM}|\le1$, que GA usa para
+descartar candidatos y que en Luus--Jaakola está comentado. La formulación monolítica de los
+lazos cerrados (F5--F7) devuelve la dinámica al problema como restricción de igualdad y
+vuelve a imponer la rampa como restricción dura:
+\begin{align*}
+\min_{u,\,x}\quad & \sum_{k=1}^{K}(\hat y_k-y_{\rm ref})^2+\lambda_{\rm pct}\sum_{k=1}^{K}\big[\hat y_k-U_y\big]_+^2\\
+\text{s.a.}\quad & x_k=x_{k-1}+\Delta t\,f(x_k,\hat d_k,u_k),\qquad k=1,\dots,K\qquad\text{(dinámica)},\\
+& 0\le u_k\le\mdot_{\max},\qquad |u_k-u_{k-1}|\le\Delta\mdot,\qquad k=1,\dots,K,
+\end{align*}
+con $\Delta\mdot=5$~kg/s por paso y $u_0$ el caudal aplicado en la consulta anterior, de modo
+que la rampa también vale entre consultas. A esto se suma la capa de riesgo de la
+sección~\ref{sec:riesgo-donde}. La tabla~\ref{tab:formulaciones-historia} resume las tres
+versiones.
+
+\begin{table}[H]\centering\small
+\begin{tabularx}{\linewidth}{@{}l Y Y Y@{}}\toprule
+Elemento & Original (sep.~2025) & P0 (\code{fitness\_cost.m}) & Lazo cerrado (F5--F7)\\\midrule
+Modelo & simulado (caja negra) & simulado (caja negra) & restricción de igualdad (N3) o linealizada (N1, N2)\\
+Rampa & dura, $0\le\dot u\le5$~kg/s$^2$ & blanda, $\lambda_m=10^{-4}$, $\pm5$~kg/s por paso, sin el paso desde la acción aplicada & \textbf{dura}, $\pm5$~kg/s por paso ($\pm10$~kg/s$^2$), también desde la acción aplicada\\
+${\rm SM}\ge0$ ($\hat y\le U_y$) & dura & blanda, $\lambda_{\rm pct}=10$ & blanda, $\lambda_{\rm pct}=10$; nunca se activa (prop.~\ref{prop:blanda-dura})\\
+${\rm SM}\le1$ ($\hat y\ge w$) & dura & ausente & ausente; el seguimiento penaliza el subenfriamiento\\
+Consigna & $w=1144$~K & $y_{\rm ref}=1179.271$~K & $y_{\rm ref}$ de la consulta ($\approx1180$~K)\\\bottomrule
+\end{tabularx}
+\caption{La formulación original, la programada para las metaheurísticas y la de los lazos
+cerrados.}
+\label{tab:formulaciones-historia}
+\end{table}
+
+\paragraph{Por qué la rampa es dura.} Es una restricción sobre la entrada, y ese tipo de
+restricción siempre admite una solución: $u_k=u_{k-1}$ la cumple. Por eso endurecerla nunca
+vuelve infactible el problema. El valor usado, 10~kg/s$^2$, equivale a 0.18\,\% del caudal
+nominal (5550.5~kg/s) por segundo. Está dentro de la banda de 0.1--0.4\,\%/s de los reportes
+de Argonne que justificó la cota en 2025, y es el doble de los 5~kg/s$^2$ de la presentación.
+La diferencia no cambia las conclusiones: en el barrido de capacidad, las rampas de 2.5, 5 y
+10~kg/s por paso cambian la PCT máxima en $\le0.6$~K (sección~\ref{sec:riesgo-donde}). La
+rampa es simétrica porque la bomba de reposición puede reducir su caudal. En la planta limita
+sólo las subidas, porque una falla corta el caudal de inmediato.
+
+\paragraph{Por qué el margen se deja en el costo.} En MPC, una cota dura sobre la
+\emph{salida} puede no tener solución: durante una falla del ACS la PCT sube haga lo que haga
+el controlador. Por eso las restricciones de salida se suelen ablandar con una penalización.
+Aquí, además, la versión blanda y la dura dan la misma decisión:
+
+\begin{proposicion}[Blanda y dura coinciden si la penalización no se activa]\label{prop:blanda-dura}
+Sean $P_b:\ \min_{u\in\mathcal U}J(u)+\lambda\sum_k[g_k(u)]_+^2$ y
+$P_d:\ \min_{u\in\mathcal U}J(u)$ s.a. $g_k(u)\le0$ para todo $k$, con $\lambda>0$. Si un
+óptimo $u_b$ de $P_b$ cumple $g_k(u_b)\le0$ para todo $k$, entonces $u_b$ también es óptimo
+de $P_d$, y los dos valores óptimos coinciden.
+\end{proposicion}
+\begin{proof}
+$u_b$ es factible para $P_d$. Para cualquier $u$ factible de $P_d$, la penalización vale
+cero, y entonces $J(u)=J(u)+\lambda\sum_k[g_k(u)]_+^2\ge J(u_b)+\lambda\sum_k[g_k(u_b)]_+^2=J(u_b)$.
+\end{proof}
+\noindent No hace falta convexidad. Con $g_k=\hat y_k-U_y$ (el lado ${\rm SM}\ge0$), la
+hipótesis se cumple en todos los lazos: en las 5850 corridas de F6 la PCT máxima de la planta
+es 1220.1~K (el monitor del DET detiene la simulación en 1220~K), a 23.9~K de $U_y$. Por lo
+tanto, los resultados de los lazos cerrados son los de la formulación con ${\rm SM}\ge0$ duro.
+Por la misma razón, el valor de $\lambda_{\rm pct}$ no importa: con el umbral en el límite, el
+término vale $\lambda_{\rm pct}\cdot0=0$ con cualquier peso. Un margen sólo pesa si su umbral
+está dentro de la zona de operación. Esa versión (DSM con umbral $\tau$) se barrió con
+$\lambda\in\{10^3,10^4,10^5\}$ y no cambió a N2 (sección~\ref{sec:dsm-lambda}), porque la
+predicción nominal no contiene la falla. El margen que sí importa es el de la capa de riesgo
+(sección~\ref{sec:prop-aditiva}).
+
+\paragraph{Por qué se omite ${\rm SM}\le1$.} Impuesta en forma dura, $\hat y\ge w$ prohibiría
+el preenfriamiento, que es precisamente el mecanismo con que la capa de riesgo reduce la
+probabilidad de cruzar 1220~K (sección~\ref{sec:prop-aditiva}). En los lazos con fallas, la
+PCT baja hasta 28~K bajo la consigna en la familia det y hasta 93~K en la extrema. El término
+de seguimiento ya penaliza el subenfriamiento, en forma simétrica.
+
+\paragraph{Supresión de movimiento.} La formulación no penaliza los cambios de caudal. El
+término habitual en MPC, $R\sum_k(u_k-u_{k-1})^2$, se estudia en la
+sección~\ref{sec:supresion}: con $R=0.1$ el caudal se suaviza casi sin costo de seguimiento
+y desaparece una oscilación de la capa de riesgo.
+
 \subsection{Las dos consultas de prueba}
 Todo el análisis de este documento se hace sobre dos consultas del lazo archivado, que
 representan dos situaciones distintas:
