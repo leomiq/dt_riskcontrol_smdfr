@@ -131,7 +131,7 @@ Exploration avenues, in execution order:
 | V3 | Exact reference | Solve the same query states with Luus–Jaakola, the genetic algorithm and the solver from V1–V2, re-simulate the actions in the ROM, and measure the metaheuristics' optimality gap and runtime. | high |
 | V4 | Risk in every candidate | Chance constraint, or `Ĵ + λ_R ρ̂` over common weighted scenarios. | high |
 | V5 | Extended risk horizon | Evaluate ρ over `N_R ≫ N` so that ACS failures become visible. | high |
-| V6 | Decision-focused scenario | Learn offline a map from context to a single scenario such that the deterministic MPC fed with it reproduces the stochastic decision. The hard part moves offline. Conceptual for now. | medium |
+| V6 | Decision-focused scenario | Learn offline a map from context to a single scenario such that the deterministic MPC fed with it reproduces the stochastic decision. The hard part moves offline. Done in F9 (23 Nov 2026): works, provided the forecast uses only slow context variables. | medium |
 | V7 | Nonlinear-model compute | Move blocking and warm starts, if the ROM has to stay in the loop. | medium |
 | V8 | Multi-stage MPC | Different actions after observing ACS success or failure. | medium |
 | V9 | Several protection systems | With one active system a failure has no backup; with two, activation order matters. | medium |
@@ -327,6 +327,21 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   global optimum in all 77 queries (≤ 0.01 % in 42), N2 with the same guarantee, N1 within
   1.3 %. `julia/f7_knitro.jl` re-solves the serialised queries with Knitro (installed via
   KNITRO_jll; licence pending).
+- **One-scenario theorem of Homem-de-Mello et al. (H. Rozas' V6), F9 (23 Nov, plan §10.6,
+  status report §36; `julia/F9Rozas.jl`, `julia/f9_rozas.jl`, `python/f9_summary.py`,
+  `python/make_f9_figures.py`, `results/f9_rozas/`).** The paper's conditions and methodology
+  checked on 4050 closed-loop N2 queries and 650 closed loops (Olab).
+  - Conditions: the expected-excess layer satisfies Theorem 1 (case i); partial failures do
+    as written per step (Lemma 1 iii, all G_ki < 0), not as implemented (one row per
+    scenario, m = 1 < n). Uniqueness (Assumption 3) holds only thanks to R = 0.1.
+  - The theorem's scenario reproduces the SAA plan in every formulation but is not physical.
+    One failure of well-chosen duration (≈ 4× the mean) loses 6 % / 0.5 % of the VSS
+    (ρ = 100 / 1000); the mean-duration point forecast loses all of it.
+  - A linear forecast of the scenario from the context (the paper's Algorithm 1 +
+    Nelder–Mead) captures 89–97 % of the VSS out of sample. In closed loop it matches SAA
+    at ρ = 100; at ρ = 1000 it chatters if it uses the current margin (the context is
+    endogenous, which the paper's i.i.d. setting ignores) and is fixed by using slow
+    features only. A discussion note for the paper, not a new contribution.
 - **Next steps (plan §10).**
   1. Ask the team about the ACS redundancy and its flow-restoration time (fixes the base
      case), α, the 4-train model and the 1220 K limit.

@@ -1,41 +1,110 @@
 %======================================================================
 \section{El escenario único de Homem-de-Mello et al.\ (F9)}\label{sec:rozas}
 %======================================================================
-En la reunión del 22 de octubre H.~Rozas propuso dos vías: linealizar el reactor (V2, base de
-N1/N2) y \emph{aprender un escenario único} que, puesto en el MPC determinista, reproduzca la
-decisión estocástica (V6), con el artículo de Homem-de-Mello, Valencia, Lagos y
-Lagos~\cite{homem2026}. La proposición~\ref{prop:margen}(b) mostró que para las \emph{cotas}
-(cuantil, CVaR, Wilks) ese escenario existe, es físico y es explícito. Esta sección comprueba,
-con la metodología del propio artículo, si el SMDFR cumple sus condiciones y qué pasa con las
-formulaciones que no son cotas: la pérdida esperada y las fallas parciales dentro del horizonte.
+En la reunión del 22 de octubre H.~Rozas propuso dos vías. La primera, linealizar el reactor,
+dio origen a N1 y N2. La segunda (V6) es la de esta sección: \emph{aprender un escenario único}
+que, puesto en el MPC determinista, dé la misma decisión que el MPC estocástico. Su base es el
+artículo de Homem-de-Mello, Valencia, Lagos y Lagos~\cite{homem2026}. La sección tiene dos
+partes. La primera explica, desde cero y con ejemplos, por qué un solo escenario puede bastar,
+qué dicen los teoremas del artículo y en qué consiste la estrategia de Rozas
+(secciones~\ref{sec:rozas-problema}--\ref{sec:rozas-estrategia}). La segunda comprueba, con la
+metodología del propio artículo, si el SMDFR cumple sus condiciones y si la estrategia funciona
+en lazo cerrado (secciones~\ref{sec:rozas-que}--\ref{sec:rozas-lazo}).
 
-\subsection{El teorema y sus condiciones}
-El artículo estudia programas de dos etapas con \emph{recurso fijo y costos fijos} (FRFC):
+\subsection{El problema desde cero: decidir antes de saber}\label{sec:rozas-problema}
+En cada consulta el MPC elige el plan de caudal del ACS \emph{antes} de saber si el ACS va a
+fallar y cuánto va a durar la falla. Hay dos maneras de decidir así:
+\begin{itemize}
+  \item \textbf{Estocástica:} considerar todos los escenarios posibles a la vez y minimizar el
+        costo \emph{esperado}. Es lo correcto, pero el problema crece con el número de escenarios.
+  \item \textbf{Determinista con un pronóstico:} reemplazar lo incierto por un solo valor y
+        resolver un problema barato. La elección intuitiva es el valor más probable o la media.
+\end{itemize}
+La segunda manera suele decidir mal, pero no por usar un solo escenario sino por usar el
+escenario equivocado. El ejemplo clásico lo muestra.
+
+\begin{ejemplo}[El vendedor de diarios]
+Un vendedor compra $z$ diarios antes de conocer la demanda $D\sim\mathcal U(0,100)$. Cada
+diario que sobra le cuesta $c_o=2$ y cada venta perdida, $c_u=3$. Su costo esperado es
+\[
+C(z)=c_o\,\mathbb E(z-D)_+ + c_u\,\mathbb E(D-z)_+=\frac{2z^2+3(100-z)^2}{200}.
+\]
+Al derivar e igualar a cero queda $F(z^*)=c_u/(c_u+c_o)=0.6$: el pedido óptimo es el
+\emph{cuantil} 0.6 de la demanda, $z^*=60$, con $C(60)=60$. Si el vendedor usa el pronóstico
+medio, $\hat D=50$, pide 50 y paga $C(50)=62.5$. Pero si «pronostica» $\hat D=60$ y resuelve el
+problema determinista, pide exactamente 60. Existe un escenario que decide tan bien como el
+problema estocástico. No es la media: es un cuantil que depende de los costos, es decir, de la
+decisión (figura~\ref{fig:f9-didactic}a).
+\end{ejemplo}
+
+\begin{ejemplo}[El mismo dilema en el SMDFR, en un paso]\label{ej:juguete}
+La PCT está en la consigna, 1179~K, y se puede pre-enfriar $e$~K por debajo, con un costo de
+seguimiento $e^2$. El límite es 1220~K, así que el margen es $41+e$~K. Si el ACS falla durante
+$D$~s, la PCT sube $\Delta T\approx0.3D$~K, con $D$ exponencial de media 46~s. Un exceso sobre
+1220~K cuesta $\rho$ por kelvin:
+\[
+J(e)=e^2+\rho\,\mathbb E\big[(0.3D-41-e)_+\big].
+\]
+Con $\rho=100$ el óptimo es $e^*=2.2$~K. El pronóstico medio dice que la falla calienta
+$0.3\cdot46=13.8$~K, menos que los 41~K de margen: el problema determinista no ve riesgo y no
+pre-enfría ($e=0$), así que pierde todo el valor de la solución estocástica (VSS: 5.6 de un costo
+de 70.7). En cambio, el escenario de una falla de $D^*=144$~s, tres veces la media y con
+probabilidad 4.4\,\%, da exactamente $e^*=2.2$~K. Con $\rho=1000$ se obtiene $e^*=11.3$~K y
+$D^*=174$~s (figura~\ref{fig:f9-didactic}c). Las secciones siguientes muestran que el MPC
+completo se comporta casi igual: pre-enfría 1.8 y 9.4~K, y su mejor falla única dura 170--190~s.
+\end{ejemplo}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/fig_f9_didactic.pdf}
+\caption{La idea del escenario único. (a) Vendedor de diarios: el costo esperado es mínimo en
+el cuantil 0.6 ($z^*=60$), no en la media. (b) El problema de un escenario con $D^*=60$ tiene un
+pliegue en $z^*$: sus pendientes van de $-3$ a $+2$ e incluyen la pendiente del costo esperado
+en $z^*$ (cero), así que su mínimo es el mismo. (c) El juguete del SMDFR
+(ejemplo~\ref{ej:juguete}): la falla de 144~s reproduce el pre-enfriamiento óptimo; la duración
+media no pre-enfría. Costos desplazados a su mínimo en (b) y (c).}
+\label{fig:f9-didactic}
+\end{figure}
+
+\takeaway{El escenario que mejor decide no es el más probable. Depende de los costos de
+equivocarse en cada dirección, y suele estar en la cola de la distribución.}
+
+\subsection{La clase de problemas: dos etapas con recurso fijo}\label{sec:rozas-clase}
+El artículo estudia problemas de \emph{dos etapas}. Primero se elige $z$ sin conocer $\xi$; luego
+$\xi$ se revela y se corrige con un \emph{recurso} $y$, que tiene un costo:
 \[
 \min_{z\in Z}\ f(z)+\mathbb E\big[Q(z,\xi)\big],\qquad
-Q(z,\xi)=\min\{q^\top y:\ Wy=h-Tz,\ y\ge0\},\quad \xi=(h,T),
+Q(z,\xi)=\min_{y\ge0}\big\{q^\top y:\ Wy=h-Tz\big\},\qquad \xi=(h,T).
 \]
-con $W$ y $q$ deterministas. Su teorema~1 afirma que, si el conjunto dual
-$U=\{u:\ W^\top u\le q\}$ es no vacío y acotado (supuesto~2) y además (i) $T$ es determinista o
-(ii) $T$ es aleatoria y cumple su lema~1 ($n<m$; o $n=m$ con $0\in\operatorname{int}U$; o $n=m$,
-$0$ punto extremo de $U$ y $-T^\top U$ dentro de un ortante), entonces el escenario
-$\xi^*=(T^*z^*,T^*)$ reproduce la solución estocástica $z^*$, y es la única si el problema de un
-escenario tiene solución única (supuesto~3). La idea de la demostración: con $h^*=T^*z^*$ el
-lado derecho de la segunda etapa se anula en $z^*$, todos los duales son óptimos y el
-subdiferencial de $Q(\cdot,\xi^*)$ es el conjunto entero $-T^{*\top}U$, que contiene al
-subgradiente esperado. Como $\xi^*$ se construye con $z^*$, el teorema no ahorra cómputo en una
-consulta aislada. Su uso práctico es el caso \emph{contextual}: aprender un pronóstico
-$\Phi(\theta,x)\approx\xi^*_x$ que dependa del estado $x$, entrenado por la calidad de la
-decisión (algoritmo~1 del artículo: pronosticar, planificar, medir el costo realizado y
-ajustar $\theta$ con Nelder--Mead).
+El artículo exige \emph{recurso fijo y costos fijos} (FRFC): $W$ y $q$ son deterministas. El azar
+sólo entra en $h$ (lo que hay que compensar) y en $T$ (cómo entra la decisión a la segunda etapa).
+La segunda etapa es un programa lineal, y su dual describe los «precios» posibles de una unidad
+más de desajuste:
+\[
+Q(z,\xi)=\max_{u\in U}\,(h-Tz)^\top u,\qquad U=\{u:\ W^\top u\le q\}.
+\]
+Para cada $\xi$, $Q$ es convexa y lineal por tramos en $z$, con pendientes $-T^\top u$, $u\in U$.
 
-En el SMDFR la primera etapa es el plan $u\in\mathbb R^{26}$ del QP de N2 (caja $[0,40]$~kg/s,
-rampa dura de 5~kg/s, $R=0.1$) y $f$ es su costo. Se prueban tres segundas etapas
-(tabla~\ref{tab:f9-condiciones}).
+\begin{ejemplo}[El vendedor como problema de dos etapas]
+El recurso registra lo que sobra ($y^+$) y lo que falta ($y^-$): $y^+-y^-=z-D$, con costo
+$c_oy^++c_uy^-$. Entonces $W=[1,\,-1]$, $q=(c_o,c_u)$, $h=-D$ y $T=-1$. El conjunto dual es el
+intervalo $U=[-c_u,\,c_o]=[-3,\,2]$: los precios de un diario de más o de menos.
+\end{ejemplo}
+
+\paragraph{El SMDFR en esta forma.} La primera etapa es el plan completo $u\in\mathbb R^{26}$
+del QP de N2 (caja $[0,40]$~kg/s, rampa dura de 5~kg/s) y $f$ es su costo: seguimiento, bisagra
+del margen y supresión de movimiento $R=0.1$. El MPC aplica sólo $u_1$ y reoptimiza, pero dentro
+de una consulta el plan es de lazo abierto: el recurso no cambia el caudal, sólo mide el exceso
+sobre 1220~K en cada paso,
+\[
+s^+_k-s^-_k=\hat y_k(u)+d+\Delta T(D)-1220,\qquad \text{costo } \rho\,s^+_k .
+\]
+Así $W=[I,\,-I]$ y $q=(\rho\mathbf 1,\,\mathbf 0)$ son fijos, $h$ contiene a $\Delta T(D)$ y
+$T=-G$, donde $G$ es la sensibilidad de la PCT predicha al caudal ($\hat y=y_0+Gu$). El conjunto
+dual es la caja $U=[0,\rho]^{26}$. Ésta es la pérdida esperada de F6 (P1). Se prueban otras dos
+segundas etapas (tabla~\ref{tab:f9-condiciones}).
 
 \begin{table}[H]\centering\small
-\caption{Las tres segundas etapas y las condiciones del teorema~1. $G$ es la matriz de
-sensibilidad de la PCT predicha al caudal ($\hat y=y_0+Gu$).}
+\caption{Las tres segundas etapas probadas y las condiciones del teorema~1.}
 \label{tab:f9-condiciones}
 \begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.5cm}>{\raggedright\arraybackslash}p{3.9cm}>{\raggedright\arraybackslash}p{1.9cm}>{\raggedright\arraybackslash}p{4.3cm}@{}}
 \toprule
@@ -48,24 +117,153 @@ P3: seguimiento en $L_1$ con error de pronóstico de fuga & $\delta L\sim\mathca
 \end{tabular}
 \end{table}
 
-\noindent El supuesto~3 merece una nota. Sin supresión de movimiento,
-$\lambda_{\min}(G^\top G)\approx1.6\cdot10^{-6}$: el QP es casi singular y planes muy distintos
-dan casi el mismo costo. Con $R=0.1$ (sección~\ref{sec:supresion}),
-$\lambda_{\min}(G^\top G+RD^\top D)\approx2.2\cdot10^{-3}$ en todas las consultas. \textbf{La
-unicidad que pide el teorema la da la supresión de movimiento.}
+\subsection{Teorema 1: existe un escenario que basta}\label{sec:rozas-teorema}
+\begin{proposicion}[Teorema~1 de~\cite{homem2026}]\label{prop:homem}
+Supóngase que $Z$ es no vacío y convexo, $f$ convexa con $\operatorname{ri}\operatorname{Dom}f
+\neq\emptyset$ (supuesto~1), y que $U$ es no vacío y acotado (supuesto~2). Sea $z^*$ una solución
+del problema de dos etapas. Si (i) $T$ es determinista, o (ii) $T$ es aleatoria y cumple el
+lema~1, existe una matriz fija $T^*$ tal que, con $h^*=T^*z^*$ y $\xi^*=(h^*,T^*)$,
+\[
+z^*\in\arg\min_{z\in Z}\ f(z)+Q(z,\xi^*).
+\]
+Si el problema de un escenario tiene solución única (supuesto~3), esa solución es $z^*$.
+\end{proposicion}
 
-\subsection{Experimento}
+\paragraph{Por qué funciona, en tres pasos.}
+\begin{enumerate}
+  \item \emph{Optimalidad de $z^*$.} Como el problema es convexo, $z^*$ es óptimo si y sólo si
+        $0\in\partial f(z^*)+N_Z(z^*)+\mathbb E[\partial_zQ(z^*,\xi)]$. El último término es un
+        promedio de pendientes $-T^\top u$ con $u\in U$.
+  \item \emph{El pliegue.} Se elige $\xi^*$ de modo que en $z^*$ el lado derecho se anule:
+        $h^*-T^*z^*=0$. La segunda etapa queda exactamente equilibrada, todo $u\in U$ es dual
+        óptimo, y $Q(\cdot,\xi^*)$ tiene en $z^*$ un pliegue con \emph{todas} las pendientes
+        permitidas: $\partial_zQ(z^*,\xi^*)=-T^{*\top}U$.
+  \item \emph{Encierro.} Si ese conjunto contiene al promedio de las pendientes del paso~1,
+        $z^*$ cumple también la condición de optimalidad del problema de un escenario.
+\end{enumerate}
+En el caso (i), $T^*=T$ y el encierro es inmediato, porque un promedio de puntos de $-T^\top U$
+queda en $-T^\top U$ (es convexo). En el vendedor, $\xi^*$ da $D^*=z^*=60$: el problema
+determinista con demanda 60 tiene un pliegue en 60 con pendientes de $-3$ a $+2$, y el costo
+esperado tiene pendiente 0 allí (figura~\ref{fig:f9-didactic}b). Para el SMDFR, el escenario del
+teorema pone el pliegue de cada paso $k$ en la PCT del plan óptimo: el margen del escenario es
+$\delta^*_k=1220-d-\hat y_k(u^*)$, uno distinto por paso.
+
+\begin{ejemplo}[Proveedor no confiable: un escenario fuera del soporte]
+Si el proveedor entrega sólo una fracción $R\sim\mathcal U(0,1)$ de lo pedido, $T=-R$ es
+aleatoria. El artículo muestra que entonces sirve cualquier escenario con $\bar D=\bar Rz^*$; con
+$\bar R=1/2$ y costos de faltante altos, $\bar D$ supera la demanda máxima (100). El escenario
+óptimo puede ser imposible: es un recurso de cálculo, no un pronóstico de lo que va a pasar. El
+análogo en el SMDFR es la falla parcial, en la que la planta recibe $\eta u$.
+\end{ejemplo}
+
+\paragraph{El lema~1: cuándo alcanza una matriz fija.} Si $T$ es aleatoria, el promedio de las
+pendientes vive en $\mathbb E[-T^\top U]$, el promedio de conjuntos distintos, y hay que encerrarlo
+en la imagen de \emph{una} matriz fija, $-T^{*\top}U$. El lema~1 da tres condiciones suficientes:
+(a) hay menos decisiones que filas, $n<m$; (b) $n=m$ y $0$ está en el interior de $U$; (c) $n=m$,
+$0$ es un vértice de $U$ y todas las imágenes $-T^\top U$ caen en un mismo ortante. El
+contraejemplo del artículo muestra por qué importa $n\le m$: con una sola fila ($U=[0,1]$) y dos
+decisiones, si $-T^\top$ vale $(1,0)^\top$ o $(0,1)^\top$ con igual probabilidad, el promedio de
+los dos segmentos es un cuadrado, y ninguna matriz fija de $2\times1$ convierte un segmento en un
+cuadrado. En el SMDFR, la P2 implementada tiene una fila por escenario y 26 decisiones: es
+exactamente ese caso. Escrita con una fila por paso ($m=n=26$) cumple la condición (c): $0$ es un
+vértice de $[0,\rho]^{26}$, y como más caudal enfría la PCT en todos los pasos siguientes
+($G_{ki}<0$), todas las imágenes caen en el mismo ortante.
+
+\paragraph{Dos observaciones.} Las condiciones son \emph{suficientes}: el paso~3 sólo necesita
+encerrar \emph{un} vector, el promedio de las pendientes en $z^*$, y no el conjunto entero. Por
+eso puede existir un escenario aunque falle el lema (se comprueba en E2). Además, $\xi^*$ se
+construye con $z^*$: para una consulta aislada, el teorema no ahorra cómputo, porque hay que
+resolver primero el problema estocástico. Su valor está en lo que permite aprender.
+
+\subsection{La estrategia de Rozas: aprender el escenario según el contexto}\label{sec:rozas-estrategia}
+En cada consulta el MPC conoce un \emph{contexto} $x$: el margen hasta 1220~K, el sesgo, el caudal
+aplicado, la fuga, la rapidez del calentamiento sin ACS. El problema de interés es contextual,
+$\min_{z}\mathbb E[G(z,\xi)\mid X=x]$, y lo que se busca es una \emph{política} $\pi:x\mapsto z$.
+
+\paragraph{Proposiciones 1 y 2 del artículo.} La mejor política en promedio es la que resuelve
+el problema para cada $x$ por separado (proposición~1). Bajo los supuestos 1--3, esa decisión es
+la del problema de un escenario con el escenario óptimo de ese contexto, $\xi^*_x$
+(proposición~2). Por lo tanto, para aproximar la mejor política basta con \emph{pronosticar}
+$\xi^*_x$: el artículo lo llama el \emph{pronóstico puntual óptimo}. No es la media condicional
+$\mathbb E[\xi\mid x]$.
+
+\begin{ejemplo}[El vendedor con contexto]
+Si la demanda depende del día ($x$ = día hábil o fin de semana), el pronóstico que decide bien es
+el cuantil 0.6 de la demanda \emph{de ese día}. Una regresión de mínimos cuadrados aprende la
+media condicional y pide de menos todos los días. Una regresión entrenada con el costo de la
+decisión aprende el cuantil.
+\end{ejemplo}
+
+\paragraph{Cómo se aprende: el algoritmo~1.} Con datos $(x_n,\xi_n)$ y un pronosticador
+$\Phi(\theta,x)$, por ejemplo una regresión lineal, se resuelve el problema binivel
+\[
+\min_\theta\ \frac1N\sum_{n=1}^N G\big(z^*_D(\Phi(\theta,x_n)),\,\xi_n\big),\qquad
+z^*_D(\hat\xi)=\arg\min_{z\in Z}\,G(z,\hat\xi).
+\]
+El algoritmo~1 lo hace sin derivadas~\cite{diasgarcia2024}: para el $\theta$ actual,
+\emph{pronostica} el escenario de cada dato, \emph{planifica} con el problema de un escenario,
+\emph{mide} el costo realizado con el $\xi_n$ verdadero y \emph{ajusta} $\theta$ con Nelder--Mead.
+No se usan derivadas porque $z^*_D(\cdot)$ es continua pero no diferenciable. El pronosticador se
+evalúa por la calidad de la decisión que induce, no por su error de pronóstico.
+
+\paragraph{Qué garantiza.} Los teoremas~2 y~3 dicen que, al crecer los datos, el $\theta$
+aprendido converge al mejor de su clase, si $\Phi$ es continua (o $\theta$ toma finitos valores),
+los datos son independientes e idénticamente distribuidos, $Z$ es acotado y el conjunto de
+$\theta$ es compacto. El teorema~4 acota la pérdida: si la clase puede aproximar $\xi^*_x$ con
+error $\delta$, el costo extra es a lo más $K\delta$; exige una primera etapa lineal.
+
+\begin{figure}[H]\centering
+\begin{tikzpicture}[node distance=4mm and 5mm,
+  box/.style={draw=accent, rounded corners=2pt, fill=soft, align=center, font=\footnotesize,
+              minimum height=9mm, text width=2.55cm},
+  lab/.style={font=\footnotesize\bfseries, text=ink},
+  arr/.style={-{Stealth[length=2mm]}, accent, thick}]
+\node[lab] (off) {Fuera de línea};
+\node[box, below=2mm of off.south west, anchor=north west] (d) {datos $(x_n,\xi_n)$\\de lazos cerrados};
+\node[box, right=of d] (f) {pronosticar\\$\hat\xi_n=\Phi(\theta,x_n)$};
+\node[box, right=of f] (p) {planificar: QP de\\un escenario};
+\node[box, right=of p] (c) {costo realizado\\$G(z^*_D,\xi_n)$};
+\draw[arr] (d) -- (f); \draw[arr] (f) -- (p); \draw[arr] (p) -- (c);
+\draw[arr] (c.south) -- ++(0,-4mm) -| node[pos=0.25, below, font=\scriptsize] {Nelder--Mead ajusta $\theta$} (f.south);
+\node[lab, below=15mm of d.south west, anchor=north west] (on) {En línea, cada 0.5~s};
+\node[box, below=2mm of on.south west, anchor=north west] (x) {consulta:\\contexto $x$};
+\node[box, right=of x] (g) {$\hat\delta=\Phi(\theta^*,x)$};
+\node[box, right=of g] (q) {un QP\\determinista};
+\node[box, right=of q] (a) {aplicar $u_1$};
+\draw[arr] (x) -- (g); \draw[arr] (g) -- (q); \draw[arr] (q) -- (a);
+\end{tikzpicture}
+\caption{La estrategia de Rozas (vía V6). Lo caro, aprender qué escenario usar en cada contexto,
+se hace fuera de línea; en línea se resuelve un solo QP determinista, del mismo tamaño que N2.}
+\label{fig:f9-estrategia}
+\end{figure}
+
+\paragraph{Qué podría fallar en el SMDFR.} (a) Que no se cumplan las condiciones: la P2
+implementada queda fuera del lema~1, y la unicidad no está garantizada sin $R$. (b) Que el
+escenario del teorema no sea físico y que una familia física (una duración de falla) no alcance.
+(c) Que el contexto no sea independiente de las decisiones: en un MPC el contexto de la consulta
+siguiente depende de la decisión de ésta, y el teorema~2 supone datos independientes. Las pruebas
+de las secciones siguientes atacan estos tres puntos.
+
+\subsection{Qué se comprueba y cómo}\label{sec:rozas-que}
 Se capturaron las consultas de 50 lazos cerrados (familia DET acelerada, $\mu\times10^4$,
 40~kg/s, N2 con la pérdida esperada $\rho=1000$, $R=0.1$, fallas del DET): una de cada seis,
 4050 consultas, de las cuales 1050 también para P2 y P3. En cada una se reconstruye el QP del
-lazo (reproduce su decisión con error $\le0.011$~kg/s) y se hacen las comprobaciones del
-artículo: E1, los supuestos; E2, el teorema~1 en forma constructiva; E3, el problema
-bilevel~(38)--(39) del artículo resuelto sin derivadas, pero restringido a escenarios
-\emph{físicos}; E4, el caso contextual; E5, el lazo cerrado. Los QP se resuelven con Clarabel
-con tolerancias de $10^{-10}$: con tolerancias estándar ($10^{-8}$) las diferencias que se miden
-quedan dentro del ruido del solver. Código: \code{julia/F9Rozas.jl}, \code{julia/f9\_rozas.jl};
-resultados: \code{results/f9\_rozas/summary.md}. Son 50 lazos y unos 3~millones de QP, en
-51~min con 20 procesos en Olab.
+lazo (reproduce su decisión con error $\le0.011$~kg/s) y se hacen cinco pruebas: E1, los
+supuestos; E2, el teorema~1 en forma constructiva; E3, el problema binivel del artículo resuelto
+sin derivadas, pero restringido a escenarios \emph{físicos}; E4, el aprendizaje contextual con el
+algoritmo~1; E5, el lazo cerrado. Los QP se resuelven con Clarabel con tolerancias de $10^{-10}$:
+con tolerancias estándar ($10^{-8}$) las diferencias que se miden quedan dentro del ruido del
+solver. Código: \code{julia/F9Rozas.jl}, \code{julia/f9\_rozas.jl}; resultados:
+\code{results/f9\_rozas/summary.md}. Son unos 3~millones de QP, en 51~min con 20 procesos en
+Olab.
+
+\paragraph{E1: los supuestos.} Los supuestos~1 y~2 se cumplen por construcción ($Z$ es una caja
+con rampa, $U=[0,\rho]^{26}$ es acotado). El supuesto~3 merece una nota. Sin supresión de
+movimiento, $\lambda_{\min}(G^\top G)\approx1.6\cdot10^{-6}$: el QP es casi singular y planes muy
+distintos dan casi el mismo costo. Con $R=0.1$ (sección~\ref{sec:supresion}),
+$\lambda_{\min}(G^\top G+RD^\top D)\approx2.2\cdot10^{-3}$ en todas las consultas. \textbf{La
+unicidad que pide el teorema la da la supresión de movimiento.} La condición de ortante del
+lema~1~(iii) se cumple en el 100\,\% de las consultas.
 
 \subsection{E2: el escenario del teorema existe, pero no es físico}
 Se resuelve el SAA (200 cuantiles de $D$), se construye $\xi^*$ con su solución y se resuelve el
@@ -138,7 +336,8 @@ Duración media o mediana (pronóstico puntual) & 1 & 76\,\% & 1 & 23\,\%\\
         riesgo. Es el mensaje central del artículo: el escenario que mejor decide no es el más
         probable.
   \item \textbf{Una falla única bien elegida recupera el 94\,\% ($\rho=100$) y el 99.5\,\%
-        ($\rho=1000$) del VSS.} Su duración mediana es de 170--190~s, unas cuatro veces la media:
+        ($\rho=1000$) del VSS.} Como en el juguete del ejemplo~\ref{ej:juguete}, su duración mediana,
+170--190~s, es unas cuatro veces la media:
         está en la cola de la distribución. La acción que se aplica, $u_1$, coincide con la del
         SAA (a menos de 0.01~kg/s) en el 95\,\% ($\rho=100$) y el 71\,\% ($\rho=1000$) de las
         consultas; las demás diferencias están en la cola del plan, que el MPC reoptimiza en la
@@ -162,13 +361,13 @@ de un escenario). El SAA es más rápido hasta $N\approx2000$; con los 40 cuanti
 (0.06~s) no hay ventaja computacional que ganar.
 
 \subsection{E4: el caso contextual}\label{sec:rozas-contextual}
-Ésta es la propuesta de Rozas propiamente dicha: aprender, fuera de línea, un pronóstico del
-escenario en función del contexto, $\hat\delta=\Phi(\theta,x)$, para que en línea sólo se resuelva
-el MPC determinista con ese escenario. El contexto $x$ son ocho cantidades que el lazo conoce en
-cada consulta: el margen hasta 1220~K, el sesgo $d$, el caudal aplicado, la fuga y el
-calentamiento sin ACS tras 10, 46, 150 y 400~s. Se siguió el artículo: regresión lineal sobre $x$
-estandarizado, ajustada con su algoritmo~1 (pronosticar, planificar, evaluar el costo realizado)
-y Nelder--Mead~\cite{diasgarcia2024}, con 8 duraciones sorteadas por consulta como datos. Se
+Ésta es la estrategia de Rozas propiamente dicha (sección~\ref{sec:rozas-estrategia},
+figura~\ref{fig:f9-estrategia}). El escenario es el margen $\hat\delta=\Phi(\theta,x)$, y el
+contexto $x$ son ocho cantidades que el lazo conoce en cada consulta: el margen hasta 1220~K, el
+sesgo $d$, el caudal aplicado, la fuga y el calentamiento sin ACS tras 10, 46, 150 y 400~s. Se
+siguió el artículo: regresión lineal sobre $x$ estandarizado, ajustada con su algoritmo~1 y
+Nelder--Mead~\cite{diasgarcia2024}, con 8 duraciones sorteadas por consulta como datos
+$\xi_n$. Se
 entrenó con las realizaciones 201--235 (2835 consultas) y se evaluó con 236--250 (1215 consultas),
 con el costo esperado exacto. Como variante (no está en el artículo) se ajustó la misma
 regresión sobre el costo \emph{esperado} dado el contexto, en vez del realizado: es el mismo

@@ -282,6 +282,8 @@ Recurso relativamente completo (supuesto 2: duales acotados) & Las restricciones
 
 \textbf{Lectura}: el teorema cubre la incertidumbre de \textbf{pronóstico} (fuga, error del ROM) con un MPC lineal y costo $L_1$. No cubre directamente la falla del ACS. Para ella sirven las capas 1–2 y el MPC multietapa (V8).
 
+\textbf{Actualización (23-11-2026, F9, \S{}10.6).} Esta lectura era demasiado pesimista. Si todo el plan $u$ es primera etapa y la segunda etapa sólo mide el exceso sobre 1220 K, $W$ y $q$ son fijos: la falla total que empieza ahora entra por $h$ (caso i, se cumple) y una falla parcial dentro del horizonte vuelve aleatoria $T$, no $W$ (caso ii, se cumple escrita por paso por el lema 1 (iii)). El costo cuadrático de seguimiento va en $f$, que el teorema admite convexa.
+
 \subsection*{7.2 Experimento mínimo inspirado en el artículo}
 \addcontentsline{toc}{subsection}{7.2 Experimento mínimo inspirado en el artículo}
 En el \emph{newsvendor}, el escenario óptimo es un \textbf{cuantil} de la demanda. El código ya calcula los percentiles 50 y 95 del ensamble de MC-dropout (\code{Y\_denorm\_50}, \code{Y\_denorm\_95}), y P0 usa la mediana. El experimento es: para varios niveles $q$, resolver el MPC determinista con el percentil $q$ de la fuga y comparar su acción y su costo con los de la solución SAA, que usa las 59 trayectorias. Si algún $q$ reproduce la decisión SAA, ese es un escenario óptimo empírico. El paso siguiente es aprender $q$ (o un sesgo) en función del contexto, lo que corresponde al pronóstico orientado a la decisión del artículo.
@@ -1673,7 +1675,7 @@ Pérdida esperada con escenarios, $\rho$ = 100 (30 kg/s) & = N2 (inactiva) & 0.0
 \item \textbf{Decidir el alcance:} un paper (formulación + lazo cerrado + riesgo) o dos (formulación y certificación; capa de riesgo en lazo cerrado).
 \end{enumerate}
 
-\textbf{No necesarios para el paper:} escenario aprendido $g_\theta$ (el escenario óptimo es explícito); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c; el PSM con todas las fuentes de incertidumbre; las semillas pendientes de 3.i.0 (detacc 210–230), del estimador (251–260) y de las formulaciones (208–212).
+\textbf{No necesarios para el paper:} escenario aprendido $g_\theta$ (el escenario óptimo es explícito; comprobado de todos modos en F9, \S{}10.6, como nota de discusión); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c; el PSM con todas las fuentes de incertidumbre; las semillas pendientes de 3.i.0 (detacc 210–230), del estimador (251–260) y de las formulaciones (208–212).
 
 \subsection*{10.1 Avance del 18-11-2026: proposición escrita y campaña F6 en Olab}
 \addcontentsline{toc}{subsection}{10.1 Avance del 18-11-2026: proposición escrita y campaña F6 en Olab}
@@ -1695,8 +1697,8 @@ Pérdida esperada con escenarios, $\rho$ = 100 (30 kg/s) & = N2 (inactiva) & 0.0
 \textbf{Campaña} & \textbf{Punto} & \textbf{Diseño} & \textbf{Corridas} \\
 \midrule
 \endhead
-\code{sens} & 2 & Semillas 201–250 $\times$ capacidad \{30, 35, 40, 45, 50\} kg/s $\times$ (N2, PI, PID + cota con $\alpha$ ∈ \{0.05, 0.02, 0.01\} y CVaR 0.95, cada una diseñada con μ$\times$ ∈ \{3·10$^{3}$, 10$^{4}$, 3·10$^{4}$\}). Rao–Blackwell evaluado con los tres μ a la vez, así que también da la robustez a un μ mal especificado & 3750 \\
-\code{form} & 3 & 50 semillas, 40 kg/s: $\alpha$ = 0.1, CVaR 0.90/0.98, Wilks 59, pérdida esperada $\rho$ ∈ \{10, 100, 1000\} & 350 \\
+\code{sens} & 2 & Semillas 201–250 $\times$ capacidad \{30, 35, 40, 45, 50\} kg/s $\times$ (N2, PI, PID + cota con $\alpha$ $\in$ \{0.05, 0.02, 0.01\} y CVaR 0.95, cada una diseñada con μ$\times$ $\in$ \{3·10$^{3}$, 10$^{4}$, 3·10$^{4}$\}). Rao–Blackwell evaluado con los tres μ a la vez, así que también da la robustez a un μ mal especificado & 3750 \\
+\code{form} & 3 & 50 semillas, 40 kg/s: $\alpha$ = 0.1, CVaR 0.90/0.98, Wilks 59, pérdida esperada $\rho$ $\in$ \{10, 100, 1000\} & 350 \\
 \code{eta} & 2 & 50 semillas: N2, cota total $\alpha$ = 0.02, cota con $\eta$ ($\alpha$ = 0.01) para 4 vectores $p_\eta$ (base, uniforme, pesimista, dos trenes), CVaR y pérdida esperada con escenarios. Riesgo con los 4 vectores a la vez & 400 \\
 \code{det} & 3 & 50 semillas con fallas DET reales en el lazo: N1/N2/N3+sesgo, cota $\alpha$ = 0.02, CVaR 0.95, Wilks, pérdida esperada $\rho$ = 100, DSM de la tesis ($\lambda$ = 10$^{4}$), PI del DET y PID de la tesis & 500 \\
 \code{nom} & 3 & Familia nominal (escenario de la tesis), semillas impares 1–99, bomba archivada y 40 kg/s: N1/N2/N3, PID y PI; 121 consultas & 500 \\
@@ -1796,7 +1798,7 @@ Recuperación automática por redundancia (arranque del tren de reserva, transfe
 \bottomrule
 \end{xltabular}}
 
-\emph{Consecuencia.} Ninguna capa de control puede mitigar una falla que se termina por reparación o por acción del operador. Son ≫ τ $\approx$ 165 s, y la PCT llega a 1220 K pase lo que pase: eso pertenece al APS (frecuencia $\times$ consecuencia), no al MPC. El MPC sólo puede proteger contra interrupciones que se \textbf{recuperan automáticamente}. Ahí la duración incluye el arranque del tren de reserva (10–20 s), la realineación de válvulas y el restablecimiento del caudal en el circuito (decenas de segundos).
+\emph{Consecuencia.} Ninguna capa de control puede mitigar una falla que se termina por reparación o por acción del operador. Son $\gg$ τ $\approx$ 165 s, y la PCT llega a 1220 K pase lo que pase: eso pertenece al APS (frecuencia $\times$ consecuencia), no al MPC. El MPC sólo puede proteger contra interrupciones que se \textbf{recuperan automáticamente}. Ahí la duración incluye el arranque del tren de reserva (10–20 s), la realineación de válvulas y el restablecimiento del caudal en el circuito (decenas de segundos).
 
 \emph{Propuesta.}
 
@@ -1880,6 +1882,19 @@ Quedó escrito en el reporte de estado, \S{}4.5 (proposición «blanda y dura co
 \item \textbf{Sin capa de riesgo}, el riesgo no cambia hasta $R\approx3$ y sube 16 \% con $R=100$: la PCT queda 0.4 K sobre la consigna.
 \item \textbf{N3 = N2 con el mismo R}: $\Delta$PCT $\le$ 0.002 K y $\Delta$ṁ $\le$ 0.026 kg/s.
 \item \textbf{Verificación del margen blando}: la PCT predicha máxima es 1220.32 K en los 2350 lazos, así que la penalización no se activó en ninguna consulta.
+\end{itemize}
+
+\subsection*{10.6 F9: el escenario único de Homem-de-Mello et al., propuesto por H. Rozas (23-11-2026)}
+\addcontentsline{toc}{subsection}{10.6 F9: el escenario único de Homem-de-Mello et al., propuesto por H. Rozas (23-11-2026)}
+\textbf{Pregunta.} ¿Cumple el SMDFR las condiciones del teorema 1 de Homem-de-Mello et al. (2026), y funciona la vía V6 (aprender el escenario según el contexto) con la metodología del propio artículo? Código \code{julia/F9Rozas.jl} + \code{julia/f9\_rozas.jl} (fases A/B/B2/C; modo \code{:scenario} nuevo en \code{ClosedLoop.run\_loop}), resumen \code{python/f9\_summary.py} $\to$ \code{results/f9\_rozas/summary.md}, figuras \code{python/make\_f9\_figures.py} $\to$ \code{fig\_f9\_*}, reporte de estado \S{}36 (\code{docs/estado/11n\_rozas.tex}). Olab: 50 lazos (DET acelerada, 40 kg/s, μ$\times$1e4, R = 0.1), 4050 consultas analizadas (51 min), 650 lazos de validación ($\approx$ 30 min), 0 errores.
+
+\begin{itemize}
+\item \textbf{Condiciones.} Pérdida esperada (P1) y pronóstico de fuga con costo L1 (P3): caso (i), se cumplen. Fallas parciales dentro del horizonte (P2): como está implementada (una fila por escenario, m = 1 < n = 26) queda fuera del lema 1; escrita por paso (m = n) cumple el lema 1 (iii) porque todos los G\_ki < 0. Supuesto 3: $\lambda _{min}$(G$^{\top }$G) $\approx$ 1.6e-6 sin R; con R = 0.1, 2.2e-3: \textbf{la unicidad la da la supresión de movimiento}.
+\item \textbf{Teorema 1 constructivo:} el escenario ξ* = (T z*, T) reproduce el plan SAA en P1, P2 (ambas formas) y P3 (peor caso 0.026 kg/s). Pero no es físico: en P1 es un margen distinto por paso; en P3, un error de fuga a \textasciitilde{}1e5 σ.
+\item \textbf{Bilevel (38)–(39) con escenarios físicos:} una sola falla de duración D̂* (mediana 170–190 s, \textasciitilde{}4$\times$ la media) pierde el 6 \% ($\rho$ = 100) y el 0.5 \% ($\rho$ = 1000) del VSS; el pronóstico puntual E[D] lo pierde entero (la cota nunca se activa). CPU: el SAA como QP crece \textasciitilde{}lineal y es más rápido que la búsqueda hasta N $\approx$ 2000.
+\item \textbf{Contextual (V6):} Φ(θ, x) lineal con el algoritmo 1 + Nelder–Mead (pérdida realizada, como el artículo) captura el 89 \% / 97 \% del VSS fuera de muestra (oráculo de escenario único: 93 \% / 99.9 \%). Con la pérdida esperada (Rao–Blackwell, variante propia) 92 \% / 99.7 \%. La curva de aprendizaje converge (teorema 2); con 25 consultas puede ser peor que no usar riesgo.
+\item \textbf{Lazo cerrado:} con $\rho$ = 100 el MPC de un escenario reproduce el SAA ($\Delta$P = +0.0001 $\pm$ 0.0002). Con $\rho$ = 1000 el pronóstico con contexto completo \textbf{oscila} (VT 1694 vs 70 kg/s): baja el margen \textasciitilde{}10 K por σ del margen actual, así que el techo de la PCT se mueve contra la PCT con ganancia $\approx$ 1.6 > 1. El artículo supone contexto exógeno; en un MPC es endógeno. Con sólo variables lentas (fuga, calentamiento a 46/150/400 s) la oscilación desaparece (VT 84), con el mismo riesgo ($\Delta$P = +0.001, sobre la frontera). Un D̂ fijo protege menos ($\Delta$P = +0.004).
+\item \textbf{Para el paper:} la vía V6 queda respondida. Es una nota de discusión, no una contribución central: el resultado estructural (\S{}10.1) ya da el escenario explícito para las cotas, y la formulación recomendada sigue siendo la cota con cuantil.
 \end{itemize}
 
 \end{document}

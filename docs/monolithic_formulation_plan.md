@@ -304,6 +304,12 @@ Hay tres capas, de menor a mayor costo:
 MPC lineal y costo $L_1$. No cubre directamente la falla del ACS. Para ella sirven las
 capas 1–2 y el MPC multietapa (V8).
 
+**Actualización (23-11-2026, F9, §10.6).** Esta lectura era demasiado pesimista. Si todo el plan
+$u$ es primera etapa y la segunda etapa sólo mide el exceso sobre 1220 K, $W$ y $q$ son fijos:
+la falla total que empieza ahora entra por $h$ (caso i, se cumple) y una falla parcial dentro
+del horizonte vuelve aleatoria $T$, no $W$ (caso ii, se cumple escrita por paso por el lema 1
+(iii)). El costo cuadrático de seguimiento va en $f$, que el teorema admite convexa.
+
 ### 7.2 Experimento mínimo inspirado en el artículo
 
 En el *newsvendor*, el escenario óptimo es un **cuantil** de la demanda. El código ya
@@ -2026,7 +2032,7 @@ F1b.4 se saltó (§8.6, tabla F1b).
    y certificación; capa de riesgo en lazo cerrado).
 
 **No necesarios para el paper:** escenario aprendido $g_\theta$ (el escenario óptimo es
-explícito); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c;
+explícito; comprobado de todos modos en F9, §10.6, como nota de discusión); multietapa con re-planificación tras la falla; ajuste 4b.5 del certificado de F3c;
 el PSM con todas las fuentes de incertidumbre; las semillas pendientes de 3.i.0
 (detacc 210–230), del estimador (251–260) y de las formulaciones (208–212).
 

@@ -89,6 +89,15 @@ comparación de trayectorias.
         recorre la frontera seguimiento--suavidad. Con $R\ge0.03$ elimina una oscilación de
         período dos que tenía la capa de riesgo, sin cambiar el riesgo ni la masa. Se propone
         $R=0.1$ (secciones~\ref{sec:formulacion-final} y~\ref{sec:supresion}).
+  \item \textbf{¿Funciona la estrategia de Rozas, un escenario único aprendido?} Sí, con una
+        condición. El SMDFR cumple las condiciones del teorema de Homem-de-Mello et al.\ para la
+        pérdida esperada (y, escritas por paso, para las fallas parciales); la unicidad la da $R$.
+        El escenario del teorema reproduce la decisión estocástica pero no es físico; una sola
+        falla bien elegida, de unas cuatro veces la duración media, recupera el 94--99.5\,\% del
+        VSS, y el pronóstico medio no recupera nada. Un pronóstico lineal del escenario, aprendido
+        con el método del artículo, captura el 89--97\,\% del VSS fuera de muestra y en lazo
+        cerrado reproduce el riesgo del SAA, siempre que dependa sólo de variables que la decisión
+        no mueve de una consulta a la siguiente (sección~\ref{sec:rozas}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -135,6 +144,11 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
         extrema, porque allí el P0 está mal informado (capacidad reducida desconocida, sesgo
         desactualizado). El certificado responde si el solver resolvió el problema planteado;
         la trayectoria depende de si ese problema describe bien la planta.
+  \item \textbf{El escenario que mejor decide no es el más probable, y en lazo cerrado el
+        contexto no es exógeno.} Un pronóstico entrenado por la calidad de la decisión apunta a
+        la cola de la distribución, no a su media. Pero si depende de variables que la propia
+        decisión mueve, la realimentación puede desestabilizar el lazo: lo que se aprende fuera
+        de línea con datos independientes debe comprobarse en lazo cerrado.
 \end{enumerate}
 
 \subsection{Limitaciones}

@@ -56,6 +56,47 @@ def ecdf(ax, v, color, label, lw=1.6, ls="-"):
     ax.step(v, np.arange(1, len(v) + 1) / len(v), where="post", color=color, lw=lw, ls=ls, label=label)
 
 
+# ---- Fig 0 (didactic): the one-scenario idea from first principles ---------------------------
+# (a) newsvendor, D ~ U(0,100), unsold c_o = 2, lost margin c_u = 3: expected cost, its optimum
+#     z* = 60 (the 0.6 quantile) and the mean forecast 50; (b) the one-scenario cost with D* = 60:
+#     a kink at z*, whose slopes [−c_u, c_o] contain the expected slope (0) → same minimiser;
+# (c) SMDFR toy: pre-cooling e below y_ref, failure heat-up ΔT = 0.3·D, D ~ Exp(46 s), ρ = 100.
+co, cu = 2.0, 3.0
+z = np.linspace(0, 100, 401)
+EC = co * z**2 / 200 + cu * (100 - z)**2 / 200
+fig, axs = plt.subplots(1, 3, figsize=(W, 2.35), layout="constrained")
+ax = axs[0]
+ax.plot(z, EC, color=BLUE, label="costo esperado E[Q(z,D)]")
+ax.axvline(60, color=BLUE, lw=0.8, ls=":"); ax.axvline(50, color=MUTED, lw=0.8, ls=":")
+ax.annotate("z* = 60\n(cuantil 0.6)", (60, 60), textcoords="offset points", xytext=(4, 22), fontsize=6.5, color=INK2)
+ax.annotate("pronóstico\nmedio 50", (50, 62.5), textcoords="offset points", xytext=(-46, 22), fontsize=6.5, color=INK2)
+ax.set_ylim(55, 110); ax.set_xlabel("pedido z"); ax.set_ylabel("costo")
+ax.set_title("(a) vendedor de diarios", loc="left")
+ax = axs[1]
+Q1 = co * np.maximum(z - 60, 0) + cu * np.maximum(60 - z, 0)
+ax.plot(z, EC - 60, color=BLUE)
+ax.plot(z, Q1, color=ORANGE)
+ax.plot([60], [0], "o", color=ORANGE, ms=4)
+ax.set_ylim(-5, 60); ax.set_xlabel("pedido z"); ax.set_ylabel("costo − mínimo")
+ax.set_title("(b) el escenario del teorema 1", loc="left")
+ax = axs[2]
+e = np.linspace(0, 8, 401); s = 0.3 * 46; rho = 100.0
+Je = e**2 + rho * s * np.exp(-(41 + e) / s)
+es = e[np.argmin(Je)]; dst = 41 + es
+J1 = e**2 + rho * np.maximum(dst - 41 - e, 0)
+Jm = e**2 + rho * np.maximum(0.3 * 46 - 41 - e, 0)               # scenario E[D]: never active
+h1, = ax.plot(e, Je - Je.min(), color=BLUE)
+h2, = ax.plot(e, J1 - J1.min(), color=ORANGE)
+h3, = ax.plot(e, Jm - Jm.min(), color=MUTED, ls="--", lw=1.2)
+ax.axvline(es, color=INK2, lw=0.6, ls=":")
+ax.set_ylim(-3, 60); ax.set_xlabel("pre-enfriamiento e [K]")
+ax.set_title("(c) juguete SMDFR, ρ = 100", loc="left")
+fig.legend([h1, h2, h3], ["costo esperado (incertidumbre completa)",
+                          f"un escenario: (b) D* = 60, (c) falla de D* ≈ {dst/0.3:.0f} s",
+                          "un escenario = pronóstico medio E[D] = 46 s (no pre-enfría)"],
+           loc="upper center", bbox_to_anchor=(0.5, -0.02), ncol=2, fontsize=6.6)
+save(fig, "fig_f9_didactic")
+
 A = rows("A_queries")
 # ---- Fig 1: Theorem 1 vs physical one-scenario -----------------------------------------------
 if A:

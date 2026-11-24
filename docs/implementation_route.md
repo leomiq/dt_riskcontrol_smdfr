@@ -278,6 +278,13 @@ puntos de operación), reformular el plan y volver a reunirse en 3–4 semanas.
   outside the Box*, Math. Program., doi:10.1007/s10107-026-02359-9 (enviado por H. Rozas).
   Su teorema exige dos etapas, segunda etapa lineal y recurso fijo; el análisis de
   aplicabilidad está en [`monolithic_formulation_plan.md`](monolithic_formulation_plan.md) §7.
+- **Estado (23-11-2026, F9)**: hecho. Las condiciones del teorema se cumplen para la pérdida
+  esperada y, escritas por paso, para las fallas parciales; un pronóstico lineal del escenario
+  entrenado con el algoritmo 1 del artículo captura el 89–97 % del VSS fuera de muestra y en
+  lazo cerrado reproduce el riesgo del SAA, siempre que use sólo variables de contexto que la
+  decisión no mueve en una consulta (con el margen actual el lazo oscila). Detalle en
+  [`monolithic_formulation_plan.md`](monolithic_formulation_plan.md) §10.6 y en el reporte de
+  estado, §36, que explica también los teoremas del artículo con ejemplos.
 - **Desarrollo de V1–V3**: la escalera de modelos N0–N3, la formulación monolítica y el
   plan F0–F5 están en [`monolithic_formulation_plan.md`](monolithic_formulation_plan.md).
 

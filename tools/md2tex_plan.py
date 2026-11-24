@@ -5,12 +5,12 @@ src, dst = sys.argv[1], sys.argv[2]
 lines = open(src, encoding="utf8").read().splitlines()
 
 SUP = {"⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6",
-       "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-", "⁺": "+"}
+       "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-", "⁺": "+", "ᵀ": r"\top "}
 TXTMATH = {"≈": r"\approx", "≤": r"\le", "≥": r"\ge", "≪": r"\ll", "→": r"\to",
            "↔": r"\leftrightarrow", "×": r"\times", "±": r"\pm", "−": "-", "∩": r"\cap",
            "✓": r"\checkmark", "✗": r"\times", "λ": r"\lambda", "Δ": r"\Delta",
            "α": r"\alpha", "Λ": r"\Lambda", "β": r"\beta", "η": r"\eta",
-           "γ": r"\gamma", "ρ": r"\rho", "°": r"^\circ"}
+           "γ": r"\gamma", "ρ": r"\rho", "°": r"^\circ", "∈": r"\in", "≫": r"\gg"}
 
 
 def esc_text(s):
