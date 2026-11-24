@@ -93,6 +93,17 @@ reducen a un margen. Para verificarlo se implementaron todas en N2 (modos de \co
 \end{itemize}
 Las duraciones se truncan en 400~s, porque una falla más larga cruza con cualquier controlador.
 
+\paragraph{El PSM de Wilks, en su forma reducida.} El plan proponía estimar el PSM en línea con 59
+simulaciones Monte Carlo del ROM por consulta, sorteando fallas del ACS, saltos de la rotura y
+error de pronóstico, y tomar la PCT máxima como límite 95/95 (proposición~\ref{prop:wilks}). Si la
+única incertidumbre es una falla total del ACS, la proposición~\ref{prop:margen} lo reduce
+exactamente al máximo de 59 duraciones: el pico es $\hat y_k+d+\Delta T(D)$ con $\Delta T$
+creciente, así que la corrida con el pico más alto es la de la falla más larga. Eso es lo que se
+implementó (modo \code{:wilks}). La versión con todas las fuentes de incertidumbre no se
+implementó y queda fuera del paper. El Monte Carlo está en la evaluación: 50 realizaciones de lazo
+por formulación, con el riesgo estimado por Rao--Blackwell (sección~\ref{sec:riesgo-rb}) o, con
+las fallas dentro del lazo, por conteo directo (sección~\ref{sec:riesgo-fallas}).
+
 \begin{table}[H]\centering\small
 \begin{tabularx}{\linewidth}{@{}Y r r r@{}}\toprule
 Formulación (50 realizaciones) & $P(\text{cruce}\mid\text{falla})$ & K bajo $y_{\rm ref}$ & Masa\\\midrule

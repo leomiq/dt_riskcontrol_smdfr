@@ -1,0 +1,143 @@
+%======================================================================
+\section{Cómo entra el riesgo en cada formulación}\label{sec:riesgo-como-entra}
+%======================================================================
+Esta sección escribe cada peldaño de la escalera como una modificación explícita del QP de N2,
+dice sobre qué se monta, cuánto cuesta y qué supone, y explica por qué la capa se puso sobre N2 y
+no sobre N3.
+
+\subsection{El núcleo: N2 en lazo cerrado}
+En cada consulta, N2 resuelve un QP sobre el modelo linealizado a lo largo de la trayectoria
+prevista (sección~\ref{sec:niveles}). En forma condensada, $\hat y=\hat y^0+Gu$, con $G$ la
+sensibilidad de la PCT predicha al caudal (triangular inferior, $G_{ki}<0$: más caudal enfría):
+\begin{align*}
+\text{(N2)}\qquad\min_{u,\,r}\quad & \underbrace{\|\hat y^0+Gu+d\mathbf 1-y_{\rm ref}\mathbf 1\|^2}_{\text{seguimiento}}
++\underbrace{R\,\|\Delta u\|^2}_{\text{suavidad}}+\underbrace{\lambda_{\rm pct}\|r\|^2}_{\text{límite }U_y}\\
+\text{s.a.}\quad & 0\le u_k\le\mdot_{\max},\qquad |u_k-u_{k-1}|\le\Delta\mdot,\qquad
+\hat y^0_k+(Gu)_k+d-U_y\le r_k,\quad r_k\ge0,
+\end{align*}
+con $d$ el sesgo medido, $U_y=1244$~K, $\mdot_{\max}=40$~kg/s, $\Delta\mdot=5$~kg/s por paso y
+$R=0.1$. Es el peldaño 0. Ningún término contiene la falla: la predicción $\hat y^0$ supone que
+el ACS entrega lo que se le pide.
+
+\begin{figure}[H]\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  core/.style={draw=accent, line width=0.9pt, rounded corners=3pt, fill=soft, align=center,
+               font=\small, minimum height=22mm, text width=38mm},
+  plug/.style={draw=accent, line width=0.5pt, rounded corners=2pt, fill=white, align=center,
+               font=\footnotesize, minimum height=11mm, text width=37mm},
+  arr/.style={-{Stealth[length=2mm]}, line width=0.6pt, draw=ink},
+  lab/.style={font=\scriptsize, text=black!65, align=center, fill=white, inner sep=1pt}]
+\node[core] (n2) at (0,0) {\textbf{QP de N2}\\seguimiento + $R\|\Delta u\|^2$\\caja y rampa duras\\(peldaño 0)};
+\node[plug] (dsm) at (-6.2,1.6) {\textbf{DSM} (peldaño 1)\\término $\lambda[\mathrm{DSM}_k-\tau]_+^2$};
+\node[plug] (cota) at (-6.2,-1.6) {\textbf{Techo} $1220-m$ (peldaño 2)\\$m$: cuantil, CVaR, Wilks};
+\node[plug] (saa) at (6.2,1.6) {\textbf{Escenarios} (peldaño 2)\\$\rho\,\mathbb E[(\text{pico}-1220)_+]$, SAA};
+\node[plug] (esc) at (6.2,-1.6) {\textbf{Un escenario} (peldaño 3)\\$\hat\delta=\Phi(\theta,x)$ aprendido};
+\draw[arr] (dsm) -- node[lab, above, sloped]{costo} (n2);
+\draw[arr] (cota) -- node[lab, below, sloped]{26 restricciones} (n2);
+\draw[arr] (saa) -- node[lab, above, sloped]{$26\times40$ holguras} (n2);
+\draw[arr] (esc) -- node[lab, below, sloped]{26 holguras} (n2);
+\node[lab] (rom) at (-6.2,-3.4) {ROM sin ACS $\Rightarrow\Delta T(t)$};
+\draw[arr, dashed] (rom) -- (cota);
+\node[lab] (dist) at (6.2,-3.4) {datos de lazos cerrados $\Rightarrow\theta$};
+\draw[arr, dashed] (dist) -- (esc);
+\end{tikzpicture}}
+\caption{Las capas de riesgo se enchufan al mismo QP. Todas siguen siendo un QP convexo del
+tamaño de N2 o un poco mayor; ninguna cambia el modelo de predicción.}
+\label{fig:riesgo-enchufes}
+\end{figure}
+
+\subsection{Las formulaciones, una por una}
+\begin{table}[H]\centering\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{24mm} >{\raggedright\arraybackslash}p{50mm} >{\raggedright\arraybackslash}p{16mm} Y >{\raggedright\arraybackslash}p{14mm}@{}}\toprule
+Formulación & Qué se agrega a N2 & Base & Tamaño y tiempo (p99) & Fase\\\midrule
+\multicolumn{5}{@{}l}{\textit{Peldaño 0: determinista}}\\
+N1 / N2 / N3 & nada (límite $U_y$ blando, inactivo) & --- & 77 var.; 0.03--0.05~s (N3: NLP de 519 var., 0.2~s) & F2--F6\\
+\multicolumn{5}{@{}l}{\textit{Peldaño 1: margen determinista}}\\
+DSM de la tesis & $+\lambda_{\rm dsm}\sum_k[\mathrm{DSM}_k-\tau]_+^2$, $\mathrm{DSM}_k=\frac{\hat y_k+d-y_{\rm ref}}{U-y_{\rm ref}}$ & N2 & +26 holguras; igual & F5b.1b\\
+\multicolumn{5}{@{}l}{\textit{Peldaño 2: métricas probabilísticas}}\\
+Pronóstico gaussiano & $\hat y_k+z_{1-\varepsilon}\sigma_k\le U$ & N1 & igual & F4 (descartada)\\
+SAA de pronóstico & $\frac1M\sum_jJ(u_1,u^{(j)}_{2..K};\hat d^{(j)})$, $M=59$ & N3 & 30\,000 var.; 2~s & F4\\
+Cota con cuantil & $\hat y_k+d\le1220-\Delta T(q_{1-\alpha})+s_k$, $+\lambda_r\sum s_k$ & N2 & +26 holguras, 1 simulación ROM; 0.1~s & F5b.1c\\
+CVaR$_\beta$ & ídem con $m=\mathrm{CVaR}_\beta[\Delta T(D)]$ (200 cuantiles) & N2 & ídem & F5b.1c, F6\\
+Wilks 59 & ídem con $m=\Delta T(\max_{s\le59}D_s)$, sorteo nuevo por consulta & N2 & ídem & F5b.1c, F6\\
+Pérdida esperada & $+\frac{\rho}{40}\sum_{k,s}v_{ks}$, $v_{ks}\ge\hat y_k+d+\Delta T(D_s)-1220$, $v\ge0$ & N2 & +1040 var.; 0.3--0.4~s & F5b.1c, F6, F9\\
+Fallas parciales & escenarios $(j,\eta,D)$: $\hat y^{(s)}_k=\hat y^0_k+\sum_{i<j}G_{ki}u_i+\eta\sum_{i\ge j}G_{ki}u_i$ & N2 & +26 por escenario & F5b.1d\\
+Cota con $\eta$ & cuantil con $\sum_\eta p_\eta P(\Delta T_\eta(D)>m)=\alpha$ & N2 & 4 curvas ROM & F5b.1d\\
+\multicolumn{5}{@{}l}{\textit{Peldaño 3: escenario único}}\\
+Escenario del teorema & segunda etapa con $\xi^*$ (un margen por paso) & N2 & 26 holguras; requiere el SAA antes & F9 (E2)\\
+Escenario aprendido & $+\rho\sum_k(\hat y_k+d+\hat\delta-1220)_+$, $\hat\delta=\Phi(\theta,x)$ & N2 & 26 holguras; 0.03--0.07~s & F9 (E4--E5)\\
+\multicolumn{5}{@{}l}{\textit{Peldaño 4: multietapa (no implementado)}}\\
+Árbol de modos & caudales por nodo del árbol del ACS, no anticipación & N2 o N3 & crece con el árbol & V8\\\bottomrule
+\end{tabularx}
+\caption{Las formulaciones de riesgo como modificaciones de N2. «Igual»: mismo tamaño y tiempo
+que N2. Detalle de cada una en la sección indicada en la tabla~\ref{tab:riesgo-guia}.}
+\label{tab:riesgo-formulaciones-n2}
+\end{table}
+
+\paragraph{Peldaño 1: el DSM.} Es una penalización sobre la PCT \emph{predicha nominal}. Con el
+umbral sobre la consigna nunca se activa en N2 (sección~\ref{sec:dsm-lambda}); con el umbral bajo
+la consigna, mueve la consigna. En ninguno de los dos casos sabe nada de la falla.
+
+\paragraph{Peldaño 2, primera fuente: el pronóstico (F4).} La restricción gaussiana y la SAA de
+dos etapas tratan la fuga futura como aleatoria. La SAA se montó sobre N3, con 59 trayectorias
+del ensamble MC-dropout: el primer caudal es común y los demás se adaptan a cada trayectoria. Es
+la formulación más grande de esta parte, y no cambió ninguna decisión.
+
+\paragraph{Peldaño 2, segunda fuente: las fallas del ACS.} Las cuatro formulaciones de la
+sección~\ref{sec:riesgo-formulaciones} usan la misma curva $\Delta T$ del ROM sin ACS. Las tres
+primeras (cuantil, CVaR, Wilks) terminan en un techo $1220-m$; la cuarta (pérdida esperada) es
+una SAA con 40 escenarios que no es un techo, pero cuya solución activa un margen efectivo. Las
+fallas parciales dentro del horizonte son la única formulación en que la incertidumbre multiplica
+a la decisión ($\eta u$), y por eso la única que podría no reducirse a un margen.
+
+\paragraph{Peldaño 3: el escenario único.} Reemplaza la SAA de la pérdida esperada por un solo
+escenario, elegido para que la decisión sea la misma. La versión aprendida usa un pronóstico
+$\Phi(\theta,x)$ del margen, ajustado fuera de línea (figura~\ref{fig:f9-estrategia}).
+
+\subsection{Consideraciones de cada formulación}
+\begin{itemize}
+  \item \textbf{Qué garantiza.} La cota con cuantil garantiza $P(\text{cruce}\mid\text{falla})\le\alpha$
+        para una falla que empieza en la consulta, si la predicción corregida es exacta y valen A1--A2
+        (sección~\ref{sec:prop-aditiva}); no garantiza nada sobre fallas que ya empezaron ni sobre
+        varias fallas. Wilks garantiza lo mismo con $\alpha=0.05$ y confianza 0.952. El CVaR y la
+        pérdida esperada no garantizan un nivel, sino una severidad o un equilibrio de costos.
+  \item \textbf{Qué parámetro hay que elegir.} $\alpha$ es una probabilidad, comparable con los
+        criterios del APS. $\beta$ y $n$ se traducen a un $\alpha$ equivalente (CVaR$_{0.95}\approx0.015$,
+        Wilks $59\approx0.01$). $\rho$ no tiene una lectura física directa.
+  \item \textbf{Qué supone sobre las fallas.} Todas suponen la distribución de la duración. Si las
+        fallas reales duran más que las de diseño, la cota pierde su garantía (0.26 con
+        $\alpha=0.02$); si duran menos, sobra pero no cuesta (sección~\ref{sec:riesgo-aplicabilidad}).
+  \item \textbf{Qué supone sobre el modelo.} El calentamiento lo calcula el ROM. En la planta, los
+        estados pre-enfriados se calientan algo más lento ($\sim10$\,\%), así que el error tiene el
+        signo seguro (A1 conservador, sección~\ref{sec:prop-aditiva}).
+  \item \textbf{Efectos de lazo cerrado.} Con la cota activa, el costo queda casi plano en la
+        dirección del primer movimiento y el caudal oscila con período dos; $R\ge0.03$ lo corrige
+        (sección~\ref{sec:supresion}). El escenario aprendido con el margen actual como contexto
+        también oscila; con variables lentas, no (sección~\ref{sec:rozas-lazo}).
+  \item \textbf{Cómputo.} Todas caben en los 0.5~s: las cotas en $\approx0.1$~s y la SAA de 40
+        escenarios en $\le0.42$~s en el peor lazo.
+\end{itemize}
+
+\subsection{Por qué sobre N2 y cómo sería sobre N3}
+La capa se montó sobre N2 por tres razones. (i) \emph{Da la misma decisión que N3}: en lazo
+cerrado las trayectorias difieren en menos de 7~mK (sección~\ref{sec:trayectorias}), y la
+decisión de N3 está certificada a menos del 0.5\,\% del óptimo global, con la misma garantía para
+N2 (sección~\ref{sec:f7}); con $R=0.1$ siguen coincidiendo (menos de 0.002~K,
+sección~\ref{sec:supresion}). (ii) \emph{Es convexo}: un QP admite holguras $\ell_1$, CVaR y SAA
+sin perder el óptimo global, y el teorema de Homem-de-Mello exige convexidad. (iii) \emph{Es
+rápido}: un QP de 77 variables en $\sim30$~ms deja tiempo para la simulación del ROM y para 40
+escenarios.
+
+Sobre N3, la cota sería una restricción no lineal más, $\hat y_k(x_k)+d\le1220-m$, que Ipopt
+acepta sin cambios; la curva $\Delta T$ es la misma, porque se calcula con el ROM fuera del
+optimizador. La SAA con N3 ya se hizo en F4 (2~s con 59 escenarios). Lo que se perdería es la
+garantía de óptimo global de cada QP y la aplicabilidad directa del teorema del escenario único,
+que necesita una segunda etapa lineal. Como la decisión de N2 y N3 coincide, los resultados de
+riesgo valen para las dos.
+
+\takeaway{\textbf{Resumen.} Todas las capas de riesgo dejan intacto el modelo de predicción y
+agregan al QP de N2 un techo sobre la PCT (cuantil, CVaR, Wilks), un término de costo (DSM,
+pérdida esperada) o un escenario (Homem-de-Mello). Lo que distingue a una métrica
+probabilística de una determinista no es la forma del término, sino de dónde sale su constante:
+del proceso de fallas o de un número fijo.}

@@ -7,6 +7,7 @@
 %   .venv\Scripts\python python/make_didactic_figures.py    (capítulos introductorios)
 %   .venv\Scripts\python python/make_closed_loop_figures.py (lazo cerrado, fig_cl_*)
 %   .venv\Scripts\python python/make_synthesis_figures.py   (figuras de síntesis, syn_*)
+%   .venv\Scripts\python python/make_risk_tutorial_figures.py (métricas de riesgo, fig_risk_tutorial)
 % Notas de compilación: con Tectonic no usar UprightFont= junto con Path=; en pies de figura
 % y títulos usar \rm max / \rm min (babel-spanish choca con \max y \min en argumentos móviles).
 \documentclass[11pt,a4paper]{article}
@@ -51,7 +52,7 @@
 \large\mdseries Del reactor y su accidente a la formulación, resolución y certificación\\
 del problema de control}
 \author{Proyecto DT--SMDFR Risk Control}
-\date{Versión consolidada, 20 de noviembre de 2026}
+\date{Versión consolidada, 24 de noviembre de 2026}
 
 \begin{document}
 \maketitle
@@ -140,12 +141,15 @@ sección~\ref{sec:riesgo-formulaciones}).}
 \input{estado/11l_certificacion}
 
 \part{La capa de riesgo}
+\input{estado/11q_riesgo_fundamentos}
+\input{estado/11r_riesgo_formulaciones}
 \input{estado/11e_riesgo}
 \input{estado/11h_proposicion}
 \input{estado/11i_riesgo_resultados}
 \input{estado/11m_supresion}
 \input{estado/11n_rozas}
 \input{estado/11k_trayectorias}
+\input{estado/11s_riesgo_sintesis}
 
 \part{Conclusiones}
 \input{estado/12_conclusiones}
@@ -275,6 +279,18 @@ sección~\ref{sec:riesgo-formulaciones}).}
   NUREG-1032).
 \bibitem{nfpa110} NFPA 110. \emph{Standard for Emergency and Standby Power Systems}: la fuente
   de reserva debe tomar la carga en 10~s.
+\bibitem{lucia2013} S.~Lucia, T.~Finkler, S.~Engell. Multi-stage nonlinear model predictive
+  control applied to a semi-batch polymerization reactor under uncertainty. \emph{Journal of
+  Process Control} 23(9) (2013) 1306--1319.
+\bibitem{mesbah2016} A.~Mesbah. Stochastic model predictive control: an overview and perspectives
+  for future research. \emph{IEEE Control Systems Magazine} 36(6) (2016) 30--44.
+\bibitem{birge2011} J.~R.~Birge, F.~Louveaux. \emph{Introduction to Stochastic Programming},
+  2.ª ed. Springer, 2011.
+\bibitem{pereira1991} M.~V.~F.~Pereira, L.~M.~V.~G.~Pinto. Multi-stage stochastic optimization
+  applied to energy planning. \emph{Mathematical Programming} 52 (1991) 359--375.
+\bibitem{delage2010} E.~Delage, Y.~Ye. Distributionally robust optimization under moment
+  uncertainty with application to data-driven problems. \emph{Operations Research} 58(3) (2010)
+  595--612.
 \end{thebibliography}
 
 \end{document}

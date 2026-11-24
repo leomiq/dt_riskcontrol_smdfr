@@ -284,7 +284,7 @@ puntos de operación), reformular el plan y volver a reunirse en 3–4 semanas.
   lazo cerrado reproduce el riesgo del SAA, siempre que use sólo variables de contexto que la
   decisión no mueve en una consulta (con el margen actual el lazo oscila). Detalle en
   [`monolithic_formulation_plan.md`](monolithic_formulation_plan.md) §10.6 y en el reporte de
-  estado, §36, que explica también los teoremas del artículo con ejemplos.
+  estado, §41, que explica también los teoremas del artículo con ejemplos.
 - **Desarrollo de V1–V3**: la escalera de modelos N0–N3, la formulación monolítica y el
   plan F0–F5 están en [`monolithic_formulation_plan.md`](monolithic_formulation_plan.md).
 

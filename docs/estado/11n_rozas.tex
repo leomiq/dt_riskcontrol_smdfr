@@ -490,6 +490,84 @@ de contexto completo oscila (tabla~\ref{tab:f9-lazo}).}
         $\Delta P=+0.004$.
 \end{enumerate}
 
+\subsection{Alcance: cuánto vale la estrategia en el SMDFR}\label{sec:rozas-alcance}
+\paragraph{Qué se probó con fallas y qué no.} N1, N2 y N3, y todas las capas de riesgo, ya se
+probaron con las fallas del DET \emph{dentro} del lazo: el estado del ACS sigue las cadenas de
+Markov de sus cinco componentes, con tiempos de falla y de reparación sorteados
+(secciones~\ref{sec:riesgo-cota}, \ref{sec:riesgo-fallas} y~\ref{sec:supresion}). Ninguna
+variante de N2 llega a 1220~K en esas 50 realizaciones. En E5, en cambio, los lazos corrieron sin
+fallas y el riesgo se integró sobre el instante y la duración de la falla (Rao--Blackwell,
+sección~\ref{sec:riesgo-rb}). Ese estimador mide la misma probabilidad con menos varianza, pero
+no muestra qué hace el controlador después de la reparación; eso ya está en las secciones
+citadas. Hay que recordar además que N1--N3 son \emph{deterministas}: no anticipan la falla, y el
+gemelo usa el caudal pedido, así que ni siquiera sabe que el ACS falló. La aleatoriedad del ACS
+entra sólo por la capa de riesgo.
+
+\paragraph{Cómputo: no hay mucho que ganar.} El atractivo práctico de un escenario único es
+reemplazar un problema estocástico grande por uno determinista del tamaño de N2. Aquí N2 es un QP
+pequeño, y el SAA de 40 escenarios ya corre en tiempo real (tabla~\ref{tab:f9-cpu}).
+
+\begin{table}[H]\centering\footnotesize
+\caption{Tiempo por consulta en los 50 lazos de E5 (Olab, $\rho=100$ y 1000). El intervalo entre
+consultas es 0.5~s.}
+\label{tab:f9-cpu}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Controlador & mediana [s] & p99, lazo típico [s] & p99, peor lazo [s]\\
+\midrule
+N2 sin riesgo & 0.03 & 0.05 & 0.07\\
+SAA, 40 escenarios (pérdida esperada) & 0.14 & 0.29--0.30 & 0.42\\
+Un escenario, $\Phi$ aprendido & 0.02 & 0.03--0.05 & 0.07\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent Las dos opciones caben en el intervalo de 0.5~s. El escenario único sólo compra
+holgura: usa a lo sumo el 15\,\% del intervalo, frente al 84\,\% del SAA en el peor lazo. Como
+la decisión es la misma (E5), \textbf{en el SMDFR actual la estrategia no mejora el control ni
+hace falta para el tiempo real}. Su valor aquí es conceptual: explica por qué todas las
+formulaciones de riesgo se reducen a un margen (proposición~\ref{prop:margen}).
+
+\paragraph{Qué óptimo garantiza el teorema.} Conviene separar tres niveles:
+\begin{center}\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.42\linewidth}>{\raggedright\arraybackslash}p{0.24\linewidth}>{\raggedright\arraybackslash}p{0.26\linewidth}@{}}
+\toprule
+Nivel & ¿Lo alcanza la estrategia? & Estado en el SMDFR\\
+\midrule
+(A) Política óptima multietapa: el caudal se adapta al modo del ACS, a la edad de la falla y a
+la etapa del sistema de protección & no: el artículo trata problemas de dos etapas & no medido\\
+(B) MPC estocástico de dos etapas (SAA), re-optimizado cada 0.5~s & referencia & E2--E5\\
+(C) MPC de un escenario exacto $\xi^*$ & sí: brecha nula (teorema~1) & E2: $\le0.026$~kg/s\\
+(D) MPC de un escenario aprendido $\Phi(\theta,x)$ & casi: 89--99.7\,\% del VSS & E4--E5\\
+\bottomrule
+\end{tabular}
+\end{center}
+La estrategia lleva de (D) a (B), no a (A). Con las fallas del DET hay razones para esperar que la
+brecha entre (B) y (A) sea pequeña, aunque no se midió. Las fallas llegan como un proceso de
+Poisson y duran tiempos exponenciales, que no tienen memoria: saber cuánto lleva caído el ACS no
+predice cuándo vuelve. Durante la falla el caudal no actúa. Tras la reparación, el MPC vuelve a
+optimizar, y eso ya es un recurso. Lo único que se decide es cuánto margen tener \emph{antes} de la
+próxima falla, que es justo la segunda etapa P1.
+
+\paragraph{Cuándo valdría la pena.} La estrategia ganaría valor en tres situaciones que el
+experimento no cubre:
+\begin{enumerate}
+  \item \textbf{Tiempos de transición con memoria (no exponenciales).} Con retardos de detección y de actuación
+        del sistema de protección, o reparaciones de duración casi fija, la edad de la falla y la
+        etapa de protección sí predicen lo que falta. Son el tipo de contexto que $\Phi(\theta,x)$
+        convierte en un escenario. Además son \emph{exógenos}, porque el caudal no cambia cuándo
+        falla ni cuándo se repara el ACS, así que no producen la oscilación de E5.
+  \item \textbf{Una segunda etapa cara}: varias fallas, fallas parciales escritas por paso (caso~ii,
+        lema~1~iii) o un horizonte de riesgo largo. Ahí el SAA crece y un QP de un escenario sigue
+        costando lo mismo que N2. Con N3 la segunda etapa deja de ser lineal y el teorema~1 ya no
+        aplica.
+  \item \textbf{Un régimen donde el riesgo pese}: capacidad del ACS comparable a la fuga
+        (sección~\ref{sec:riesgo-aplicabilidad}). Con 40~kg/s y el DET acelerado, la capa de riesgo
+        cambia la probabilidad de cruce en 0.001--0.004.
+\end{enumerate}
+Medir la brecha entre (B) y (A) exigiría una referencia por programación dinámica sobre un modelo
+reducido (margen de PCT, modo del ACS, edad de la falla y etapa de protección).
+
 \takeaway{\textbf{Para recordar.} El SMDFR cumple las condiciones del teorema~1 en la pérdida
 esperada (caso i) y, escrita por paso, en las fallas parciales (caso ii, lema~1~iii); la
 unicidad la da la supresión de movimiento $R$. El escenario del teorema reproduce la decisión
@@ -499,4 +577,8 @@ de Rozas funciona: un pronóstico lineal del escenario, aprendido con el método
 captura el 89--97\,\% del VSS fuera de muestra y, en lazo cerrado, reproduce el riesgo del SAA,
 siempre que el pronóstico dependa sólo de variables que la decisión no mueve de una consulta a
 la siguiente. Si depende del margen actual, el lazo oscila: el artículo supone un contexto
-exógeno y en un MPC no lo es.}
+exógeno y en un MPC no lo es. En el SMDFR actual la ganancia es sólo de holgura de cómputo: N2 es
+un QP pequeño y el SAA de 40 escenarios ya corre en tiempo real (p99 $\le0.42$ de 0.5~s), con la
+misma decisión. El teorema cierra la brecha entre un escenario y el MPC de dos etapas, no la
+brecha con la política multietapa óptima; la estrategia valdría más con tiempos de protección con
+memoria (no exponenciales), una segunda etapa cara o un ACS cercano a la fuga.}

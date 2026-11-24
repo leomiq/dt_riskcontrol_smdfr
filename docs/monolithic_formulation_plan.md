@@ -2221,7 +2221,7 @@ Fuentes: [GI-122, Davis-Besse](https://www.nrc.gov/sr0933/section-3-new-generic-
 
 ### 10.4 Trayectorias de lazo cerrado por formulación y certificado global (20-11-2026)
 
-**Trayectorias** (reporte de estado, §35; `python/make_trajectory_figures.py` →
+**Trayectorias** (reporte de estado, §42; `python/make_trajectory_figures.py` →
 `docs/figures/traj_*`, `results/f6_paper/trajectory_distances.csv`). Se compararon las
 trayectorias completas de la campaña F6, a pares, con las mismas realizaciones (50 por familia).
 La métrica es el máximo en el tiempo de |PCT_A − PCT_B| por realización.
@@ -2321,7 +2321,7 @@ figuras `fig_f8_tradeoff` y `fig_f8_risk`.
 y funciona la vía V6 (aprender el escenario según el contexto) con la metodología del propio
 artículo? Código `julia/F9Rozas.jl` + `julia/f9_rozas.jl` (fases A/B/B2/C; modo `:scenario`
 nuevo en `ClosedLoop.run_loop`), resumen `python/f9_summary.py` → `results/f9_rozas/summary.md`,
-figuras `python/make_f9_figures.py` → `fig_f9_*`, reporte de estado §36 (`docs/estado/11n_rozas.tex`).
+figuras `python/make_f9_figures.py` → `fig_f9_*`, reporte de estado §41 (`docs/estado/11n_rozas.tex`).
 Olab: 50 lazos (DET acelerada, 40 kg/s, μ×1e4, R = 0.1), 4050 consultas analizadas (51 min),
 650 lazos de validación (≈ 30 min), 0 errores.
 
@@ -2350,3 +2350,13 @@ Olab: 50 lazos (DET acelerada, 40 kg/s, μ×1e4, R = 0.1), 4050 consultas analiz
 - **Para el paper:** la vía V6 queda respondida. Es una nota de discusión, no una contribución
   central: el resultado estructural (§10.1) ya da el escenario explícito para las cotas, y la
   formulación recomendada sigue siendo la cota con cuantil.
+- **Alcance (24-11-2026, reporte §41 «Alcance»).** En cómputo no hay mucho que ganar: en los
+  lazos de E5, N2 tarda p99 ≈ 0.05 s, el SAA de 40 escenarios 0.29–0.30 s (peor lazo 0.42 s) y el
+  escenario único 0.03–0.05 s, todos bajo los 0.5 s entre consultas y con la misma decisión. El
+  teorema reproduce el MPC de **dos etapas**, no la política multietapa óptima (adaptada al modo
+  del ACS, la edad de la falla y la etapa de protección), cuya brecha no se midió. Con fallas
+  Poisson y duraciones exponenciales (sin memoria) se espera pequeña. La estrategia valdría más con
+  tiempos de protección con memoria, no exponenciales (contexto exógeno, sin oscilación), una segunda etapa cara
+  (varias fallas, fallas parciales por paso, N3 fuera del teorema) o un ACS cercano a la fuga.
+  Nota: N1–N3 y las capas de riesgo sí se probaron con fallas del DET dentro del lazo (§8.14,
+  §8.17–8.18, F6 `det`, F8); los lazos de E5 corrieron sin fallas con riesgo por Rao–Blackwell.

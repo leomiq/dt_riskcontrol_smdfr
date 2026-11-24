@@ -1,0 +1,277 @@
+%======================================================================
+\section{Síntesis de resultados: de lo determinista a lo probabilístico}\label{sec:riesgo-sintesis}
+%======================================================================
+Las secciones anteriores siguen el orden en que se hicieron los experimentos. Esta sección los
+reordena por peldaño de la escalera (figura~\ref{fig:riesgo-escalera}): primero lo que logra un
+MPC determinista, sin y con pruebas de fallas, y qué tan robusto es; luego qué agrega cada manera
+de incorporar el riesgo.
+
+\subsection{Peldaño 0 sin fallas: el MPC determinista resuelve bien el problema que tiene}
+\begin{itemize}
+  \item \textbf{Lazo abierto.} N3 resuelve P0 en $\sim0.05$~s y N2 en cuatro QP de 10~ms, con la
+        misma decisión; una cota inferior certificada la ubica a menos del 2.3\,\% y del 11.4\,\%
+        del óptimo global en las dos consultas de prueba (parte~IV).
+  \item \textbf{Lazo cerrado nominal} (50 realizaciones, sección~\ref{sec:desempeno}). N1, N2 y N3
+        dan la misma trayectoria, se asientan en el 100\,\% de las realizaciones (5.5~s con
+        40~kg/s, 13~s con la caja archivada) y la PCT no pasa de 1185~K. Su IAE es entre 6 y 29
+        veces menor que el del PID y el del PI de la tesis.
+  \item \textbf{Incertidumbre que no importa.} El error de pronóstico de la fuga mueve la PCT
+        predicha $\sim0.025$~K y no cambia la decisión (F4, sección~\ref{sec:riesgo}). El desajuste
+        ROM--HRM es un sesgo de $\sim0.2$~K que la corrección \emph{offset-free} elimina
+        (sección~\ref{sec:f45}). Un pronóstico de Kalman o el caudal medido del ACS cambian el caudal
+        hasta 4~kg/s, pero no la PCT ($0.00\pm0.00$~K, sección~\ref{sec:riesgo-donde}).
+\end{itemize}
+
+\subsection{Peldaño 0 con pruebas de fallas: cuán robusto es el MPC determinista}
+El MPC determinista no conoce las fallas, pero se puede \emph{probar} contra ellas. Se hicieron
+cuatro pruebas, de la más dura a la más realista (tabla~\ref{tab:sintesis-robustez}).
+
+\begin{table}[H]\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{30mm} >{\raggedright\arraybackslash}p{36mm} Y >{\raggedright\arraybackslash}p{28mm}@{}}\toprule
+Prueba & Qué falla & N1 / N2 / N3 & Comparación\\\midrule
+Familia extrema, caja archivada (12.9~kg/s; sec.~\ref{sec:extremos}) & fuga 15--25~kg/s, ACS al 60--90\,\%, fallas de 30--90~s & 9/14 y 22/50 llegan a 1220~K; el MPC satura siempre y da lo mismo que el caudal máximo & sin ACS: 14/14\\
+Familia extrema, actuador físico (sec.~\ref{sec:extremos}, \ref{sec:desempeno}) & ídem & 0/14 y 0/50; PCT máxima 1189--1207~K, margen mínimo 13~K & PI del DET: 0/14; el MPC usa 25\,\% menos masa\\
+Mapa de capacidad (sec.~\ref{sec:riesgo-donde}) & capacidad 15--70~kg/s, familia extrema & con $\le20$~kg/s, 3--6 de 14 cruzan; con $\ge40$~kg/s, ninguna & PI: 6--10 de 14\\
+Fallas del DET en el lazo, 40~kg/s (sec.~\ref{sec:riesgo-fallas}) & 5 componentes Markov, $\lambda\times10^5$, $\mu\times10^4$, $\ge1$ falla por realización & 0/50; PCT pico media 1189~K; DSM mínimo 54.9~K & PID 1/50, PI 7/50\\
+Riesgo integrado (Rao--Blackwell, sec.~\ref{sec:riesgo-rb}) & cualquier instante y duración de la primera falla & $P(\text{cruce}\mid\text{falla})=0.031$; $\approx1.0$\,\% por transitorio & PID 0.033, PI 0.119\\
+Sensibilidad a la duración (sec.~\ref{sec:riesgo-aplicabilidad}) & media 15, 46 o 150~s & 0.002, 0.031 y 0.32 & ---\\\bottomrule
+\end{tabularx}
+\caption{Robustez del MPC determinista frente a fallas del ACS.}
+\label{tab:sintesis-robustez}
+\end{table}
+
+\paragraph{Qué significa «robusto» aquí.} Conviene separar tres afirmaciones.
+\begin{enumerate}
+  \item \textbf{Robustez empírica}: en las familias probadas con capacidad suficiente, ninguna
+        realización de N1--N3 cruza 1220~K, y los controladores de la tesis sí lo hacen. Es una
+        prueba de estrés: dice que no se vio un cruce, no cuán probable es.
+  \item \textbf{Riesgo residual}: medido con Rao--Blackwell, N2 cruza en el 3.1\,\% de las fallas
+        del caso base. Ese número no lo eligió nadie: lo fija la consigna.
+  \item \textbf{Garantía}: el MPC determinista no tiene ninguna. Su límite $U_y$ nunca se activa
+        (proposición~\ref{prop:blanda-dura}), y su predicción no contiene la falla.
+\end{enumerate}
+
+\paragraph{De dónde viene la robustez.} No de anticipar la falla, sino de \emph{seguir bien la
+consigna}. Con la PCT en $y_{\rm ref}\approx1180$~K hay 40~K hasta 1220~K, y la planta tarda
+$\tau\approx160$~s en recorrerlos sin ACS; sólo cruzan las fallas más largas que eso,
+$S(160)=0.031$ (figura~\ref{fig:riesgo-tutorial}b). El PI del DET tiene una zona muerta y recibe
+las fallas con la PCT alta: su $\tau$ baja hasta 45~s y su riesgo es casi cuatro veces mayor. La
+consigna actúa como un \emph{margen implícito}. La robustez del MPC determinista es, por lo tanto,
+la de su consigna más la precisión con que la sigue.
+
+\paragraph{Dónde se rompe.} (i) Si la capacidad del actuador no alcanza a la fuga (caja
+archivada), ningún controlador ni capa de riesgo evita el cruce: es un problema de diseño del ACS,
+no de control. (ii) Si las fallas duran tanto como $\tau$ (media de 150~s), el riesgo sube a 0.32
+y, de nuevo, ninguna capa lo baja a un nivel aceptable. (iii) Si las fallas se recuperan en
+decenas de segundos (caso base), el margen implícito deja un riesgo de 3\,\% que \emph{sí} se puede
+reducir pre-enfriando, y ése es el único régimen en que los peldaños siguientes cambian algo.
+
+\subsection{Peldaño 1: el margen determinista no agrega protección}
+El DSM de la tesis no cambia la trayectoria de N2 con ningún $\lambda_{\rm dsm}$ entre $10^2$ y
+$10^6$, ningún límite (1244 o 1220~K) ni ningún umbral probado, con y sin fallas: la PCT pico
+cambia menos de 0.002~K y la trayectoria con fallas del DET es la misma, con algo más de
+movimiento del actuador (secciones~\ref{sec:dsm-lambda} y~\ref{sec:riesgo-fallas}). La razón es
+estructural: el DSM se calcula sobre la predicción nominal, que no contiene la falla, y su umbral
+está 0.15~K sobre la consigna que N2 ya sigue. En la tesis se activaba por los errores del
+optimizador (LJ) y de la predicción, no por el riesgo. Un DSM con umbral bajo la consigna sería
+una consigna más baja, fija, sin calibrar en probabilidad.
+
+\subsection{Peldaño 2: las métricas probabilísticas}
+\paragraph{Riesgo de pronóstico (F4).} La SAA de dos etapas con 59 trayectorias de fuga, sobre
+N3, corre en $\sim2$~s y da la misma primera acción que el problema determinista: la incertidumbre
+de la fuga es unas 100 veces menor que la autoridad del actuador.
+
+\paragraph{Riesgo de fallas del ACS (F5b--F8).} La tabla~\ref{tab:sintesis-prob} reúne los
+resultados con 50 realizaciones a 40~kg/s, $\mu\times10^4$ y $R=0.1$ donde corresponde.
+
+\begin{table}[H]\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{38mm} r r r >{\raggedright\arraybackslash}p{18mm} Y@{}}\toprule
+Formulación (peldaño) & $P(\text{cruce}\mid\text{falla})$ & Pre-enfr.\ [K] & Masa & Fallas en el lazo & Garantía / teorema\\\midrule
+N2 (0) & 0.031 & 0.0 & --- & 0/50 & ninguna; margen implícito\\
+N2 + DSM, $\lambda=10^4$ (1) & 0.031 & 0.0 & --- & 0/50 & ninguna\\
+Pérdida esperada $\rho=100$ (2) & 0.026 & 1.8 & +4\,\% & 0/50 & equilibrio de costos; SAA\\
+Cuantil $\alpha=0.05$ (2) & 0.027 & 1.1 & +2\,\% & --- & $P\le\alpha$; lema del cuantil\\
+CVaR$_{0.90}$ (2) & 0.021 & 3.6 & +8\,\% & --- & severidad de la cola; R--U\\
+Cuantil $\alpha=0.02$ (2) & 0.015 & 7.4 & +17\,\% & 0/50 & $P\le\alpha$, verificada\\
+CVaR$_{0.95}$ (2) & 0.014 & 8.6 & +20\,\% & 0/50 & severidad; R--U\\
+Pérdida esperada $\rho=1000$ (2) & 0.014 & 9.4 & +21\,\% & --- & equilibrio de costos; SAA\\
+Wilks 59 (2) & 0.011 & 13.0 & +29\,\% & 0/50 & 95/95; regla de Wilks\\
+Cuantil $\alpha=0.01$ (2) & 0.011 & 12.9 & +32\,\% & --- & $P\le\alpha$, en el límite\\
+Un escenario aprendido, $\rho=100$ (3) & 0.026 & 1.8 & --- & --- & = SAA; Homem-de-Mello\\
+Un escenario aprendido, $\rho=1000$ (3) & 0.015 & 8.2 & --- & --- & 99.7\,\% del VSS\\\bottomrule
+\end{tabularx}
+\caption{Las formulaciones probabilísticas ordenadas por riesgo (tablas~\ref{tab:rb},
+\ref{tab:det-tesis} y~\ref{tab:f9-lazo}). «Fallas en el lazo»: cruces de 1220~K con las fallas
+del DET aplicadas a la planta (campaña F6 \code{det}); «---»: no corrido en esa campaña.}
+\label{tab:sintesis-prob}
+\end{table}
+
+\paragraph{Lo que muestran, en orden.}
+\begin{enumerate}
+  \item \textbf{La métrica probabilística sí cambia la decisión}, y en la cantidad que pide su
+        parámetro: la cota con cuantil cumple $P\le\alpha$, verificado sobre la planta. El
+        mecanismo es único: pre-enfriar antes de la falla. Durante la falla todas las formulaciones
+        se calientan igual (sección~\ref{sec:trayectorias}).
+  \item \textbf{Todas recorren una sola frontera.} Como el pico es aditivo en la duración, el
+        cuantil, el CVaR, Wilks y el escenario único se reducen a un margen, y la pérdida esperada
+        cae sobre la misma curva (proposición~\ref{prop:margen}). Ninguna compra más protección por
+        kelvin de pre-enfriamiento.
+  \item \textbf{El precio es explícito}: bajar el riesgo a la mitad cuesta 7.4~K bajo la consigna
+        y un 17\,\% más de plomo; a un tercio, 12.9~K y 32\,\%. Con las fallas en el lazo, el IAE
+        de la tesis sube (de 475 a 1689~K\,s con $\alpha=0.02$) porque cuenta el margen como error,
+        y el DSM mínimo sube de 54.9 a 59--61~K.
+  \item \textbf{Las extensiones no cambian la conclusión}: con fallas parciales el riesgo es $p_0$
+        veces el de las totales y la cota con $\eta$ es la de falla total con $\alpha/p_0$; la
+        capacidad del ACS entre 30 y 50~kg/s casi no influye; con $R\ge0.03$ desaparece la oscilación
+        de las cotas sin cambiar el riesgo.
+  \item \textbf{La utilidad depende de un dato físico}: el tiempo de recuperación automática del
+        ACS frente a $\tau\approx165$~s (sección~\ref{sec:riesgo-aplicabilidad}).
+\end{enumerate}
+
+\subsection{Peldaño 3: el escenario único de Rozas}
+El teorema de Homem-de-Mello et al.\ se cumple en el SMDFR para la pérdida esperada y, escritas
+por paso, para las fallas parciales; la unicidad la da $R$. El escenario exacto reproduce la
+decisión de la SAA pero no es un evento físico; una sola falla bien elegida, de 170--190~s (cuatro
+veces la media), recupera el 94--99.5\,\% del VSS, y la duración media no recupera nada. Aprendido
+según el contexto, con el método del artículo, captura el 89--97\,\% del VSS fuera de muestra y
+en lazo cerrado reproduce el riesgo de la SAA, si el contexto sólo usa variables que la decisión no
+mueve. En el SMDFR actual la ganancia es de holgura de cómputo (0.07 frente a 0.42~s en el peor
+lazo), no de decisión (sección~\ref{sec:rozas}).
+
+\subsection{La recomendación, con su razón}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{40mm} Y@{}}\toprule
+Elección & Razón\\\midrule
+N2 + corrección de sesgo & misma decisión que N3, certificada; QP convexo de $\sim30$~ms\\
+Rampa dura, límite $U_y$ blando & la rampa siempre es factible; el límite nunca se activa\\
+$R=0.1$ & suaviza el caudal y elimina la oscilación de la capa de riesgo sin costo\\
+Cota con cuantil, $\alpha$ a elegir con el equipo & la métrica más simple y con garantía verificada; las demás no son más eficientes\\
+Evaluación por Rao--Blackwell sobre la planta & 150 veces menos realizaciones que contar cruces\\
+SAA o escenario único & sólo si se prefiere penalizar el exceso; dan la misma decisión\\\bottomrule
+\end{tabularx}
+\end{center}
+
+\takeaway{\textbf{En orden.} El MPC determinista (N1--N3) resuelve bien su problema y, con
+capacidad suficiente, no cruza 1220~K en ninguna prueba de fallas; su robustez viene de seguir
+con precisión una consigna que deja 40~K de margen, y su riesgo residual es del 3\,\% por falla.
+El margen determinista de la tesis no agrega nada. Una métrica probabilística convierte ese margen
+implícito en uno calibrado: la cota con cuantil cumple $P\le\alpha$ pagando pre-enfriamiento, y
+todas las métricas recorren la misma frontera. El escenario único de Rozas reproduce la decisión
+estocástica con un solo QP. Lo que ninguna de estas formulaciones hace es adaptar decisiones
+futuras al modo del ACS: eso es el MPC multietapa.}
+
+%======================================================================
+\section{Problemas abiertos y prometedores}\label{sec:riesgo-futuro}
+%======================================================================
+\subsection{El MPC multietapa (vía V8 de la ruta)}
+\paragraph{Qué falta en las formulaciones actuales.} Todas las capas de riesgo son de \emph{dos
+etapas}: un solo plan $u\in\mathbb R^{26}$ para todos los escenarios, y una segunda etapa que sólo
+\emph{mide} el exceso sobre 1220~K. En un MPC multietapa, en cambio, las decisiones futuras
+dependen de lo que se haya observado: el plan se ramifica según el modo del ACS. Con
+$\sigma_n\in\{0,1\}$ (ACS operativo o fallado) en cada nodo $n$ de un árbol, con padre $a(n)$ y
+probabilidad $\pi_n$:
+\begin{align*}
+\min_{\{u_n\}}\quad & \sum_n\pi_n\Big[(\hat y_n-y_{\rm ref})^2+R\,(u_n-u_{a(n)})^2+\rho\,(\hat y_n-1220)_+\Big]\\
+\text{s.a.}\quad & x_n=\Phi\big(x_{a(n)},\,(1-\sigma_n)\,u_n,\,\hat d_n\big),\qquad \hat y_n=h(x_n)+d,\\
+& 0\le u_n\le\mdot_{\max},\qquad |u_n-u_{a(n)}|\le\Delta\mdot .
+\end{align*}
+La \emph{no anticipación} está en la indexación: dos escenarios que comparten la historia hasta un
+nodo comparten la decisión de ese nodo. La versión de dos etapas actual es el caso en que todos los
+nodos de una misma etapa comparten $u$. En la práctica se ramifica sólo en los primeros pasos
+(\emph{horizonte robusto}) y el resto del árbol se deja sin ramificar, como en el MPC multietapa
+no lineal de Lucia et al.~\cite{lucia2013}; ver también la revisión de MPC estocástico de
+Mesbah~\cite{mesbah2016} y el texto de Birge y Louveaux~\cite{birge2011}.
+
+\paragraph{Por qué hoy rendiría poco.} Hay tres razones, todas medidas en este documento.
+(i) Durante la falla el caudal es cero: no hay decisión que ramificar. (ii) Tras la reparación,
+el MPC re-optimiza cada 0.5~s, y eso ya es un recurso. (iii) El horizonte es de 13~s y las fallas
+duran decenas de segundos: dentro del horizonte el árbol casi nunca cambia de modo. Lo único que se
+decide es el margen \emph{antes} de la próxima falla, que es lo que la segunda etapa ya captura.
+
+\paragraph{Cuándo rendiría.} El multietapa ganaría valor si aparece una decisión que dependa del
+modo del ACS:
+\begin{enumerate}
+  \item \textbf{Varias protecciones} (vía V9): con un segundo sistema activo o el tapón de sal
+        pasivo, durante una falla del ACS sí hay que decidir qué activar y cuándo. A$\to$B y
+        B$\to$A pueden dejar riesgos distintos.
+  \item \textbf{Tiempos con memoria}: retardos de detección y de actuación, o reparaciones de
+        duración casi fija. Entonces la edad de la falla predice cuánto falta, y una política que
+        la observe puede decidir mejor. La mezcla del DET tiene un poco de memoria
+        (ejemplo~\ref{ej:memoria}), pero durante la falla no hay nada que decidir.
+  \item \textbf{Un horizonte de riesgo largo}: para que el árbol vea la reparación, el horizonte
+        debe cubrir $q_{1-\alpha}(D)\approx180$--220~s. Con pasos de 0.5~s son 360--440 pasos por
+        rama; haría falta un bloqueo de movimientos (vía V7) o una malla gruesa para la parte de
+        riesgo.
+\end{enumerate}
+
+\paragraph{Cómo medir cuánto se pierde con dos etapas.} La brecha entre el MPC de dos etapas
+(nivel B de la sección~\ref{sec:rozas-alcance}) y la política multietapa óptima (nivel A) se puede
+medir con programación dinámica sobre un modelo reducido. El estado es el margen $m$ hasta
+1220~K, el modo $\sigma$, la edad $a$ de la falla y, si hay varias protecciones, la etapa de
+protección; la ecuación de Bellman es
+\[
+V(m,\sigma,a)=\min_{u\in\mathcal U(\sigma)}\Big\{c(m,u)+\mathbb E\big[V(m',\sigma',a')\mid m,\sigma,a,u\big]\Big\},
+\]
+con $m'$ dado por la dinámica reducida (enfriamiento con $u$ si $\sigma=0$; calentamiento de
+$\approx0.3$~K/s si $\sigma=1$) y las transiciones de $(\sigma,a)$ dadas por las tasas del DET. Con
+un estado de tres o cuatro dimensiones, el problema se resuelve en una malla. Si la política de
+dos etapas queda cerca de $V$, el multietapa no vale la pena para el SMDFR actual; si no, la
+brecha dice cuánto se gana y en qué estados.
+
+\subsection{El escenario único más allá de dos etapas}
+El teorema de Homem-de-Mello et al.\ trata problemas de dos etapas: cierra la brecha entre un
+escenario y el MPC de dos etapas, no la brecha con la política multietapa
+(sección~\ref{sec:rozas-alcance}). Una extensión natural, que queda como \emph{pregunta de
+investigación} y no como resultado del artículo, es aplicarlo etapa por etapa. En los métodos de
+descomposición anidada, como la programación dual dinámica estocástica (SDDP~\cite{pereira1991}),
+cada etapa resuelve un problema de dos etapas cuya segunda etapa es una función de costo futuro
+convexa y poliédrica, construida con cortes. Si cada uno de esos problemas cumple las condiciones
+del teorema~1 (recurso fijo, costos fijos, duales acotados), existe un escenario por etapa que
+reproduce su decisión, y la estrategia de Rozas pasaría a aprender una \emph{secuencia} de
+escenarios. Habría que comprobar tres cosas: (i) que el costo futuro conserve la estructura que el
+teorema pide; (ii) que el lema~1 se cumpla etapa por etapa cuando la falla multiplica a la decisión
+($T$ aleatoria); y (iii) que el contexto siga siendo exógeno, que es lo más delicado: en un
+problema multietapa el estado que pasa de una etapa a la siguiente depende de la decisión, el mismo
+fenómeno que hizo oscilar el lazo en E5 (sección~\ref{sec:rozas-lazo}).
+
+\subsection{Otros problemas prometedores}
+\begin{itemize}
+  \item \textbf{Robustez frente a la distribución de la duración.} El error de especificación de
+        $\mu$ es asimétrico: si las fallas duran más que las de diseño, la cota con $\alpha=0.02$
+        deja 0.26 (sección~\ref{sec:riesgo-aplicabilidad}). Una cota \emph{distribucionalmente
+        robusta}~\cite{delage2010}, que exija $P\le\alpha$ para todas las duraciones medias
+        plausibles, se reduce aquí a diseñar con la recuperación más lenta del conjunto, porque
+        $S$ crece con la duración media; lo que falta es el conjunto, que debe salir del equipo.
+  \item \textbf{Riesgo por transitorio y varias fallas.} La cota controla una falla que empieza en
+        la consulta. Una restricción conjunta sobre todo el transitorio, o con dos fallas seguidas,
+        pediría un horizonte de riesgo largo y, probablemente, el árbol del multietapa.
+  \item \textbf{Incertidumbre del modelo de calentamiento.} El supuesto A1 es conservador en
+        $\sim10$\,\% en la réplica del HRM; falta validarlo nodo a nodo durante una falla contra
+        Simulink. Si el error resultara del lado inseguro, se agregaría como back-off gaussiano
+        (proposición~\ref{prop:cc}) con la varianza del error ROM--HRM durante la falla.
+  \item \textbf{Escenario aprendido con contexto exógeno.} La estrategia de Rozas rendiría más con
+        una segunda etapa cara (varias fallas, fallas parciales por paso) y con contexto que la
+        decisión no mueve: la etapa del sistema de protección, la edad de la falla o la fuga
+        medida.
+\end{itemize}
+
+\begin{table}[H]\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{36mm} Y >{\raggedright\arraybackslash}p{36mm} c@{}}\toprule
+Problema & Por qué promete & Qué haría falta & Prioridad\\\midrule
+Tiempo de recuperación del ACS & decide el régimen en que la capa de riesgo sirve & dato del equipo (trenes, arranque automático) & 1\\
+Referencia por programación dinámica & mide la brecha dos etapas--multietapa antes de construir el árbol & modelo reducido $(m,\sigma,a)$; días de trabajo & 2\\
+MPC multietapa con varias protecciones (V8--V9) & primera fuente real de decisiones dependientes del modo & modelo de la segunda protección; árbol con horizonte robusto; bloqueo de movimientos & 3\\
+Cota robusta en $\mu$ & la garantía actual se pierde si las fallas duran más & conjunto de duraciones plausibles & 3\\
+Escenario único multietapa (Rozas + SDDP) & extendería la estrategia a la política multietapa & comprobar el teorema por etapa; contexto exógeno & 4\\
+Validar A1 nodo a nodo & cierra la última brecha de modelo del resultado de riesgo & MATLAB (leo\_asus) & 4\\\bottomrule
+\end{tabularx}
+\caption{Problemas abiertos de la capa de riesgo, por prioridad.}
+\label{tab:riesgo-futuro}
+\end{table}
+
+\takeaway{\textbf{Hacia dónde seguir.} Con las fallas del DET y un solo sistema de protección,
+las formulaciones de dos etapas ya capturan la única decisión que importa: cuánto margen tener
+antes de la falla. El MPC multietapa, y con él una versión multietapa del escenario único de Rozas,
+valdría la pena cuando aparezcan decisiones durante la falla (varias protecciones), tiempos con
+memoria u horizontes de riesgo largos. Antes de construirlo conviene medir la brecha con una
+referencia de programación dinámica sobre un modelo reducido.}

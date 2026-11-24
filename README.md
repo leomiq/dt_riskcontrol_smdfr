@@ -310,7 +310,7 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   interruptions recovered automatically by redundancy. Base case μ×1e4 (mean ≈ 46 s), read
   as the automatic recovery time, with μ×3e3 and μ×3e4 as the sensitivity band.
 - **Closed-loop trajectories compared across formulations (20 Nov, plan §10.4, status report
-  §35; `python/make_trajectory_figures.py`, `docs/figures/traj_*`,
+  §42; `python/make_trajectory_figures.py`, `docs/figures/traj_*`,
   `results/f6_paper/trajectory_distances.csv`).** Pairwise max |ΔPCT| over the same 50
   realisations: N2 and N3 coincide (< 1e-4 K; 0.39 K at most in the extreme family). N1
   leaves N3 only in the extreme family (median 1.4 K) after a failure with unknown reduced
@@ -328,7 +328,7 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
   1.3 %. `julia/f7_knitro.jl` re-solves the serialised queries with Knitro (installed via
   KNITRO_jll; licence pending).
 - **One-scenario theorem of Homem-de-Mello et al. (H. Rozas' V6), F9 (23 Nov, plan §10.6,
-  status report §36; `julia/F9Rozas.jl`, `julia/f9_rozas.jl`, `python/f9_summary.py`,
+  status report §41; `julia/F9Rozas.jl`, `julia/f9_rozas.jl`, `python/f9_summary.py`,
   `python/make_f9_figures.py`, `results/f9_rozas/`).** The paper's conditions and methodology
   checked on 4050 closed-loop N2 queries and 650 closed loops (Olab).
   - Conditions: the expected-excess layer satisfies Theorem 1 (case i); partial failures do
@@ -342,6 +342,15 @@ self-contained didactic report in Spanish, with the reference SMDFR model paper 
     at ρ = 100; at ρ = 1000 it chatters if it uses the current margin (the context is
     endogenous, which the paper's i.i.d. setting ignores) and is fixed by using slow
     features only. A discussion note for the paper, not a new contribution.
+- **Risk part of the status report expanded (24 Nov).** Three new didactic sections
+  (`docs/estado/11q_riesgo_fundamentos.tex`, `11r_riesgo_formulaciones.tex`,
+  `11s_riesgo_sintesis.tex`; figure `python/make_risk_tutorial_figures.py` →
+  `fig_risk_tutorial`): a five-step risk ladder (deterministic → DSM margin → probabilistic
+  metrics → single scenario → multistage), every metric computed by hand on a one-step toy
+  and then step by step on an SMDFR query, the theorems behind each case, each formulation
+  written as a modification of the N2 QP, results reordered from deterministic (with failure
+  tests and robustness) to probabilistic, and open problems (multistage MPC, a stage-wise
+  one-scenario idea, a dynamic-programming reference, robustness in μ).
 - **Next steps (plan §10).**
   1. Ask the team about the ACS redundancy and its flow-restoration time (fixes the base
      case), α, the 4-train model and the 1220 K limit.

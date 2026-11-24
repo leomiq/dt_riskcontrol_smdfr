@@ -86,8 +86,14 @@ $\beta$, $\rho$ & Nivel del CVaR; peso de la pérdida esperada\\\bottomrule
   \item[Metaheurística] Método de búsqueda general que sólo evalúa el costo (LJ, GA, DE, PSO).
   \item[MC-dropout] Estimación de la incertidumbre de una red neuronal repitiendo la inferencia
         con dropout activo.
+  \item[Margen implícito] Distancia entre la consigna y el límite de 1220~K (unos 40~K): la
+        protección que tiene un MPC determinista sin métrica de riesgo.
+  \item[MPC multietapa] MPC estocástico cuyas decisiones futuras se ramifican según lo que se
+        observe (aquí, el modo del ACS), con no anticipación.
   \item[MPC] Control predictivo basado en modelo: optimiza un horizonte futuro, aplica la primera
         acción y repite.
+  \item[No anticipación] Una decisión sólo puede depender de lo observado hasta ese momento:
+        escenarios con la misma historia comparten la decisión.
   \item[NLP / QP] Programa no lineal / programa cuadrático.
   \item[Números aleatorios comunes] Usar las mismas realizaciones para todos los controladores,
         de modo que las comparaciones sean pareadas y tengan menos varianza.
@@ -103,10 +109,15 @@ $\beta$, $\rho$ & Nivel del CVaR; peso de la pérdida esperada\\\bottomrule
         $\rho=(k-1)/k$.
   \item[ROM] Modelo reducido (un nodo por material) usado por el controlador para predecir.
   \item[SAA] Aproximación de una esperanza por el promedio sobre escenarios muestreados.
+  \item[Supervivencia] $S(t)=P(D>t)$: la probabilidad de que una falla dure más que $t$.
   \item[Tiempo de asentamiento] Instante desde el cual el error queda para siempre dentro de una
         banda (aquí, 0.30~K).
   \item[Transcripción directa] Formulación monolítica: estados y controles son variables, y la
         dinámica discretizada es un conjunto de restricciones.
+  \item[VaR] Valor en riesgo: el cuantil $1-\alpha$ de una pérdida; la cota con cuantil es un
+        techo con el VaR del calentamiento.
+  \item[VSS] Valor de la solución estocástica: cuánto costo esperado se ahorra decidiendo con
+        la distribución en lugar de con el pronóstico nominal.
 \end{description}
 
 %======================================================================
@@ -154,7 +165,8 @@ $\beta$, $\rho$ & Nivel del CVaR; peso de la pérdida esperada\\\bottomrule
   \item \textbf{Figuras}: \code{python/make\_status\_figures.py} (lazo abierto),
         \code{make\_didactic\_figures.py} (capítulos introductorios),
         \code{make\_closed\_loop\_figures.py} (lazo cerrado), \code{make\_f5b\_figures.py} (capa
-        de riesgo) y \code{make\_f6\_figures.py} (campaña F6). Las figuras de rigidez y de
+        de riesgo) \code{make\_f6\_figures.py} (campaña F6) y \code{make\_risk\_tutorial\_figures.py}
+        (métricas de riesgo desde cero). Las figuras de rigidez y de
         brecha de optimalidad en una dimensión son ejemplos ilustrativos, no resultados del
         modelo.
   \item \textbf{Documento}: \code{tectonic -X compile estado\_mpc\_monolitico.tex} desde

@@ -3,7 +3,9 @@
 %======================================================================
 
 \subsection{Respuestas a las preguntas}
-El resumen gráfico (figura~\ref{fig:resumen}) condensa las tres respuestas principales; las
+La sección~\ref{sec:riesgo-sintesis} ordena los resultados de riesgo de lo determinista a lo
+probabilístico, y la sección~\ref{sec:riesgo-metricas} explica cada métrica desde cero. El
+resumen gráfico (figura~\ref{fig:resumen}) condensa las tres respuestas principales; las
 figuras~\ref{fig:syn-openloop}, \ref{fig:syn-cl-compare}--\ref{fig:syn-scorecard},
 \ref{fig:syn-audit}, \ref{fig:syn-mechanism} y~\ref{fig:syn-fan} son su versión detallada;
 las figuras~\ref{fig:f7-cert} y~\ref{fig:traj-hierarchy} resumen el certificado global y la
@@ -97,7 +99,12 @@ comparación de trayectorias.
         VSS, y el pronóstico medio no recupera nada. Un pronóstico lineal del escenario, aprendido
         con el método del artículo, captura el 89--97\,\% del VSS fuera de muestra y en lazo
         cerrado reproduce el riesgo del SAA, siempre que dependa sólo de variables que la decisión
-        no mueve de una consulta a la siguiente (sección~\ref{sec:rozas}).
+        no mueve de una consulta a la siguiente (sección~\ref{sec:rozas}). Pero aquí no hay
+        mucho que ganar: N2 es un QP pequeño y el SAA de 40 escenarios ya corre en tiempo real
+        (p99 $\le0.42$ de 0.5~s) con la misma decisión. El teorema reproduce el MPC de dos etapas,
+        no la política multietapa óptima; la estrategia valdría más con tiempos de protección con
+        memoria (no exponenciales), una segunda etapa cara o un ACS cercano a la fuga
+        (sección~\ref{sec:rozas-alcance}).
 \end{enumerate}
 
 \begin{table}[H]\centering\small
@@ -197,6 +204,11 @@ N1, QP con una linealización & 0.01~s & 0.24404 & óptimo global de su QP (brec
   \item \textbf{Escribir el manuscrito} (decidido el 18-11: un solo paper con la formulación y
         su certificación, el lazo cerrado con las métricas de la tesis, y la capa de riesgo con
         las proposiciones y su condición de aplicabilidad).
+  \item \textbf{Antes de un MPC multietapa, medir cuánto se ganaría}: una referencia por
+        programación dinámica sobre un modelo reducido (margen, modo del ACS, edad de la falla)
+        dice cuánto se pierde con las formulaciones de dos etapas. El multietapa, y una versión
+        multietapa del escenario único de Rozas, valdrían la pena con varias protecciones, tiempos
+        con memoria u horizontes de riesgo largos (sección~\ref{sec:riesgo-futuro}).
   \item \textbf{Opcional, si un revisor lo pide}: comparar la réplica del HRM con Simulink nodo a
         nodo durante una falla del ACS (requiere MATLAB), y resolver las 77 consultas
         certificadas con Knitro (\code{julia/f7\_knitro.jl}, listo; falta la licencia) o con un
