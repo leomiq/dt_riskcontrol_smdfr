@@ -114,7 +114,8 @@ refleja eso: la primera acción $u_1$ es común a todos los escenarios, porque s
 saber cuál ocurrirá (\emph{no anticipación}), y las siguientes pueden adaptarse a cada escenario
 (\emph{recurso}).
 
-\paragraph{El escenario óptimo.} Homem-de-Mello et al.\ demostraron que, en una clase de
+\paragraph{El escenario óptimo.} H.~Rozas propuso explorar este enfoque (reunión del 22 de
+octubre de 2026). Homem-de-Mello et al.\ demostraron que, en una clase de
 programas estocásticos de dos etapas con recurso fijo y segunda etapa lineal, existe un
 \emph{único escenario} cuyo problema determinista reproduce la decisión
 estocástica~\cite{homem2026}. Ese escenario no tiene por qué ser único ni pertenecer al soporte
@@ -125,7 +126,9 @@ como demanda. Si un resultado así valiera para el MPC, el riesgo podría tratar
 el problema con un escenario bien elegido, sin multiplicar los escenarios. Para eso el
 problema debe ser lineal, y ésa es otra razón para disponer de una versión lineal de P0. Para
 las fallas del ACS, el resultado vale de forma exacta y con un escenario explícito, porque el
-pico de PCT es aditivo en la duración de la falla (proposición~\ref{prop:margen}).
+pico de PCT es aditivo en la duración de la falla (proposición~\ref{prop:margen}). La
+sección~\ref{sec:rozas} comprueba las condiciones del teorema con la metodología del artículo,
+también para las formulaciones que no son cotas.
 
 \takeaway{\textbf{Para recordar.} Linealizar convierte P0 en un QP convexo, con óptimo global,
 certificado dual y una función de transferencia que explica la física: el ACS actúa a través de

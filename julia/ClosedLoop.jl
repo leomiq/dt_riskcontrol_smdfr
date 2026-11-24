@@ -372,6 +372,8 @@ penalty `lam` [1/K] on the slack). Other formulations (plan §8.17), all on `hea
                                       (online 95/95 PSM);
   `(mode = :expected, rho, Dq)`       cost ρ/N Σ_k Σ_i (ŷ_k + d + ΔT(D_i) − 1220)₊ (expected
                                       excess given a failure now; convex, no bound).
+  `(mode = :scenario, fn, rho)`       F9: the expected excess with ONE scenario, margin
+                                      δ̂ = fn(curve, c, yhat_now) (Homem-de-Mello et al., 2026).
   `Dcap` (400 s) caps D: a failure longer than that crosses 1220 K whatever the controller.
 Partial failures (F5b.1d, plan §8.18; severities `etas` with probabilities `peta`, the ACS then
 delivers η·`mmax` at most):
@@ -501,11 +503,14 @@ function run_loop(B::Bench, ctrl::Symbol; n = 61, act = B.act_arch, bias = false
                 elseif mode == :expected                      # ρ E[(peak − 1220)₊], no bound
                     c = (; c..., exp_dT = [dT_at(curve, min(D, Dcap)) for D in risk.Dq], rho = risk.rho,
                          U_lim = 1220.0)
+                elseif mode == :scenario                      # F9: one-scenario MPC (Homem-de-Mello
+                    c = (; c..., exp_dT = [risk.fn(curve, c, yhat_now)], rho = risk.rho,   # et al.):
+                         U_lim = 1220.0)                                  # margin δ̂ = fn(context)
                 else
                     error("risk mode $mode")
                 end
             end
-            mode in (:expected, :scen_cvar, :scen_exp) || (c = (; c..., ubound = ub, lam_r = risk.lam))
+            mode in (:expected, :scenario, :scen_cvar, :scen_exp) || (c = (; c..., ubound = ub, lam_r = risk.lam))
         end
         if ctrl in (:N1, :N2, :N3)
             dec = decide(ctrl, c, L, act, prev)

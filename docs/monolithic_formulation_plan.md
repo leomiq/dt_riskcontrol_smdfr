@@ -2308,3 +2308,39 @@ figuras `fig_f8_tradeoff` y `fig_f8_risk`.
 - **N3 = N2 con el mismo R**: ΔPCT ≤ 0.002 K y Δṁ ≤ 0.026 kg/s.
 - **Verificación del margen blando**: la PCT predicha máxima es 1220.32 K en los 2350 lazos, así
   que la penalización no se activó en ninguna consulta.
+
+### 10.6 F9: el escenario único de Homem-de-Mello et al., propuesto por H. Rozas (23-11-2026)
+
+**Pregunta.** ¿Cumple el SMDFR las condiciones del teorema 1 de Homem-de-Mello et al. (2026),
+y funciona la vía V6 (aprender el escenario según el contexto) con la metodología del propio
+artículo? Código `julia/F9Rozas.jl` + `julia/f9_rozas.jl` (fases A/B/B2/C; modo `:scenario`
+nuevo en `ClosedLoop.run_loop`), resumen `python/f9_summary.py` → `results/f9_rozas/summary.md`,
+figuras `python/make_f9_figures.py` → `fig_f9_*`, reporte de estado §36 (`docs/estado/11n_rozas.tex`).
+Olab: 50 lazos (DET acelerada, 40 kg/s, μ×1e4, R = 0.1), 4050 consultas analizadas (51 min),
+650 lazos de validación (≈ 30 min), 0 errores.
+
+- **Condiciones.** Pérdida esperada (P1) y pronóstico de fuga con costo L1 (P3): caso (i), se
+  cumplen. Fallas parciales dentro del horizonte (P2): como está implementada (una fila por
+  escenario, m = 1 < n = 26) queda fuera del lema 1; escrita por paso (m = n) cumple el lema 1 (iii)
+  porque todos los G_ki < 0. Supuesto 3: λ_min(GᵀG) ≈ 1.6e-6 sin R; con R = 0.1, 2.2e-3: **la
+  unicidad la da la supresión de movimiento**.
+- **Teorema 1 constructivo:** el escenario ξ* = (T z*, T) reproduce el plan SAA en P1, P2 (ambas
+  formas) y P3 (peor caso 0.026 kg/s). Pero no es físico: en P1 es un margen distinto por paso;
+  en P3, un error de fuga a ~1e5 σ.
+- **Bilevel (38)–(39) con escenarios físicos:** una sola falla de duración D̂* (mediana 170–190 s,
+  ~4× la media) pierde el 6 % (ρ = 100) y el 0.5 % (ρ = 1000) del VSS; el pronóstico puntual E[D]
+  lo pierde entero (la cota nunca se activa). CPU: el SAA como QP crece ~lineal y es más rápido
+  que la búsqueda hasta N ≈ 2000.
+- **Contextual (V6):** Φ(θ, x) lineal con el algoritmo 1 + Nelder–Mead (pérdida realizada, como
+  el artículo) captura el 89 % / 97 % del VSS fuera de muestra (oráculo de escenario único: 93 % /
+  99.9 %). Con la pérdida esperada (Rao–Blackwell, variante propia) 92 % / 99.7 %. La curva de
+  aprendizaje converge (teorema 2); con 25 consultas puede ser peor que no usar riesgo.
+- **Lazo cerrado:** con ρ = 100 el MPC de un escenario reproduce el SAA (ΔP = +0.0001 ± 0.0002).
+  Con ρ = 1000 el pronóstico con contexto completo **oscila** (VT 1694 vs 70 kg/s): baja el margen
+  ~10 K por σ del margen actual, así que el techo de la PCT se mueve contra la PCT con ganancia
+  ≈ 1.6 > 1. El artículo supone contexto exógeno; en un MPC es endógeno. Con sólo variables
+  lentas (fuga, calentamiento a 46/150/400 s) la oscilación desaparece (VT 84), con el mismo riesgo
+  (ΔP = +0.001, sobre la frontera). Un D̂ fijo protege menos (ΔP = +0.004).
+- **Para el paper:** la vía V6 queda respondida. Es una nota de discusión, no una contribución
+  central: el resultado estructural (§10.1) ya da el escenario explícito para las cotas, y la
+  formulación recomendada sigue siendo la cota con cuantil.
